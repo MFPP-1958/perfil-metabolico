@@ -8,17 +8,87 @@
 
 const API = "https://intervals.icu/api/v1";
 
-// Solo estas rutas. Evita que alguien use la funcion como proxy abierto
-// hacia cualquier otro endpoint de la API con tu clave.
+// Rutas admitidas, todas comprobadas contra la API real. La lista es cerrada para
+// que nadie pueda usar la funcion como proxy abierto hacia cualquier endpoint con
+// tu clave (por ejemplo los PUT/POST que modifican cuentas ajenas).
+//
+// Los ids de atleta son i + digitos. Los de actividad pueden venir con o sin la i.
 const RUTAS_PERMITIDAS = [
+  // --- Atletas ---
   /^\/athletes$/,
   /^\/athlete\/i\d+$/,
+  /^\/athlete\/i\d+\/profile$/,
+  /^\/athlete\/i\d+\/sport-settings$/,
+  /^\/athlete\/i\d+\/athlete-summary$/,
+  /^\/athlete\/i\d+\/connections$/,
+
+  // --- Curvas y modelos del atleta ---
   /^\/athlete\/i\d+\/power-curves$/,
+  /^\/athlete\/i\d+\/hr-curves$/,
+  /^\/athlete\/i\d+\/pace-curves$/,
+  /^\/athlete\/i\d+\/power-hr-curve$/,
+  /^\/athlete\/i\d+\/activity-power-curves$/,
+  /^\/athlete\/i\d+\/activity-hr-curves$/,
+  /^\/athlete\/i\d+\/mmp-model$/,
+
+  // --- Listados de actividades ---
   /^\/athlete\/i\d+\/activities$/,
-  /^\/athlete\/i\d+\/wellness$/
+  /^\/athlete\/i\d+\/activities-around$/,
+  /^\/athlete\/i\d+\/activities\/search$/,
+  /^\/athlete\/i\d+\/activities\/interval-search$/,
+  /^\/athlete\/i\d+\/activity-tags$/,
+
+  // --- Bienestar y calendario ---
+  /^\/athlete\/i\d+\/wellness$/,
+  /^\/athlete\/i\d+\/wellness\/\d{4}-\d{2}-\d{2}$/,
+  /^\/athlete\/i\d+\/events$/,
+  /^\/athlete\/i\d+\/event-tags$/,
+  /^\/athlete\/i\d+\/fitness-model-events$/,
+
+  // --- Una actividad concreta ---
+  /^\/activity\/i?\d+$/,
+  /^\/activity\/i?\d+\/streams$/,
+  /^\/activity\/i?\d+\/intervals$/,
+  /^\/activity\/i?\d+\/power-curve$/,
+  /^\/activity\/i?\d+\/power-curves$/,
+  /^\/activity\/i?\d+\/pace-curve$/,
+  /^\/activity\/i?\d+\/hr-curve$/,
+  /^\/activity\/i?\d+\/power-histogram$/,
+  /^\/activity\/i?\d+\/hr-histogram$/,
+  /^\/activity\/i?\d+\/pace-histogram$/,
+  /^\/activity\/i?\d+\/gap-histogram$/,
+  /^\/activity\/i?\d+\/power-vs-hr$/,
+  /^\/activity\/i?\d+\/time-at-hr$/,
+  /^\/activity\/i?\d+\/hr-load-model$/,
+  /^\/activity\/i?\d+\/power-spike-model$/,
+  /^\/activity\/i?\d+\/best-efforts$/,
+  /^\/activity\/i?\d+\/interval-stats$/,
+  /^\/activity\/i?\d+\/weather-summary$/,
+  /^\/activity\/i?\d+\/segments$/,
+  /^\/activity\/i?\d+\/map$/
 ];
 
-const PARAMS_PERMITIDOS = new Set(["curves", "type", "oldest", "newest", "limit"]);
+const PARAMS_PERMITIDOS = new Set([
+  // rangos y limites
+  "oldest", "newest", "limit", "fields", "start", "end", "now",
+  // curvas
+  "curves", "type", "includeRanks", "pmType", "secs", "distances", "gap",
+  "subMaxEfforts", "fatigue",
+  // streams
+  "types", "includeDefaults",
+  // histogramas
+  "bucketSize",
+  // busquedas
+  "q", "tags", "route_id", "activity_id",
+  "minSecs", "maxSecs", "minIntensity", "maxIntensity", "minReps", "maxReps",
+  // eventos
+  "category", "resolve", "calendar_id",
+  // actividad
+  "intervals", "stream", "duration", "distance", "count", "minValue",
+  "excludeIntervals", "startIndex", "endIndex", "start_index", "end_index",
+  // mapa
+  "bounds", "boundsOnly", "weather", "descr_config"
+]);
 
 // Campos que jamas deben llegar al navegador.
 const CAMPOS_SENSIBLES = new Set([
@@ -31,7 +101,12 @@ const CAMPOS_SENSIBLES = new Set([
 ]);
 
 function limpiar(dato) {
-  if (Array.isArray(dato)) return dato.map(limpiar);
+  if (Array.isArray(dato)) {
+    // Los streams son arrays enormes de numeros: no hay nada que limpiar dentro
+    // y recorrerlos elemento a elemento seria tirar tiempo.
+    if (dato.length && typeof dato[0] !== "object") return dato;
+    return dato.map(limpiar);
+  }
   if (dato && typeof dato === "object") {
     const salida = {};
     for (const clave of Object.keys(dato)) {
@@ -103,8 +178,15 @@ exports.handler = async function (event) {
 
     const texto = await res.text();
     if (!res.ok) {
+      // El 422 mas habitual es intentar leer en detalle una actividad de Strava.
+      let pista = "";
+      if (res.status === 422 && texto.indexOf("Strava") >= 0) {
+        pista = " Intervals.icu no permite leer por API las actividades importadas"
+              + " de Strava. Solo funciona con las que llegan de Garmin, Wahoo,"
+              + " subida manual o desde el propio dispositivo.";
+      }
       return respuesta(res.status, {
-        error: "Intervals.icu respondio " + res.status,
+        error: "Intervals.icu respondio " + res.status + "." + pista,
         detalle: texto.slice(0, 300)
       });
     }
