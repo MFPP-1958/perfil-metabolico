@@ -1000,6 +1000,20 @@
       const text = await res.text().catch(()=> "");
       let detalle = text ? text.slice(0,180) : "";
       try{ const j = JSON.parse(text); detalle = j.error || j.detalle || detalle; }catch(e){}
+
+      // El 401 del proxy casi siempre es el campo de código vacío. Decirlo, y señalarlo.
+      if(res.status === 401 && !clave){
+        const campo = $("icuAccessCode");
+        if(campo){
+          campo.style.borderColor = "var(--bad)";
+          campo.focus();
+          setTimeout(()=>{ campo.style.borderColor = ""; }, 4000);
+        }
+        throw new Error("Escribe en el campo «Código de acceso» de arriba el mismo valor "
+          + "que pusiste en la variable MFPP_ACCESS_CODE de Netlify. "
+          + (icuCodigoAcceso() ? "El código introducido no coincide: revisa mayúsculas y espacios sobrantes."
+                               : "Ahora mismo está vacío."));
+      }
       throw new Error(`La API respondió ${res.status}. ${detalle}`);
     }
     return await res.json();
