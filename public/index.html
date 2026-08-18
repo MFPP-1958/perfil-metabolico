@@ -454,6 +454,38 @@
       </div>
 
       <div class="panel" style="margin-top:18px">
+        <h3>Test de VLa máx</h3>
+        <div class="alert">
+          Intervals.icu no calcula la VLa máx, pero <b>sí almacena lactato</b> en los intervalos.
+          Si lo registras allí, el botón de abajo lo trae solo. Si no, introduce aquí las muestras.
+        </div>
+        <div class="formgrid" style="margin-top:14px">
+          <div>
+            <label>Lactato antes (mmol·l⁻¹)</label>
+            <input id="laPre" type="number" step="0.1" placeholder="Ej: 1.2" oninput="calcularVLaMax()"/>
+          </div>
+          <div>
+            <label>Lactato pico después (mmol·l⁻¹)</label>
+            <input id="laPost" type="number" step="0.1" placeholder="Ej: 9.8" oninput="calcularVLaMax()"/>
+          </div>
+          <div>
+            <label>Duración del esprint (s)</label>
+            <input id="laDur" type="number" step="0.1" value="15" oninput="calcularVLaMax()"/>
+          </div>
+          <div>
+            <label>Tiempo aláctico (s)</label>
+            <input id="laAlac" type="number" step="0.1" value="3" oninput="calcularVLaMax()"/>
+          </div>
+        </div>
+        <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+          <button class="btn" onclick="icuBuscarLactato()">Buscar lactato en Intervals.icu</button>
+          <button class="btn primary" onclick="aplicarVLaMax()">Usar esta VLa máx en el perfil</button>
+        </div>
+        <div class="indices-grid" id="vlaGrid" style="margin-top:16px"></div>
+        <div id="vlaNota" class="analysis-box"></div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
         <h3>Modelo metabólico de Mader</h3>
         <div class="formgrid" style="grid-template-columns:repeat(2,1fr);max-width:560px;margin-bottom:16px">
           <div>
@@ -612,6 +644,7 @@
 
     updateIndices(d,c);
     updateMader(d);
+    if($("vlaGrid")) calcularVLaMax();
     updateRadar(metrics);
     updatePD(d);
     updateSystems(d,c);
@@ -630,6 +663,125 @@
 
   // Indices con la formula a la vista y el ratio crudo como valor principal.
   // El porcentaje normalizado va debajo, para que nunca se confunda uno con otro.
+  // VLa max a partir de un esprint maximo, segun la Ec. 2 de Dunst, Hesse y
+  // Ueberschär (2025): vLamax = ΔLactato / (T - t_alactico), con t_alactico de 2-3 s.
+  function calcularVLaMax(){
+    const caja = $("vlaGrid"), nota = $("vlaNota");
+    if(!caja) return;
+
+    const pre = num("laPre"), post = num("laPost");
+    const dur = num("laDur"), alac = num("laAlac");
+    const efectivo = dur - alac;
+
+    let vla = null, problema = null;
+    if(!post)                 problema = "Falta el lactato pico posterior al esprint.";
+    else if(post <= pre)      problema = "El lactato posterior tiene que ser mayor que el previo.";
+    else if(!(efectivo > 0))  problema = "La duración del esprint debe superar al tiempo aláctico.";
+    else                      vla = (post - pre) / efectivo;
+
+    window.__vlamax = vla;
+
+    caja.innerHTML = [
+      ["VLa máx", vla !== null ? round(vla,2) : "—", "ΔLactato / (T − t aláctico)"],
+      ["Δ Lactato", (post && pre !== "") ? round(post - pre,1) + " mmol·l⁻¹" : "—", "pico − basal"],
+      ["Tiempo efectivo", efectivo > 0 ? round(efectivo,1) + " s" : "—", `${round(dur,1)} s − ${round(alac,1)} s`]
+    ].map(t => `<div class="indice"><div class="nom">${t[0]}</div><div class="val">${t[1]}</div><div class="form">${t[2]}</div></div>`).join("");
+
+    if(problema){
+      nota.innerHTML = `<h4>Faltan datos</h4><p>${escapeHtml(problema)}</p>`;
+      return;
+    }
+
+    // Rango orientativo: 0,3-0,5 en perfiles de resistencia, ~1,0 en esprínters.
+    let lectura;
+    if(vla < 0.30)      lectura = "Muy baja: perfil marcadamente aeróbico, poca capacidad de esprint.";
+    else if(vla < 0.55) lectura = "Propia de un perfil de resistencia.";
+    else if(vla < 0.80) lectura = "Intermedia.";
+    else if(vla < 1.20) lectura = "Alta: perfil glucolítico, cercano al de un esprínter.";
+    else                lectura = "Fuera del rango habitual (0,3–1,2). Revisa las muestras y el protocolo antes de darla por buena.";
+
+    nota.innerHTML = `<h4>Resultado</h4>
+      <p><b>VLa máx = ${round(vla,2)} mmol·l⁻¹·s⁻¹.</b> ${lectura}</p>
+      <p class="small"><b>Protocolo:</b> muestra de lactato en reposo, esprint máximo de 10–15 s,
+      y muestras seriadas después (a los 3, 5, 7 y 9 min) quedándose con el valor más alto.
+      El tiempo aláctico son los 2–3 s iniciales en los que aún no hay glucólisis.</p>
+      <p class="small"><b>Sobre la cadencia:</b> el protocolo habitual usa 120–130 rpm, pero Haase et al. (2024)
+      encontraron que la acumulación máxima se da por encima de 170 rpm. Medir a cadencia baja
+      puede infravalorar la VLa máx y, con ella, sobrestimar los umbrales que calcula el modelo de Mader.</p>
+      <p class="small">Ecuación 2 de Dunst, Hesse y Ueberschär (2025), <i>Eur J Appl Physiol</i>.</p>`;
+  }
+
+  function aplicarVLaMax(){
+    if(!window.__vlamax){ alert("Introduce primero las muestras de lactato y la duración del esprint."); return; }
+    $("vla").value = window.__vlamax.toFixed(2);
+    marcarEstimado("vla", false);
+    update();
+    icuSetStatus("VLa máx aplicada", `Se ha puesto ${window.__vlamax.toFixed(2)} mmol·l⁻¹·s⁻¹ en el perfil. El modelo de Mader ya puede calcular los umbrales.`);
+  }
+
+  // Recorre las actividades recientes buscando intervalos con lactato registrado.
+  async function icuBuscarLactato(){
+    const nota = $("vlaNota");
+    try{
+      const athleteId = icuAthlete();
+      nota.innerHTML = `<h4>Buscando</h4><p>Revisando los intervalos de las actividades recientes...</p>`;
+
+      const days = parseInt($("icuDays").value || "90",10);
+      const oldest = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
+      const newest = new Date().toISOString().slice(0,10);
+
+      const acts = await icuFetch(`/athlete/${encodeURIComponent(athleteId)}/activities?oldest=${oldest}&newest=${newest}&limit=20`);
+      if(!Array.isArray(acts) || !acts.length) throw new Error("No hay actividades en ese rango de días.");
+
+      const hallazgos = [];
+      for(const a of acts){
+        const r = await icuFetchOptional(`/activity/${encodeURIComponent(a.id)}/intervals`);
+        if(r.__error) continue;
+        const ivs = r.icu_intervals || [];
+        ivs.forEach((iv,i) => {
+          const pico = iv.max_lactate != null ? iv.max_lactate : iv.average_lactate;
+          if(pico != null){
+            hallazgos.push({
+              fecha: (a.start_date_local || "").slice(0,10),
+              actividad: a.name || a.id,
+              intervalo: iv.label || ("Intervalo " + (i+1)),
+              segundos: iv.moving_time,
+              vatios: iv.average_watts,
+              min: iv.min_lactate, med: iv.average_lactate, max: iv.max_lactate,
+              pico: pico
+            });
+          }
+        });
+      }
+
+      if(!hallazgos.length){
+        nota.innerHTML = `<h4>No hay lactato registrado</h4>
+          <p>He revisado los intervalos de las ${acts.length} actividades más recientes y ninguno
+          tiene muestras de lactato.</p>
+          <p class="small">Para que aparezcan aquí, en Intervals.icu abre la actividad del test,
+          selecciona el intervalo del esprint e introduce el lactato en sus campos. Mientras tanto,
+          usa los campos de arriba a mano.</p>`;
+        return;
+      }
+
+      nota.innerHTML = `<h4>Lactato encontrado</h4>
+        <table><thead><tr><th>Fecha</th><th>Intervalo</th><th>Duración</th><th>Potencia</th><th>Lactato pico</th></tr></thead><tbody>
+        ${hallazgos.map(h => `<tr>
+          <td>${escapeHtml(h.fecha)}</td>
+          <td>${escapeHtml(h.intervalo)}</td>
+          <td>${h.segundos != null ? h.segundos + " s" : "—"}</td>
+          <td>${h.vatios != null ? h.vatios + " W" : "—"}</td>
+          <td><b>${h.pico}</b> mmol·l⁻¹</td>
+        </tr>`).join("")}
+        </tbody></table>
+        <p class="small">Copia el valor previo y el pico a los campos de arriba junto con la duración
+        del esprint para obtener la VLa máx.</p>`;
+
+    }catch(e){
+      nota.innerHTML = `<h4>Error al buscar lactato</h4><p style="color:var(--bad);font-weight:800">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
   // Modelo metabolico de Mader. Ecuaciones y constantes tomadas de
   // Dunst AK, Hesse C, Ueberschär O (2025), Eur J Appl Physiol,
   // doi 10.1007/s00421-024-05663-4 (acceso abierto), que las reproduce
