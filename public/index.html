@@ -1,0 +1,1724 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MFPP Cycling Specialist | Dashboard Metabólico</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // La configuracion local (con la API key) solo se carga en tu ordenador.
+    // Publicado en Netlify no existe: alli la clave la guarda la funcion del servidor.
+    if(["localhost","127.0.0.1",""].indexOf(location.hostname) >= 0){
+      document.write('<script src="../config.local.js"><\/script>');
+    }
+  </script>
+  <style>
+    :root{
+      --bg:#071521;
+      --panel:#10253a;
+      --panel2:#152f49;
+      --card:#183957;
+      --card2:#0f2235;
+      --line:rgba(160,210,255,.22);
+      --text:#eef7ff;
+      --muted:#a9c2d8;
+      --cyan:#6df2ff;
+      --blue:#58a7ff;
+      --lime:#e8ff74;
+      --pink:#ffb7b7;
+      --orange:#ffd08a;
+      --green:#98f5b5;
+      --bad:#ff9d9d;
+      --shadow:0 18px 40px rgba(0,0,0,.32);
+      --radius:22px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(88,167,255,.30), transparent 35%),
+        radial-gradient(circle at 85% 15%, rgba(109,242,255,.16), transparent 34%),
+        linear-gradient(135deg,#06111c,#0a1c2d 55%,#071521);
+      color:var(--text);
+      min-height:100vh;
+    }
+    .app{display:grid; grid-template-columns:280px 1fr; min-height:100vh}
+    aside{
+      padding:26px 22px;
+      background:linear-gradient(180deg,rgba(18,46,72,.96),rgba(8,20,32,.95));
+      border-right:1px solid var(--line);
+      position:sticky; top:0; height:100vh;
+    }
+    .brand{display:flex; align-items:center; gap:13px; margin-bottom:28px}
+    .logo{
+      width:48px;height:48px;border-radius:15px;
+      background:linear-gradient(135deg,var(--cyan),var(--blue));
+      box-shadow:0 0 26px rgba(109,242,255,.35);
+      display:grid;place-items:center;font-weight:900;color:#062033;
+    }
+    .brand h1{font-size:18px;line-height:1.05;margin:0;letter-spacing:.5px}
+    .brand span{font-size:12px;color:var(--cyan);font-weight:800}
+    nav button{
+      width:100%;border:1px solid transparent;background:transparent;color:var(--muted);
+      padding:14px 15px;border-radius:15px;text-align:left;font-weight:800;margin:5px 0;
+      cursor:pointer;font-size:15px;transition:.2s;
+    }
+    nav button:hover{background:rgba(109,242,255,.08);color:white;border-color:var(--line)}
+    nav button.active{
+      background:linear-gradient(135deg,rgba(88,167,255,.95),rgba(109,242,255,.45));
+      color:white;box-shadow:0 12px 22px rgba(40,130,220,.28);
+    }
+    .side-note{
+      margin-top:28px;padding:16px;border-radius:18px;border:1px solid var(--line);
+      background:rgba(255,255,255,.04);color:var(--muted);font-size:13px;line-height:1.45;
+    }
+    main{padding:26px; overflow:hidden}
+    header{
+      display:flex;justify-content:space-between;gap:18px;align-items:center;
+      padding:20px 22px;border:1px solid var(--line);border-radius:var(--radius);
+      background:rgba(19,47,73,.78);box-shadow:var(--shadow);backdrop-filter:blur(10px);
+      margin-bottom:22px;
+    }
+    .title h2{margin:0;font-size:26px;letter-spacing:.3px}
+    .title p{margin:6px 0 0;color:var(--muted)}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+    .btn{
+      border:1px solid var(--line);background:rgba(255,255,255,.06);color:white;
+      padding:11px 14px;border-radius:14px;font-weight:900;cursor:pointer;transition:.2s;
+    }
+    .btn:hover{transform:translateY(-1px);background:rgba(109,242,255,.12)}
+    .btn.primary{background:linear-gradient(135deg,var(--blue),#4b7cff);border-color:rgba(255,255,255,.24)}
+    .grid{display:grid;gap:18px}
+    .grid.cols2{grid-template-columns:1.05fr .95fr}
+    .grid.cols3{grid-template-columns:repeat(3,1fr)}
+    .grid.cols4{grid-template-columns:repeat(4,1fr)}
+    .panel,.card{
+      border:1px solid var(--line);border-radius:var(--radius);
+      background:linear-gradient(180deg,rgba(25,58,88,.86),rgba(13,30,47,.86));
+      box-shadow:var(--shadow);padding:18px;
+    }
+    .panel h3,.card h3{margin:0 0 14px;color:var(--cyan);font-size:16px;text-transform:uppercase;letter-spacing:.6px}
+    label{display:block;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px}
+    input,select,textarea{
+      width:100%;border:1px solid rgba(160,210,255,.35);background:rgba(8,25,42,.62);
+      color:white;border-radius:14px;padding:12px 13px;font-weight:800;font-size:15px;outline:none;
+    }
+    input:focus,select:focus,textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(109,242,255,.12)}
+    textarea{min-height:92px;resize:vertical;font-weight:600}
+    /* Un valor estimado no debe parecer una medicion. */
+    input.estimado{
+      border-color:var(--orange); border-style:dashed;
+      background:rgba(255,208,138,.10); color:var(--orange);
+    }
+    input.estimado + .marca-estimado{display:block}
+    .marca-estimado{display:none;color:var(--orange);font-size:11px;font-weight:800;margin-top:4px}
+    .formgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+    .metric{
+      padding:16px;border-radius:18px;border:1px solid var(--line);
+      background:rgba(255,255,255,.04);min-height:116px;
+    }
+    .metric .name{color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.8px}
+    .metric .value{font-size:32px;font-weight:950;margin:8px 0 2px;color:var(--lime)}
+    .metric .unit{color:var(--muted);font-size:12px;font-weight:700}
+    .badge{
+      display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;
+      border:1px solid var(--line);font-weight:900;font-size:12px;background:rgba(255,255,255,.06)
+    }
+    .badge.good{color:var(--green)} .badge.mid{color:var(--lime)} .badge.warn{color:var(--orange)} .badge.bad{color:var(--bad)}
+    .bigprofile{
+      min-height:260px;display:flex;flex-direction:column;justify-content:space-between;
+      background:
+        radial-gradient(circle at 75% 20%, rgba(232,255,116,.22), transparent 30%),
+        linear-gradient(180deg,rgba(30,70,105,.95),rgba(14,32,50,.9));
+    }
+    .profile-title{font-size:34px;line-height:1.02;margin:8px 0;color:var(--lime);font-weight:950}
+    .subtitle{color:var(--muted);line-height:1.5}
+    .tabs{display:none}.tabs.active{display:block}
+
+    .indices-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:13px;margin-bottom:18px}
+    .indice{
+      padding:14px;border-radius:18px;border:1px solid var(--line);
+      background:rgba(255,255,255,.04);display:flex;flex-direction:column;gap:6px;
+    }
+    .indice .nom{color:var(--muted);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.7px;line-height:1.25}
+    .indice .val{font-size:30px;font-weight:950;color:var(--lime);line-height:1}
+    .indice .val.nodato{color:var(--muted)}
+    .indice .form{color:var(--muted);font-size:11px;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    /* Barra permanente de identificacion del ciclista. Va fuera del header
+       para que aparezca tambien en el PDF, que es donde mas falta hace. */
+    .barra-atleta{
+      position:sticky; top:0; z-index:20;
+      display:flex; align-items:center; gap:15px;
+      padding:14px 20px; margin-bottom:18px;
+      border:1px solid var(--cyan); border-radius:var(--radius);
+      background:linear-gradient(135deg,rgba(20,58,92,.97),rgba(12,32,52,.97));
+      box-shadow:var(--shadow); backdrop-filter:blur(10px);
+    }
+    .barra-atleta.vacia{
+      border-color:var(--orange);
+      background:linear-gradient(135deg,rgba(92,64,20,.55),rgba(52,38,12,.55));
+    }
+    .ba-avatar{
+      width:46px; height:46px; flex:none; border-radius:14px;
+      display:grid; place-items:center; font-weight:900; font-size:16px; color:#062033;
+      background:linear-gradient(135deg,var(--cyan),var(--blue));
+    }
+    .barra-atleta.vacia .ba-avatar{background:linear-gradient(135deg,var(--orange),#c98a2e)}
+    .ba-datos{display:flex; flex-direction:column; gap:3px; min-width:0}
+    .ba-nombre{font-size:20px; font-weight:950; letter-spacing:.3px; line-height:1.1}
+    .ba-detalle{color:var(--muted); font-size:13px; font-weight:700}
+    .barra-atleta.vacia .ba-nombre{color:var(--orange)}
+    .ba-etiqueta{
+      margin-left:auto; flex:none; padding:7px 12px; border-radius:999px;
+      border:1px solid var(--line); background:rgba(255,255,255,.06);
+      font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:var(--cyan);
+    }
+    .bars{display:grid;gap:12px}
+    .barrow{display:grid;grid-template-columns:190px 1fr 70px;gap:12px;align-items:center}
+    .bar{height:12px;border-radius:999px;background:rgba(255,255,255,.10);overflow:hidden;border:1px solid rgba(255,255,255,.10)}
+    .bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--blue),var(--cyan),var(--lime));width:50%}
+    .analysis-box{
+      padding:16px;border-radius:18px;background:rgba(255,255,255,.045);border:1px solid var(--line);
+      line-height:1.55;color:#e8f5ff;
+    }
+    .analysis-box h4{margin:0 0 8px;color:white;font-size:18px}
+    ul{margin:8px 0 0;padding-left:20px}.analysis-box li{margin:6px 0}
+    .print-report{display:none}
+    .canvasWrap{height:320px}
+    .small{font-size:12px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse;overflow:hidden;border-radius:16px}
+    th,td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left}
+    th{color:var(--cyan);font-size:12px;text-transform:uppercase;letter-spacing:.7px}
+    td{color:#eaf7ff;font-size:14px}
+    .pillrow{display:flex;gap:8px;flex-wrap:wrap}
+    .alert{
+      border-left:4px solid var(--cyan);
+      background:rgba(109,242,255,.08);
+      padding:13px 14px;border-radius:14px;color:#e9fbff;line-height:1.45;
+    }
+    @media(max-width:1100px){.app{grid-template-columns:1fr} aside{position:relative;height:auto}.formgrid,.grid.cols4,.grid.cols3,.grid.cols2{grid-template-columns:1fr}.barrow{grid-template-columns:1fr}}
+    @media print{
+      body{background:white;color:#111}.app{display:block}aside,header,.no-print{display:none!important}
+      .tabs{display:block!important}.panel,.card{break-inside:avoid;background:white;color:#111;box-shadow:none;border:1px solid #ccc}
+      .print-report{display:block}.metric .value,.panel h3,.card h3{color:#084b70}.subtitle,.small,label{color:#333}
+      .barra-atleta{
+        position:static; background:white!important; border:2px solid #084b70; color:#111;
+        break-inside:avoid; break-after:avoid;
+      }
+      .ba-nombre{color:#084b70} .ba-detalle{color:#333} .ba-avatar{color:white;background:#084b70}
+      .ba-etiqueta{color:#084b70; border-color:#084b70}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="no-print">
+    <div class="brand">
+      <div class="logo">MF</div>
+      <div><h1>METABOLIC<br>DASHBOARD</h1><span>MFPP Cycling Specialist</span></div>
+    </div>
+    <nav>
+      <button class="active" data-tab="resumen">Resumen</button>
+      <button data-tab="inputs">Datos del ciclista</button>
+      <button data-tab="intervals">Intervals.icu</button>
+      <button data-tab="perfil">Perfil metabólico</button>
+      <button data-tab="prescripcion">Prescripción</button>
+      <button data-tab="evolucion">Histórico</button>
+      <button data-tab="informe">Informe</button>
+    </nav>
+    <div class="side-note">
+      Conectado a Intervals.icu. Los datos que la API no proporciona (VLa máx, TTE, estabilidad) se introducen a mano.
+    </div>
+  </aside>
+
+  <main>
+    <header class="no-print">
+      <div class="title">
+        <h2>Dashboard metabólico aplicado al ciclismo</h2>
+        <p>Diagnóstico, interpretación por categoría y prescripción práctica de entrenamiento.</p>
+      </div>
+      <div class="actions">
+        <button class="btn" onclick="loadDemo()">Cargar ejemplo</button>
+        <button class="btn" onclick="saveTest()">Guardar test</button>
+        <button class="btn" onclick="exportJSON()">Exportar JSON</button>
+        <button class="btn primary" onclick="window.print()">Exportar PDF</button>
+      </div>
+    </header>
+
+    <div id="barraAtleta" class="barra-atleta vacia">
+      <div class="ba-avatar" id="baIniciales">—</div>
+      <div class="ba-datos">
+        <div class="ba-nombre" id="baNombre">Sin ciclista seleccionado</div>
+        <div class="ba-detalle" id="baDetalle">Elige un ciclista en la pestaña Intervals.icu.</div>
+      </div>
+      <div class="ba-etiqueta" id="baEtiqueta">Sin datos</div>
+    </div>
+
+    <section id="resumen" class="tabs active">
+      <div class="grid cols2">
+        <div class="panel bigprofile">
+          <div>
+            <h3>Resumen del perfil</h3>
+            <div class="small">Fenotipo global</div>
+            <div id="fenotipo" class="profile-title">Pendiente de datos</div>
+            <p id="resumenTexto" class="subtitle">Introduce los datos principales para generar el análisis.</p>
+          </div>
+          <div class="pillrow">
+            <span id="rendimientoPotencial" class="badge mid">Rendimiento potencial: —</span>
+            <span id="eficienciaMetabolica" class="badge mid">Eficiencia metabólica: —</span>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Radar metabólico</h3>
+          <div class="canvasWrap"><canvas id="radarChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid cols4" style="margin-top:18px">
+        <div class="metric"><div class="name">VO₂ máx</div><div id="m_vo2" class="value">—</div><div class="unit">ml·kg⁻¹·min⁻¹</div></div>
+        <div class="metric"><div class="name">VLa máx</div><div id="m_vla" class="value">—</div><div class="unit">mmol·l⁻¹·s⁻¹</div></div>
+        <div class="metric"><div class="name">mFTP</div><div id="m_ftp" class="value">—</div><div class="unit">W</div></div>
+        <div class="metric"><div class="name">LT1 / VT1</div><div id="m_lt1" class="value">—</div><div class="unit">W</div></div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Índices calculados</h3>
+        <div class="indices-grid" id="indicesGrid"></div>
+        <div class="bars" id="bars"></div>
+      </div>
+    </section>
+
+    <section id="inputs" class="tabs">
+      <div class="panel">
+        <h3>Panel de edición rápida</h3>
+        <div class="formgrid">
+          <div><label>Atleta</label><input id="athlete" value="Ejemplo Atleta"/></div>
+          <div><label>Fecha</label><input id="date" type="date"/></div>
+          <div><label>Categoría</label><select id="category"><option>Infantil</option><option selected>Cadete</option><option>Juvenil</option><option>Sub23</option><option>Élite</option><option>Máster</option></select></div>
+          <div><label>Modalidad</label><select id="modality"><option selected>Ruta</option><option>BTT</option><option>CX</option><option>Pista</option><option>Triatlón</option></select></div>
+          <div><label>Peso (kg)</label><input id="weight" type="number" step="0.1" value="72"/></div>
+          <div><label>VO₂ máx</label><input id="vo2" type="number" step="0.1" value="68.3"/></div>
+          <div><label>P@VO₂ máx (W)</label><input id="pvo2" type="number" value="412"/></div>
+          <div><label>VLa máx</label><input id="vla" type="number" step="0.01" value="1.85"/></div>
+          <div><label>mFTP (W)</label><input id="ftp" type="number" value="305"/></div>
+          <div><label>CP (W)</label><input id="cp" type="number" value="318"/></div>
+          <div><label>FRC / W’ (kJ)</label><input id="frc" type="number" step="0.1" value="21.6"/></div>
+          <div><label>TTE (min)</label><input id="tte" type="number" step="0.1" value="28.75"/></div>
+          <div><label>Stamina (%)</label><input id="stamina" type="number" value="72"/></div>
+          <div><label>LT1 / VT1 (W)</label><input id="lt1" type="number" value="185"/></div>
+          <div><label>Pmáx (W)</label><input id="pmax" type="number" value="1312"/></div>
+          <div><label>Nota</label><input id="note" placeholder="Opcional"/></div>
+        </div>
+        <div style="margin-top:16px" class="alert">
+          Los porcentajes e índices se normalizan internamente para orientar decisiones de entrenamiento. No sustituyen una valoración clínica ni una prueba de laboratorio.
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Curva potencia-duración manual</h3>
+        <div class="formgrid">
+          <div><label>5 s (W)</label><input id="p5s" type="number" value="1180"/></div>
+          <div><label>15 s (W)</label><input id="p15s" type="number" value="930"/></div>
+          <div><label>1 min (W)</label><input id="p1m" type="number" value="620"/></div>
+          <div><label>5 min (W)</label><input id="p5m" type="number" value="405"/></div>
+          <div><label>20 min (W)</label><input id="p20m" type="number" value="322"/></div>
+          <div><label>60 min (W)</label><input id="p60m" type="number" value="292"/></div>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="intervals" class="tabs">
+      <div class="grid cols2">
+        <div class="panel">
+          <h3>Conexión con Intervals.icu</h3>
+          <div class="alert">
+            Esta integración puede recibir más elementos de Intervals.icu, pero el dashboard solo mostrará los IDs que indiques como ciclistas entrenados. 
+            La clave API y el filtro de IDs se guardan solo en este navegador mediante almacenamiento local.
+          </div>
+          <div class="formgrid" style="margin-top:16px; grid-template-columns:repeat(2,1fr)">
+            <div>
+              <label>ID del entrenador / cuenta en Intervals.icu</label>
+              <input id="icuCoachId" placeholder="Ejemplo: i12345"/>
+            </div>
+            <div>
+              <label>API Key de Intervals.icu</label>
+              <input id="icuApiKey" type="password" placeholder="Pega aquí tu API key"/>
+            </div>
+            <div>
+              <label>Seleccionar ciclista real</label>
+              <select id="icuAthleteSelect" onchange="icuSelectAthleteFromDropdown()">
+                <option value="">Primero carga tus atletas vinculados</option>
+              </select>
+            </div>
+            <div>
+              <label>ID del atleta seleccionado</label>
+              <input id="icuAthleteId" placeholder="Se rellenará al elegir atleta"/>
+            </div>
+            <div>
+              <label>IDs de mis ciclistas entrenados</label>
+              <input id="icuAllowedAthleteIds" placeholder="Ejemplo: i450014, i566978" oninput="icuApplyAthleteFilter()"/>
+            </div>
+            <div>
+              <label>Filtro rápido de ciclistas</label>
+              <input id="icuAthleteFilter" placeholder="Buscar por nombre..." oninput="icuApplyAthleteFilter()"/>
+            </div>
+            <div>
+              <label>Modo de listado</label>
+              <select id="icuListMode" onchange="icuApplyAthleteFilter()">
+                <option value="coached" selected>Solo atletas que entreno</option>
+                <option value="all">Mostrar respuesta completa filtrada por mis IDs</option>
+              </select>
+            </div>
+            <div>
+              <label>Servidor API</label>
+              <input id="icuBaseUrl" value="https://intervals.icu/api/v1"/>
+            </div>
+            <div>
+              <label>Código de acceso (solo web publicada)</label>
+              <input id="icuAccessCode" type="password" placeholder="Solo si configuraste MFPP_ACCESS_CODE" oninput="icuGuardarCodigo()"/>
+            </div>
+            <div>
+              <label>Días de actividades a consultar</label>
+              <input id="icuDays" type="number" value="90"/>
+            </div>
+          </div>
+          <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+            <button class="btn primary" onclick="icuSaveConfig()">Guardar conexión</button>
+            <button class="btn" onclick="icuLoadAthleteList()">Cargar solo mis atletas</button>
+            <button class="btn" onclick="icuSaveAllowedAthletes()">Guardar mis 2 ciclistas</button>
+            <button class="btn" onclick="icuTestConnection()">Probar conexión</button>
+            <button class="btn" onclick="icuImportAthlete()">Importar datos básicos</button>
+            <button class="btn primary" onclick="icuLoadFullMetabolicAnalysis()">Cargar análisis metabólico</button>
+            <button class="btn" onclick="icuImportActivities()">Consultar actividades</button>
+            <button class="btn" onclick="icuClearConfig()">Borrar API Key</button>
+          </div>
+          <div id="icuStatus" class="analysis-box" style="margin-top:16px">
+            <h4>Estado</h4>
+            <p>Introduce el ID del atleta y la API Key para comenzar.</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Datos importables</h3>
+          <div class="analysis-box">
+            <h4>Qué intenta importar esta versión</h4>
+            <ul>
+              <li>Lista de atletas vinculados a tu cuenta de entrenador.</li>
+              <li>Selección directa del ciclista desde un desplegable.</li>
+              <li>Botón único para cargar el análisis metabólico del atleta seleccionado.</li>
+              <li>Nombre del ciclista.</li>
+              <li>Peso, si está disponible.</li>
+              <li>FTP/eFTP/mFTP, si está disponible.</li>
+              <li>Mejores potencias aproximadas desde actividades recientes cuando la API las devuelve.</li>
+              <li>Actividades recientes para revisar volumen, desnivel y carga.</li>
+            </ul>
+            <p class="small">La disponibilidad exacta depende de los permisos del atleta, de los campos que devuelva Intervals.icu y de posibles restricciones CORS del navegador.</p>
+          </div>
+          <div id="icuPreview" class="analysis-box" style="margin-top:16px">
+            <h4>Vista previa</h4>
+            <p>Aquí aparecerán los datos recibidos antes de volcarlos al dashboard.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Actividades recientes</h3>
+        <div id="icuActivities">
+          <p class="subtitle">Sin datos consultados todavía.</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Nota técnica para uso profesional</h3>
+        <div class="analysis-box">
+          <p><b>Versión directa desde navegador:</b> cómoda para uso personal, pero la API Key queda en el propio navegador del entrenador.</p>
+          <p><b>Versión profesional recomendada:</b> crear un pequeño servidor intermedio privado. Así la API Key no viaja dentro del archivo HTML y se pueden gestionar varios ciclistas con más seguridad.</p>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="perfil" class="tabs">
+      <div class="grid cols2">
+        <div class="panel">
+          <h3>Análisis detallado por sistemas</h3>
+          <div id="systems" class="grid cols2"></div>
+        </div>
+        <div class="panel">
+          <h3>Curva potencia-duración</h3>
+          <div class="canvasWrap"><canvas id="pdChart"></canvas></div>
+          <p class="small">Comparación interna de tus mejores potencias introducidas manualmente.</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Modelo metabólico de Mader</h3>
+        <div class="formgrid" style="grid-template-columns:repeat(2,1fr);max-width:560px;margin-bottom:16px">
+          <div>
+            <label>VO₂ basal (ml·kg⁻¹·min⁻¹)</label>
+            <input id="vo2base" type="number" step="0.1" value="5"/>
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="btn" onclick="aplicarMaderALT1()">Usar FATmax como LT1</button>
+          </div>
+        </div>
+        <div class="indices-grid" id="maderGrid"></div>
+        <div id="maderNota" class="analysis-box"></div>
+      </div>
+    </section>
+
+    <section id="prescripcion" class="tabs">
+      <div class="grid cols2">
+        <div class="panel">
+          <h3>Foco de entrenamiento recomendado</h3>
+          <div id="trainingFocus" class="analysis-box"></div>
+        </div>
+        <div class="panel">
+          <h3>Prescripción por categoría</h3>
+          <div id="categoryAdvice" class="analysis-box"></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:18px">
+        <h3>Ejemplos de sesiones</h3>
+        <div id="sessions" class="grid cols3"></div>
+      </div>
+    </section>
+
+    <section id="evolucion" class="tabs">
+      <div class="panel">
+        <h3>Histórico de tests guardados</h3>
+        <div id="history"></div>
+      </div>
+    </section>
+
+    <section id="informe" class="tabs">
+      <div class="panel">
+        <h3>Informe automático para entrenador</h3>
+        <div id="coachReport" class="analysis-box"></div>
+      </div>
+      <div class="panel" style="margin-top:18px">
+        <h3>Informe simplificado para ciclista / familia</h3>
+        <div id="riderReport" class="analysis-box"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  let radarChart, pdChart;
+
+  const fields = ["athlete","date","category","modality","weight","vo2","pvo2","vla","ftp","cp","frc","tte","stamina","lt1","pmax","note","p5s","p15s","p1m","p5m","p20m","p60m"];
+
+  function num(id){ return parseFloat($(id).value) || 0; }
+  function val(id){ return $(id).value || ""; }
+  function clamp(x,a=0,b=100){ return Math.max(a, Math.min(b,x)); }
+  function round(x,d=0){ return Number.isFinite(x) ? x.toFixed(d) : "—"; }
+
+  function getData(){
+    const o={};
+    fields.forEach(f=>o[f]=val(f));
+    ["weight","vo2","pvo2","vla","ftp","cp","frc","tte","stamina","lt1","pmax","p5s","p15s","p1m","p5m","p20m","p60m"].forEach(f=>o[f]=num(f));
+    return o;
+  }
+
+  function compute(d){
+    const ftpRelVo2 = d.pvo2 ? d.ftp / d.pvo2 : 0;
+    const lt1RelFtp = d.ftp ? d.lt1 / d.ftp : 0;
+    const frcRel = d.ftp ? d.frc / d.ftp : 0;
+    const pmaxRel = d.weight ? d.pmax / d.weight : 0;
+    const vo2Score = clamp((d.vo2-40)/(75-40)*100);
+    const pvo2Score = clamp((d.pvo2 / Math.max(1,d.weight) - 3.5)/(6.5-3.5)*100);
+    const glycolytic = clamp((d.vla-0.35)/(2.2-0.35)*100);
+    const reserveAna = clamp((frcRel-0.025)/(0.11-0.025)*100);
+    const base = clamp((lt1RelFtp-0.55)/(0.85-0.55)*100);
+    const sustain = clamp((ftpRelVo2-0.68)/(0.88-0.68)*100);
+    const durability = clamp(d.stamina);
+    const efficiency = d.vo2 ? (d.pvo2/d.vo2) : 0;
+    const efficiencyScore = clamp((efficiency-4.5)/(7-4.5)*100);
+    const cost = clamp((glycolytic*0.55 + (100-base)*0.30 + reserveAna*0.15));
+    let phenotype = "Perfil equilibrado";
+    if(glycolytic>70 && base<45) phenotype="Predominio glucolítico actual";
+    else if(base>70 && sustain>65 && glycolytic<55) phenotype="Perfil aeróbico sostenible";
+    else if(glycolytic>65 && pmaxRel>15) phenotype="Perfil explosivo / puncheur";
+    else if(vo2Score>70 && sustain<45) phenotype="Motor alto, sostenibilidad mejorable";
+    else if(base<40) phenotype="Base aeróbica limitada";
+    return {ftpRelVo2, lt1RelFtp, frcRel, pmaxRel, vo2Score, pvo2Score, glycolytic, reserveAna, base, sustain, durability, efficiency, efficiencyScore, cost, phenotype};
+  }
+
+  function labelLevel(x, inverse=false){
+    const v = inverse ? 100-x : x;
+    if(v>=75) return ["ALTA","good"];
+    if(v>=55) return ["MEDIA-ALTA","mid"];
+    if(v>=35) return ["MEDIA","warn"];
+    return ["BAJA","bad"];
+  }
+
+  // Identificacion permanente: visible en todas las pestañas y en el PDF, para no
+  // confundir nunca de quien son los datos que se estan mirando.
+  function actualizarBarraAtleta(d){
+    const barra = $("barraAtleta");
+    if(!barra) return;
+    const nombre = (d.athlete || "").trim();
+    const id = $("icuAthleteId") ? $("icuAthleteId").value.trim() : "";
+
+    barra.classList.toggle("vacia", !nombre);
+    $("baIniciales").textContent = nombre
+      ? nombre.split(/\s+/).filter(Boolean).slice(0,2).map(p => p[0]).join("").toUpperCase()
+      : "—";
+    $("baNombre").textContent = nombre || "Sin ciclista seleccionado";
+
+    if(!nombre){
+      $("baDetalle").textContent = "Elige un ciclista en la pestaña Intervals.icu o escribe los datos a mano.";
+      $("baEtiqueta").textContent = "Sin datos";
+      return;
+    }
+
+    const partes = [];
+    if(id) partes.push(id);
+    if(d.category) partes.push(d.category);
+    if(d.modality) partes.push(d.modality);
+    if(d.weight) partes.push(round(d.weight,1) + " kg");
+    if(d.date) partes.push(d.date.split("-").reverse().join("/"));
+    $("baDetalle").textContent = partes.join("  ·  ");
+    $("baEtiqueta").textContent = id ? "Intervals.icu" : "Manual";
+  }
+
+  function update(){
+    const d=getData(), c=compute(d);
+    actualizarBarraAtleta(d);
+    $("m_vo2").textContent=round(d.vo2,1);
+    $("m_vla").textContent=round(d.vla,2);
+    $("m_ftp").textContent=round(d.ftp,0);
+    $("m_lt1").textContent=round(d.lt1,0);
+    $("fenotipo").textContent=c.phenotype;
+    $("resumenTexto").textContent = summaryText(d,c);
+    $("rendimientoPotencial").textContent = "Rendimiento potencial: " + (c.vo2Score>70 || c.pvo2Score>70 ? "ALTO" : c.vo2Score>50 ? "MEDIO" : "EN DESARROLLO");
+    $("eficienciaMetabolica").textContent = "Eficiencia metabólica: " + labelLevel((c.base+c.sustain+c.efficiencyScore)/3)[0];
+
+    const metrics=[
+      ["Producción glucolítica",c.glycolytic,"%"],
+      ["Capacidad / reserva anaeróbica",c.reserveAna,"%"],
+      ["Techo aeróbico",c.vo2Score,"%"],
+      ["Potencia aeróbica",c.pvo2Score,"%"],
+      ["Sostenibilidad relativa",c.sustain,"%"],
+      ["Base aeróbica relativa",c.base,"%"],
+      ["Durabilidad / Stamina",c.durability,"%"],
+      ["Eficiencia aeróbica",c.efficiencyScore,"%"]
+    ];
+    $("bars").innerHTML = metrics.map(m=>`<div class="barrow"><b>${m[0]}</b><div class="bar"><i style="width:${clamp(m[1])}%"></i></div><span>${round(m[1],0)}${m[2]}</span></div>`).join("");
+
+    updateIndices(d,c);
+    updateMader(d);
+    updateRadar(metrics);
+    updatePD(d);
+    updateSystems(d,c);
+    updatePrescription(d,c);
+    updateReports(d,c);
+    renderHistory();
+  }
+
+  function summaryText(d,c){
+    if(!d.ftp || !d.vo2) return "Introduce los datos principales para generar el análisis.";
+    if(c.glycolytic>70 && c.base<45) return `El ciclista presenta alta producción glucolítica y una base aeróbica relativa baja. Puede generar potencia alta, pero necesita mejorar la estabilidad metabólica y el control de intensidad.`;
+    if(c.sustain<45 && c.vo2Score>65) return `El ciclista tiene un techo aeróbico interesante, pero todavía no transforma ese potencial en potencia sostenible durante esfuerzos prolongados.`;
+    if(c.base>65 && c.glycolytic<55) return `Perfil aeróbicamente sólido, con buena capacidad para sostener esfuerzos. Puede necesitar trabajo específico de cambio de ritmo según objetivo competitivo.`;
+    return `Perfil con margen de mejora mediante una combinación de trabajo aeróbico, control de intensidad y estímulos específicos según categoría y calendario.`;
+  }
+
+  // Indices con la formula a la vista y el ratio crudo como valor principal.
+  // El porcentaje normalizado va debajo, para que nunca se confunda uno con otro.
+  // Modelo metabolico de Mader. Ecuaciones y constantes tomadas de
+  // Dunst AK, Hesse C, Ueberschär O (2025), Eur J Appl Physiol,
+  // doi 10.1007/s00421-024-05663-4 (acceso abierto), que las reproduce
+  // a partir de Mader (1984, 2003) y Mader y Heck (1986).
+  const MADER = {
+    ks1: 0.0635,               // (mmol·kg⁻¹)²  activación al 50% de la fosforilación oxidativa (Ec. 3)
+    ks2: Math.pow(1.1, 3),     // (mmol·kg⁻¹)³  activación al 50% de la glucólisis (Ec. 4)
+    celaO2: 0.02049,           // mmol La por ml O₂ (Ec. 6)
+    volLa: 0.4                 // volumen de distribución del lactato (Ec. 6)
+  };
+
+  // Recorre el estado de fosforilación [ADP] y localiza los dos umbrales:
+  // FATmax = máximo déficit de piruvato (Ec. 8) y MLSS = déficit cero (Ec. 9).
+  function maderUmbrales(vo2max, vlamax){
+    if(!(vo2max > 0 && vlamax > 0)) return null;
+    let mlss = null, fatmax = null, dpMax = -Infinity, previo = null;
+    for(let adp = 0.005; adp <= 3; adp += 0.001){
+      const vo2ss = vo2max / (1 + MADER.ks1/(adp*adp));              // Ec. 3
+      const vlass = vlamax / (1 + MADER.ks2/(adp*adp*adp));          // Ec. 4
+      const vlaox = MADER.celaO2 * (vo2ss/60) / MADER.volLa;         // Ec. 6
+      const dp = vlaox - vlass;                                      // Ec. 7
+      if(dp > dpMax){ dpMax = dp; fatmax = {vo2ss:vo2ss}; }
+      if(previo && previo.dp > 0 && dp <= 0 && !mlss){
+        const t = previo.dp / (previo.dp - dp);
+        mlss = {vo2ss: previo.vo2ss + t*(vo2ss - previo.vo2ss)};
+      }
+      previo = {vo2ss:vo2ss, dp:dp};
+    }
+    return (mlss && fatmax) ? {mlss:mlss, fatmax:fatmax} : null;
+  }
+
+  // Convierte un VO₂ en estado estable a vatios (Ec. 11). La pendiente CE-VO₂ no
+  // se mide aquí: se deduce del propio ciclista sabiendo que en P@VO₂máx el
+  // consumo es su VO₂máx. Es una calibración individual, no una constante genérica.
+  function maderPotencia(vo2ss, d, vo2base){
+    const vo2maxAbs  = d.vo2 * d.weight;
+    const vo2baseAbs = vo2base * d.weight;
+    const ceVo2 = (vo2maxAbs - vo2baseAbs) / d.pvo2;   // ml O₂·min⁻¹·W⁻¹
+    if(!(ceVo2 > 0)) return null;
+    return { watts: (vo2ss*d.weight - vo2baseAbs) / ceVo2, ceVo2: ceVo2 };
+  }
+
+  function updateMader(d){
+    const caja = $("maderGrid"), nota = $("maderNota");
+    if(!caja) return;
+    const vo2base = num("vo2base");
+    const r = maderUmbrales(d.vo2, d.vla);
+
+    const falta = [];
+    if(!d.vla)    falta.push("VLa máx");
+    if(!d.vo2)    falta.push("VO₂ máx");
+    if(!d.weight) falta.push("peso");
+    if(!d.pvo2)   falta.push("P@VO₂ máx");
+
+    if(!r || falta.length){
+      caja.innerHTML = "";
+      nota.innerHTML = `<h4>Faltan datos de entrada</h4>
+        <p>El modelo necesita <b>${escapeHtml(falta.join(", ") || "más datos")}</b>.
+        La VLa máx no la proporciona Intervals.icu: se mide con un esprint máximo
+        y lactato antes y después, o se importa de otro programa.</p>`;
+      window.__mader = null;
+      return;
+    }
+
+    const pMlss = maderPotencia(r.mlss.vo2ss, d, vo2base);
+    const pFat  = maderPotencia(r.fatmax.vo2ss, d, vo2base);
+    window.__mader = {mlss:pMlss, fatmax:pFat};
+
+    const tarjetas = [
+      ["MLSS (umbral)", pMlss ? round(pMlss.watts,0) + " W" : "—",
+       `${round(r.mlss.vo2ss/d.vo2*100,0)}% del VO₂máx`],
+      ["FATmax", pFat ? round(pFat.watts,0) + " W" : "—",
+       `${round(r.fatmax.vo2ss/d.vo2*100,0)}% del VO₂máx`],
+      ["CE-VO₂ deducido", pMlss ? round(pMlss.ceVo2,2) : "—", "ml O₂·min⁻¹·W⁻¹"],
+      ["mFTP medido", d.ftp ? round(d.ftp,0) + " W" : "—", "para comparar con el MLSS"]
+    ];
+
+    caja.innerHTML = tarjetas.map(t =>
+      `<div class="indice"><div class="nom">${t[0]}</div><div class="val">${t[1]}</div><div class="form">${t[2]}</div></div>`
+    ).join("");
+
+    const dif = (pMlss && d.ftp) ? Math.round(pMlss.watts - d.ftp) : null;
+    nota.innerHTML = `<h4>Cómo leer esto</h4>
+      <p>El <b>MLSS</b> es el punto en que la formación de lactato iguala a su eliminación
+      (déficit de piruvato cero). Es un umbral alto, comparable al mFTP, no al LT1.
+      El <b>FATmax</b> es el máximo déficit de piruvato: la intensidad de mayor oxidación
+      de grasas, próxima al umbral aeróbico y por tanto la referencia razonable para el LT1.</p>
+      ${dif !== null ? `<p>Diferencia entre el MLSS calculado y el mFTP medido: <b>${dif > 0 ? "+" : ""}${dif} W</b>.
+      Una separación grande suele indicar que la VLa máx introducida no corresponde a la forma actual.</p>` : ""}
+      <p class="small">Ecuaciones y constantes (ks1 = 0,0635; ks2 = 1,1³; CE<sub>La·O₂</sub> = 0,02049; Vol<sub>La</sub> = 0,4)
+      tomadas de Dunst, Hesse y Ueberschär (2025), <i>Eur J Appl Physiol</i>, doi:10.1007/s00421-024-05663-4,
+      que las reproduce de Mader (1984, 2003) y Mader y Heck (1986).
+      La pendiente CE-VO₂ se deduce de P@VO₂máx, no se mide por espirometría, y el modelo
+      no incorpora la dependencia de la cadencia que ese mismo trabajo describe.
+      Su validez frente a mediciones directas es objeto de debate en la literatura.</p>`;
+  }
+
+  // Lleva el FATmax al campo LT1, dejandolo marcado como valor estimado.
+  function aplicarMaderALT1(){
+    const m = window.__mader;
+    if(!m || !m.fatmax){ alert("Primero hacen falta VLa máx, VO₂ máx, peso y P@VO₂ máx."); return; }
+    $("lt1").value = Math.round(m.fatmax.watts);
+    marcarEstimado("lt1", true);
+    update();
+  }
+
+  function updateIndices(d,c){
+    const caja = $("indicesGrid");
+    if(!caja) return;
+
+    const items = [
+      ["Eficiencia aeróbica",        c.efficiency,  2, "EA = P@VO₂ / VO₂máx", c.efficiencyScore, !!(d.pvo2 && d.vo2)],
+      ["Sostenibilidad relativa",    c.ftpRelVo2,   2, "SR = mFTP / P@VO₂",   c.sustain,         !!(d.ftp && d.pvo2)],
+      ["Reserva anaeróbica rel.",    c.frcRel,      3, "RAR = FRC / mFTP",    c.reserveAna,      !!(d.frc && d.ftp)],
+      ["Base aeróbica relativa",     c.lt1RelFtp,   2, "BAR = LT1 / mFTP",    c.base,            !!(d.lt1 && d.ftp)],
+      ["Producción glucolítica",     d.vla,         2, "VLa máx (mmol·l⁻¹·s⁻¹)", c.glycolytic,   !!d.vla],
+      ["Estabilidad",                d.stamina,     0, "Índice directo (%)",  c.durability,      !!d.stamina]
+    ];
+
+    caja.innerHTML = items.map(it => {
+      const [nombre, valor, dec, formula, score, hay] = it;
+      const [lvl,cls] = hay ? labelLevel(score) : ["SIN DATO","warn"];
+      const texto = hay ? round(valor,dec) : "—";
+      return `<div class="indice">
+        <div class="nom">${nombre}</div>
+        <div class="val${hay ? "" : " nodato"}">${texto}</div>
+        <span class="badge ${cls}">${lvl}${hay ? " · " + round(score,0) + "/100" : ""}</span>
+        <div class="form">${formula}</div>
+      </div>`;
+    }).join("");
+  }
+
+  function updateRadar(metrics){
+    const labels = ["Glucolítico","Reserva anaeróbica","Techo aeróbico","Potencia aeróbica","Sostenibilidad","Base aeróbica","Durabilidad","Eficiencia"];
+    const data = metrics.map(x=>Math.round(x[1]));
+    if(radarChart) radarChart.destroy();
+    radarChart = new Chart($("radarChart"),{
+      type:"radar",
+      data:{labels,datasets:[{label:"Perfil actual",data,fill:true,borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:0,max:100,ticks:{display:false},grid:{color:"rgba(255,255,255,.16)"},angleLines:{color:"rgba(255,255,255,.16)"},pointLabels:{color:"#dff7ff",font:{weight:"bold"}}}},plugins:{legend:{labels:{color:"#fff"}}}}
+    });
+  }
+
+  function updatePD(d){
+    if(pdChart) pdChart.destroy();
+    pdChart = new Chart($("pdChart"),{
+      type:"line",
+      data:{labels:["5 s","15 s","1 min","5 min","20 min","60 min"],datasets:[{label:"Potencia",data:[d.p5s,d.p15s,d.p1m,d.p5m,d.p20m,d.p60m],tension:.35,borderWidth:3,pointRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:"#fff"}}},scales:{x:{ticks:{color:"#dff7ff"},grid:{color:"rgba(255,255,255,.10)"}},y:{ticks:{color:"#dff7ff"},grid:{color:"rgba(255,255,255,.10)"}}}}
+    });
+  }
+
+  // disponible=false cuando falta el dato de partida. Un 0% etiquetado "BAJA"
+  // se lee como una medicion baja, cuando en realidad no se ha medido nada.
+  function systemCard(title, value, bullets, inverse=false, disponible=true){
+    const [lvl,cls] = disponible ? labelLevel(value,inverse) : ["SIN DATO","warn"];
+    const texto = disponible ? `${round(value,0)}%` : "—";
+    return `<div class="analysis-box"><h4>${title}</h4><div class="metric" style="min-height:auto"><div class="value" style="font-size:34px">${texto}</div><span class="badge ${cls}">${lvl}</span></div><ul>${bullets.map(b=>`<li>${b}</li>`).join("")}</ul></div>`;
+  }
+
+  function updateSystems(d,c){
+    $("systems").innerHTML =
+      systemCard("Producción glucolítica",c.glycolytic,["Requiere VLa máx, que Intervals.icu no proporciona: se introduce a mano.","A mayor producción, mayor coste metabólico en esfuerzos intensos.","No es malo: debe interpretarse según rol y categoría."],false,!!d.vla) +
+      systemCard("Base aeróbica relativa",c.base,[`Relación LT1 / mFTP: ${d.ftp ? Math.round(d.lt1/d.ftp*100) + "%" : "—"}.`,"El porcentaje grande es una puntuación sobre el rango de referencia 55–85%, no el ratio.","Clave en cadetes y juveniles."],false,!!(d.lt1 && d.ftp)) +
+      systemCard("Sostenibilidad",c.sustain,[`Relación mFTP / P@VO₂ máx: ${d.pvo2 ? Math.round(d.ftp/d.pvo2*100) + "%" : "—"}.`,"El porcentaje grande es una puntuación sobre el rango de referencia 68–88%, no el ratio.","Mejora con subumbral, tempo y pacing."],false,!!(d.ftp && d.pvo2)) +
+      systemCard("Durabilidad",c.durability,["Capacidad para mantener rendimiento con fatiga.","Importante en pruebas largas y vueltas por etapas.","Se entrena con volumen progresivo y controlado."],false,!!d.stamina);
+  }
+
+  function updatePrescription(d,c){
+    let focus, avoid, methods, indicators;
+    if(c.glycolytic>70 && c.base<50){
+      focus="Reequilibrar el predominio glucolítico";
+      methods=["Z2 estricta al 60-70% del FTP","Tempo estable al 76-85% del FTP","Subumbral continuo al 88-92% del FTP","Cadencia fluida y economía de pedaleo"];
+      avoid=["Cambios de ritmo constantes sin objetivo","HIIT excesivo","Sprints frecuentes dentro de semanas de consolidación"];
+      indicators=["Menor FC a igual potencia","Menor RPE submáximo","LT1 más próximo al mFTP","Mayor estabilidad en esfuerzos largos"];
+    } else if(c.sustain<45){
+      focus="Transformar techo aeróbico en potencia sostenible";
+      methods=["Sweet spot al 88-94% del FTP","Umbral controlado al 95-100% del FTP","Bloques largos con pacing estable","Trabajo técnico de ahorro energético"];
+      avoid=["Salir demasiado fuerte en las series","Entrenar siempre a tirones","Confundir VO₂ máx con umbral"];
+      indicators=["Mejor TTE","Menor caída entre 5 min y 20 min","Mejor control de ritmo"];
+    } else {
+      focus="Consolidar perfil y afinar según objetivo competitivo";
+      methods=["Mantener base aeróbica","Introducir VO₂ máx al 110-120% del FTP","Cambios de ritmo específicos","Trabajo de fuerza y torque"];
+      avoid=["Monotonía de estímulos","Exceso de volumen sin recuperación","Competir entrenando todos los días"];
+      indicators=["Mejor recuperación","Mayor potencia específica","Más regularidad en carrera"];
+    }
+    $("trainingFocus").innerHTML = `<h4>Prioridad 1: ${focus}</h4><p><b>Objetivo fisiológico:</b> mejorar el equilibrio entre producción y aclarado de lactato sin eliminar cualidades útiles para la competición.</p><p><b>Métodos recomendados:</b></p><ul>${methods.map(x=>`<li>${x}</li>`).join("")}</ul><p><b>Evitar:</b></p><ul>${avoid.map(x=>`<li>${x}</li>`).join("")}</ul><p><b>Indicadores de mejora:</b></p><ul>${indicators.map(x=>`<li>${x}</li>`).join("")}</ul>`;
+    $("categoryAdvice").innerHTML = categoryText(d.category);
+    $("sessions").innerHTML = sessionCards(d.category,c);
+  }
+
+  function categoryText(cat){
+    const map={
+      "Infantil":"Prioridad educativa y técnica. Usar los datos solo como orientación general. Evitar etiquetas fisiológicas rígidas y exceso de intensidad estructurada.",
+      "Cadete":"Prioridad: desarrollo aeróbico, técnica, colocación, economía de carrera y control de intensidad. Las métricas sirven para orientar, no para encasillar. Evitar sobreespecialización temprana.",
+      "Juvenil":"Prioridad: consolidar umbral, mejorar VO₂ máx, aprender a repetir esfuerzos y aumentar durabilidad. Ya puede introducirse especificidad competitiva con control.",
+      "Sub23":"Prioridad: especialización progresiva según rol competitivo. Ajustar VLa máx, umbral, VO₂ máx y durabilidad en función de calendario y tipo de corredor.",
+      "Élite":"Prioridad: optimización fina. Interpretar cada índice según rol: escalador, rodador, sprinter, clasicómano o gregario.",
+      "Máster":"Prioridad: mantener VO₂ máx, fuerza, salud musculotendinosa, recuperación y durabilidad. Vigilar la carga interna y no abusar de alta intensidad."
+    };
+    return `<h4>${cat}</h4><p>${map[cat] || map["Cadete"]}</p><p><b>Regla práctica:</b> la prescripción debe respetar edad biológica, experiencia, calendario, recuperación y contexto escolar/laboral.</p>`;
+  }
+
+  function sessionCards(cat,c){
+    const base = [
+      ["Base aeróbica","90-150 min en Z2 al 60-70% del FTP. Cadencia cómoda, sin picos innecesarios."],
+      ["Tempo estable","3 × 12 min al 80-85% del FTP, recuperación 5 min suave."],
+      ["Subumbral","2 × 20 min al 88-92% del FTP, priorizando control y regularidad."]
+    ];
+    const vo2 = [
+      ["VO₂ máx","5 × 3 min al 110-115% del FTP, recuperación 3 min suave."],
+      ["Cambios controlados","2 bloques de 10 × 30 s al 120% del FTP / 30 s suave."],
+      ["Sprints neuromusculares","8 × 10 s máximos, recuperación 4-5 min muy suave."]
+    ];
+    const arr = c.glycolytic>70 ? base : vo2;
+    return arr.map(s=>`<div class="analysis-box"><h4>${s[0]}</h4><p>${s[1]}</p><p class="small">Ajustar según categoría, fatiga y calendario competitivo.</p></div>`).join("");
+  }
+
+  function updateReports(d,c){
+    $("coachReport").innerHTML = `<h4>${d.athlete || "Atleta"} — ${d.category}</h4>
+      <p>El perfil actual se clasifica como <b>${c.phenotype}</b>. VO₂ máx: <b>${round(d.vo2,1)} ml·kg⁻¹·min⁻¹</b>, P@VO₂ máx: <b>${round(d.pvo2,0)} W</b>, mFTP: <b>${round(d.ftp,0)} W</b>, VLa máx: <b>${round(d.vla,2)} mmol·l⁻¹·s⁻¹</b> y LT1: <b>${round(d.lt1,0)} W</b>.</p>
+      <p>La lectura principal es que la relación entre capacidad aeróbica, producción glucolítica, sostenibilidad y base aeróbica debe orientar la prescripción. El objetivo no es perseguir un número aislado, sino mejorar la transferencia hacia la competición.</p>`;
+    $("riderReport").innerHTML = `<h4>Explicación sencilla para el ciclista</h4>
+      <p>Ahora mismo tus datos muestran en qué tipo de esfuerzos eres más fuerte y qué parte debemos mejorar. No se trata de que un dato sea “bueno” o “malo”, sino de saber cómo entrenar mejor.</p>
+      <p>La prioridad será mejorar tu capacidad para sostener potencia gastando menos energía, sin perder las cualidades que ya tienes.</p>`;
+  }
+
+  function saveTest(){
+    const data=getData();
+    const list=JSON.parse(localStorage.getItem("mfpp_tests")||"[]");
+    list.unshift({...data, savedAt:new Date().toISOString()});
+    localStorage.setItem("mfpp_tests",JSON.stringify(list.slice(0,50)));
+    renderHistory();
+    alert("Test guardado en este navegador.");
+  }
+
+  function renderHistory(){
+    const list=JSON.parse(localStorage.getItem("mfpp_tests")||"[]");
+    if(!list.length){ $("history").innerHTML="<p class='subtitle'>Todavía no hay tests guardados.</p>"; return; }
+    $("history").innerHTML = `<div class="grid">` + list.map((t,i)=>`<div class="analysis-box"><h4>${t.athlete} · ${t.date || "sin fecha"}</h4><p>${t.category} · ${t.modality} · mFTP ${t.ftp} W · VO₂ máx ${t.vo2} · VLa máx ${t.vla}</p><button class="btn" onclick="loadHistory(${i})">Cargar</button> <button class="btn" onclick="deleteHistory(${i})">Eliminar</button></div>`).join("") + `</div>`;
+  }
+
+  function loadHistory(i){
+    const list=JSON.parse(localStorage.getItem("mfpp_tests")||"[]");
+    const t=list[i]; if(!t) return;
+    fields.forEach(f=>{ if($(f) && t[f]!==undefined) $(f).value=t[f]; });
+    update();
+  }
+  function deleteHistory(i){
+    const list=JSON.parse(localStorage.getItem("mfpp_tests")||"[]");
+    list.splice(i,1); localStorage.setItem("mfpp_tests",JSON.stringify(list)); renderHistory();
+  }
+  function exportJSON(){
+    const blob = new Blob([JSON.stringify(getData(),null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob); const a=document.createElement("a");
+    a.href=url; a.download="test-metabolico-mfpp.json"; a.click(); URL.revokeObjectURL(url);
+  }
+  function loadDemo(){
+    // El ejemplo no pertenece a ningun ciclista real: hay que soltar el ID
+    // importado, o la barra lo atribuiria al ultimo atleta seleccionado.
+    if($("icuAthleteId")) $("icuAthleteId").value = "";
+    if($("icuAthleteSelect")) $("icuAthleteSelect").value = "";
+    const demo={athlete:"Ejemplo Atleta",date:"2026-04-23",category:"Cadete",modality:"Ruta",weight:72,vo2:68.3,pvo2:412,vla:1.85,ftp:305,cp:318,frc:21.6,tte:28.75,stamina:72,lt1:185,pmax:1312,note:"",p5s:1180,p15s:930,p1m:620,p5m:405,p20m:322,p60m:292};
+    Object.entries(demo).forEach(([k,v])=>{ if($(k)) $(k).value=v; });
+    update();
+  }
+
+
+  function icuAuthHeader(){
+    const key = $("icuApiKey") ? $("icuApiKey").value.trim() : "";
+    if(!key) throw new Error("Falta la API Key de Intervals.icu.");
+    return "Basic " + btoa("API_KEY:" + key);
+  }
+
+  function icuBase(){
+    return ($("icuBaseUrl").value || "https://intervals.icu/api/v1").replace(/\/+$/,"");
+  }
+
+  function icuAthlete(){
+    const id = $("icuAthleteId").value.trim();
+    if(!id) throw new Error("Falta el ID del atleta.");
+    return id;
+  }
+
+  function icuSetStatus(title,msg,isError=false){
+    $("icuStatus").innerHTML = `<h4>${title}</h4><p style="${isError?'color:var(--bad);font-weight:800':''}">${msg}</p>`;
+  }
+
+  function icuSaveConfig(){
+    const cfg = {
+      coachId:$("icuCoachId").value.trim(),
+      athleteId:$("icuAthleteId").value.trim(),
+      allowedAthleteIds:$("icuAllowedAthleteIds") ? $("icuAllowedAthleteIds").value.trim() : "",
+      apiKey:$("icuApiKey").value.trim(),
+      baseUrl:$("icuBaseUrl").value.trim(),
+      days:$("icuDays").value,
+      athletes: JSON.parse(localStorage.getItem("mfpp_intervals_athletes") || "[]")
+    };
+    localStorage.setItem("mfpp_intervals_config", JSON.stringify(cfg));
+    icuSetStatus("Conexión guardada","Los datos de conexión se han guardado en este navegador.");
+  }
+
+  function icuLoadConfig(){
+    const cfg = JSON.parse(localStorage.getItem("mfpp_intervals_config") || "{}");
+    if($("icuCoachId") && cfg.coachId) $("icuCoachId").value = cfg.coachId;
+    if($("icuAthleteId") && cfg.athleteId) $("icuAthleteId").value = cfg.athleteId;
+    if($("icuAllowedAthleteIds") && cfg.allowedAthleteIds) $("icuAllowedAthleteIds").value = cfg.allowedAthleteIds;
+    if($("icuApiKey") && cfg.apiKey) $("icuApiKey").value = cfg.apiKey;
+    if($("icuBaseUrl") && cfg.baseUrl) $("icuBaseUrl").value = cfg.baseUrl;
+    if($("icuDays") && cfg.days) $("icuDays").value = cfg.days;
+    icuRenderAthleteSelect(JSON.parse(localStorage.getItem("mfpp_intervals_athletes") || "[]"));
+  }
+
+  function icuClearConfig(){
+    localStorage.removeItem("mfpp_intervals_config");
+    ["icuCoachId","icuAthleteId","icuApiKey","icuAllowedAthleteIds"].forEach(id=>{ if($(id)) $(id).value=""; });
+    localStorage.removeItem("mfpp_intervals_athletes");
+    icuRenderAthleteSelect([]);
+    icuSetStatus("Conexión borrada","Se ha borrado la configuración guardada en este navegador.");
+  }
+
+  // Codigo de acceso de la web publicada. Se guarda en este navegador.
+  function icuCodigoAcceso(){
+    const campo = $("icuAccessCode") ? $("icuAccessCode").value.trim() : "";
+    if(campo) return campo;
+    return localStorage.getItem("mfpp_access_code") || (window.MFPP_CONFIG || {}).accessCode || "";
+  }
+
+  function icuGuardarCodigo(){
+    if($("icuAccessCode")) localStorage.setItem("mfpp_access_code", $("icuAccessCode").value.trim());
+  }
+
+  // ¿Se está trabajando en el ordenador o es la web publicada?
+  function esLocal(){
+    return ["localhost","127.0.0.1",""].indexOf(location.hostname) >= 0;
+  }
+
+  // Clave para la llamada directa. SOLO en local: en la web publicada devuelve
+  // siempre cadena vacía para forzar el paso por el proxy. Si no, bastaría con
+  // pegar la clave en el formulario para que el navegador recibiera —y expusiera—
+  // las claves y correos de todos los ciclistas.
+  function icuClaveLocal(){
+    if(!esLocal()) return "";
+    const cfg = window.MFPP_CONFIG || {};
+    if(cfg.apiKey && cfg.apiKey !== "PEGA_AQUI_TU_API_KEY") return cfg.apiKey;
+    return $("icuApiKey") ? $("icuApiKey").value.trim() : "";
+  }
+
+  // Dos caminos hacia la API:
+  //  - local: llamada directa (Intervals.icu permite CORS y refleja el origen)
+  //  - publicado: funcion de Netlify, que pone la clave en el servidor y limpia
+  //    los campos sensibles (icu_api_key, email) antes de responder.
+  async function icuFetch(path){
+    const clave = icuClaveLocal();
+    let url, opciones = { method:"GET", headers:{ "Accept":"application/json" } };
+
+    if(clave){
+      url = icuBase() + path;
+      opciones.headers["Authorization"] = "Basic " + btoa("API_KEY:" + clave);
+    }else{
+      url = "/.netlify/functions/intervals?path=" + encodeURIComponent(path);
+      const codigo = icuCodigoAcceso();
+      if(codigo) url += "&code=" + encodeURIComponent(codigo);
+    }
+
+    const res = await fetch(url, opciones);
+    if(!res.ok){
+      const text = await res.text().catch(()=> "");
+      let detalle = text ? text.slice(0,180) : "";
+      try{ const j = JSON.parse(text); detalle = j.error || j.detalle || detalle; }catch(e){}
+      throw new Error(`La API respondió ${res.status}. ${detalle}`);
+    }
+    return await res.json();
+  }
+
+  function icuCoach(){
+    const id = $("icuCoachId") ? $("icuCoachId").value.trim() : "";
+    if(!id) throw new Error("Falta el ID de tu cuenta de entrenador en Intervals.icu.");
+    return id;
+  }
+
+  function icuAllowedIds(){
+    const txt = $("icuAllowedAthleteIds") ? $("icuAllowedAthleteIds").value.trim() : "";
+    return txt
+      .split(/[,\s;]+/)
+      .map(x => x.trim())
+      .filter(Boolean);
+  }
+
+  function icuSaveAllowedAthletes(){
+    const ids = icuAllowedIds();
+    if(!ids.length){
+      icuSetStatus("Faltan IDs","Escribe los IDs exactos de tus 2 ciclistas separados por coma. Ejemplo: i450014, i566978", true);
+      return;
+    }
+    const cfg = JSON.parse(localStorage.getItem("mfpp_intervals_config") || "{}");
+    cfg.allowedAthleteIds = ids.join(", ");
+    localStorage.setItem("mfpp_intervals_config", JSON.stringify(cfg));
+    icuApplyAthleteFilter();
+    icuSetStatus("Filtro guardado",`A partir de ahora solo se mostrarán estos atletas: ${ids.join(", ")}.`);
+  }
+
+  function filterAllowedAthletes(list){
+    const ids = icuAllowedIds();
+    if(!ids.length) return list;
+    const clean = new Set(ids.map(x => String(x).trim().toLowerCase()));
+    return list.filter(a => clean.has(String(a.id).trim().toLowerCase()));
+  }
+
+  function isLikelyNonAthlete(name, raw){
+    const n = String(name || "").toLowerCase().trim();
+
+    // Intervals.icu puede devolver también plantillas, gráficos, paneles, carpetas o informes compartidos.
+    // Estos términos filtran esos objetos para que el desplegable sea útil como lista de ciclistas.
+    const blockedTerms = [
+      "aerobic fitness",
+      "evolución",
+      "evolucion",
+      "gráfico",
+      "grafico",
+      "hrv and readiness",
+      "readiness",
+      "sleep plus",
+      "time in zones",
+      "mejores datos",
+      "canyon endurance",
+      "bh ultralight",
+      "planet x"
+    ];
+
+    if(blockedTerms.some(t => n.includes(t))) return true;
+
+    // Si el objeto recibido trae un tipo explícito que no parece atleta, lo descartamos.
+    const type = String(pick(raw || {}, ["type","kind","object_type","objectType","category"]) || "").toLowerCase();
+    if(type && !["athlete","rider","user","follower","followed"].some(t => type.includes(t))){
+      return true;
+    }
+
+    return false;
+  }
+
+  function normalizeAthleteList(data, includeAll=false){
+    const buckets = [];
+
+    function collect(x){
+      if(!x) return;
+      if(Array.isArray(x)){ x.forEach(collect); return; }
+      if(typeof x !== "object") return;
+
+      // Posibles formatos habituales de respuesta.
+      ["athletes","items","following","followers","clients","users","data","shared_athletes"].forEach(k=>{
+        if(Array.isArray(x[k])) buckets.push(...x[k]);
+      });
+
+      // Si el propio objeto parece un atleta, también se considera.
+      const possibleId = pick(x,["id","athlete_id","athleteId","icu_athlete_id","icuAthleteId","external_id","athlete"]);
+      const possibleName = pick(x,["name","athlete_name","display_name","athleteName","username"]);
+      if(possibleId && possibleName) buckets.push(x);
+    }
+
+    collect(data);
+
+    const seen = new Set();
+    const athletes = buckets.map(a => {
+      const id = pick(a,["id","athlete_id","athleteId","icu_athlete_id","icuAthleteId","external_id","athlete"]);
+      const name = pick(a,["name","athlete_name","display_name","athleteName","username"]);
+      const email = pick(a,["email","email_address"]);
+      return {
+        id:String(id || "").trim(),
+        name:String(name || id || "Atleta sin nombre").trim(),
+        email:String(email || "").trim(),
+        raw:a,
+        nonAthlete:isLikelyNonAthlete(name,a)
+      };
+    }).filter(a => {
+      if(!a.id || seen.has(a.id)) return false;
+      seen.add(a.id);
+      if(includeAll) return true;
+      return !a.nonAthlete;
+    });
+
+    return athletes.sort((a,b)=>a.name.localeCompare(b.name,"es"));
+  }
+
+  // Endpoint verificado: GET /athletes devuelve los atletas a los que da acceso
+  // la clave. No hace falta el ID del entrenador. Sustituye a toda la bateria de
+  // heuristicas que adivinaban la ruta en versiones anteriores.
+  async function icuLoadAthleteList(){
+    try{
+      icuSetStatus("Cargando ciclistas","Consultando /athletes en Intervals.icu...");
+      const lista = await icuFetch("/athletes");
+      if(!Array.isArray(lista)) throw new Error("Respuesta inesperada de /athletes.");
+
+      // Filtro: manda lo que escribas en el formulario; si esta vacio, la lista
+      // de config.local.js; si tampoco hay, se muestran todos.
+      const manual = icuAllowedIds();
+      const permitidos = (window.MFPP_CONFIG || {}).atletasPermitidos || [];
+      const filtro = manual.length ? manual : permitidos;
+
+      const atletas = lista
+        .filter(a => a && a.id)
+        .filter(a => !filtro.length || filtro.indexOf(a.id) >= 0)
+        .map(a => ({
+          id: a.id,
+          name: a.name || ((a.firstname||"") + " " + (a.lastname||"")).trim() || a.id,
+          weight: (a.icu_weight != null ? a.icu_weight : a.weight)
+        }))
+        .sort((a,b) => a.name.localeCompare(b.name, "es"));
+
+      localStorage.setItem("mfpp_intervals_athletes", JSON.stringify(atletas));
+      icuRenderAthleteSelect(atletas);
+
+      $("icuPreview").innerHTML = `<h4>Ciclistas encontrados</h4>
+        <p>Se muestran <b>${atletas.length}</b> ciclistas. Selecciona uno y pulsa <b>Cargar análisis metabólico</b>.</p>
+        <table><thead><tr><th>Ciclista</th><th>ID</th><th>Peso</th></tr></thead><tbody>
+        ${atletas.map(a=>`<tr><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.id)}</td><td>${a.weight != null ? a.weight + " kg" : "—"}</td></tr>`).join("")}
+        </tbody></table>`;
+
+      const total = lista.length;
+      icuSetStatus("Ciclistas cargados",
+        `Se muestran ${atletas.length} de ${total} atletas accesibles con esta clave.` +
+        (filtro.length ? " Filtro por IDs activo." : " Sin filtro: se muestran todos."));
+    }catch(e){
+      icuSetStatus("Error al cargar ciclistas", e.message, true);
+    }
+  }
+
+  function extractCoachedAthletes(data){
+    const raw = [];
+
+    function collectFromArray(arr){
+      if(!Array.isArray(arr)) return;
+      arr.forEach(item => raw.push(item));
+    }
+
+    if(Array.isArray(data)) collectFromArray(data);
+
+    if(data && typeof data === "object"){
+      // Posibles claves reales para atletas vinculados.
+      ["athletes","coached_athletes","coachedAthletes","clients","riders"].forEach(k => collectFromArray(data[k]));
+
+      // Algunos formatos devuelven { athlete: {...} } dentro de cada relación.
+      ["items","data"].forEach(k => {
+        if(Array.isArray(data[k])){
+          data[k].forEach(item => {
+            if(item && item.athlete && typeof item.athlete === "object") raw.push(item.athlete);
+            else raw.push(item);
+          });
+        }
+      });
+    }
+
+    const seen = new Set();
+
+    return raw.map(item => {
+      const source = item && item.athlete && typeof item.athlete === "object" ? item.athlete : item;
+
+      const id = pick(source,[
+        "id","icu_id","icuId","athlete_id","athleteId",
+        "icu_athlete_id","icuAthleteId","external_id"
+      ]);
+
+      const name = pick(source,[
+        "name","athlete_name","display_name","athleteName",
+        "username","full_name","fullName"
+      ]);
+
+      const email = pick(source,["email","email_address"]);
+
+      const type = String(pick(source,["type","kind","object_type","objectType"]) || "").toLowerCase();
+
+      return {
+        id:String(id || "").trim(),
+        name:String(name || "").trim(),
+        email:String(email || "").trim(),
+        type,
+        raw:source
+      };
+    }).filter(a => {
+      if(!a.id || !a.name) return false;
+      if(seen.has(a.id)) return false;
+      seen.add(a.id);
+
+      // Filtro duro: descarta objetos que no sean personas/ciclistas.
+      const n = a.name.toLowerCase();
+      const blocked = [
+        "aerobic fitness","evolución","evolucion","gráfico","grafico",
+        "hrv","readiness","sleep","time in zones","mejores datos",
+        "fitness","zones","average","msa"
+      ];
+      if(blocked.some(t => n.includes(t))) return false;
+
+      if(a.type && !["athlete","user","rider","client"].some(t => a.type.includes(t))) return false;
+
+      return true;
+    }).sort((a,b)=>a.name.localeCompare(b.name,"es"));
+  }
+
+  function icuApplyAthleteFilter(){
+    const source = JSON.parse(localStorage.getItem("mfpp_intervals_athletes") || "[]");
+    const q = ($("icuAthleteFilter") ? $("icuAthleteFilter").value : "").toLowerCase().trim();
+
+    let filtered = source;
+    if(($("icuListMode") && $("icuListMode").value === "all")){
+      filtered = JSON.parse(localStorage.getItem("mfpp_intervals_all_received") || "[]");
+    }
+
+    filtered = filterAllowedAthletes(filtered);
+
+    if(q){
+      filtered = filtered.filter(a => (a.name || "").toLowerCase().includes(q) || (a.id || "").toLowerCase().includes(q));
+    }
+
+    icuRenderAthleteSelect(filtered);
+  }
+
+  function icuRenderAthleteSelect(athletes){
+    const sel = $("icuAthleteSelect");
+    if(!sel) return;
+    if(!athletes || !athletes.length){
+      sel.innerHTML = `<option value="">No hay atletas vinculados para mostrar</option>`;
+      return;
+    }
+    const current = $("icuAthleteId") ? $("icuAthleteId").value.trim() : "";
+    sel.innerHTML = `<option value="">Selecciona un atleta</option>` + athletes
+      .map(a => {
+        const label = `${a.name} · ${a.id}`;
+        return `<option value="${escapeHtml(a.id)}" ${a.id===current ? "selected" : ""}>${escapeHtml(label)}</option>`;
+      })
+      .join("");
+  }
+
+  async function icuSelectAthleteFromDropdown(){
+    const sel = $("icuAthleteSelect");
+    if(!sel || !sel.value) return;
+    $("icuAthleteId").value = sel.value;
+    const athletes = JSON.parse(localStorage.getItem("mfpp_intervals_athletes") || "[]");
+    const a = athletes.find(x => x.id === sel.value);
+    if(!a) return;
+
+    // Vaciar SIEMPRE antes de nada. Si la carga falla, es preferible un dashboard
+    // en blanco a uno que muestre los datos de otro ciclista bajo este nombre.
+    icuLimpiarDatos();
+    $("athlete").value = a.name;
+    $("icuActivities").innerHTML = `<p class="subtitle">Sin datos consultados todavía.</p>`;
+    icuSaveConfig();
+    update();
+
+    $("icuPreview").innerHTML = `<h4>Cargando ${escapeHtml(a.name)}</h4><p>ID: ${escapeHtml(a.id)}</p>`;
+    await icuLoadFullMetabolicAnalysis();
+  }
+
+
+  async function icuTestConnection(){
+    try{
+      icuSetStatus("Conectando","Probando acceso con Intervals.icu...");
+      const athleteId = icuAthlete();
+      const data = await icuFetch(`/athlete/${encodeURIComponent(athleteId)}`);
+      $("icuPreview").innerHTML = `<h4>Respuesta del atleta</h4><pre style="white-space:pre-wrap;max-height:360px;overflow:auto">${escapeHtml(JSON.stringify(data,null,2))}</pre>`;
+      icuSetStatus("Conexión correcta","La API ha respondido correctamente. Ya puedes importar los datos básicos.");
+    }catch(e){
+      icuSetStatus("Error de conexión", e.message + " Si el navegador bloquea la petición por CORS, será necesario usar un pequeño servidor intermedio.", true);
+    }
+  }
+
+  function pick(obj, names){
+    for(const n of names){
+      if(obj && obj[n] !== undefined && obj[n] !== null && obj[n] !== "") return obj[n];
+    }
+    return "";
+  }
+
+  async function icuImportAthlete(){
+    try{
+      icuSetStatus("Importando","Consultando datos básicos del atleta...");
+      const athleteId = icuAthlete();
+      const data = await icuFetch(`/athlete/${encodeURIComponent(athleteId)}`);
+
+      const name = pick(data,["name","athlete_name","display_name","athleteName"]);
+      const weight = pick(data,["weight","weight_kg","weightKg"]);
+      const ftp = pick(data,["ftp","eftp","threshold_power","thresholdPower","mftp"]);
+      const vo2 = pick(data,["vo2max","vo2_max","vo2Max"]);
+      const pvo2 = pick(data,["p_vo2max","pvo2max","pVO2max","power_vo2max"]);
+      const lt1 = pick(data,["lt1","vt1","lthr_power","aerobic_threshold_power"]);
+      const stamina = pick(data,["stamina","durability"]);
+      const pmax = pick(data,["pmax","max_power","maxPower"]);
+
+      icuLimpiarDatos();
+      if(name) $("athlete").value = name;
+      if(weight) $("weight").value = weight;
+      if(ftp) $("ftp").value = ftp;
+      if(vo2) $("vo2").value = vo2;
+      if(pvo2) $("pvo2").value = pvo2;
+      if(lt1) $("lt1").value = lt1;
+      if(stamina) $("stamina").value = stamina;
+      if(pmax) $("pmax").value = pmax;
+
+      $("icuPreview").innerHTML = `<h4>Datos importados</h4>
+        <ul>
+          <li>Nombre: ${name || "no disponible"}</li>
+          <li>Peso: ${weight || "no disponible"}</li>
+          <li>FTP/eFTP/mFTP: ${ftp || "no disponible"}</li>
+          <li>VO₂ máx: ${vo2 || "no disponible"}</li>
+          <li>P@VO₂ máx: ${pvo2 || "no disponible"}</li>
+          <li>LT1/VT1: ${lt1 || "no disponible"}</li>
+        </ul>
+        <p class="small">La respuesta completa incluye la clave de API y el correo del atleta, por eso no se muestra aquí.</p>`;
+      update();
+      icuSetStatus("Importación completada","Se han volcado al dashboard los campos disponibles.");
+    }catch(e){
+      icuSetStatus("Error al importar", e.message, true);
+    }
+  }
+
+  async function icuImportActivities(){
+    try{
+      icuSetStatus("Consultando actividades","Leyendo actividades recientes del atleta...");
+      const athleteId = icuAthlete();
+      const days = parseInt($("icuDays").value || "90",10);
+      const oldest = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
+      const newest = new Date().toISOString().slice(0,10);
+
+      const data = await icuFetch(`/athlete/${encodeURIComponent(athleteId)}/activities?oldest=${oldest}&newest=${newest}`);
+      const arr = Array.isArray(data) ? data : (data.activities || data.items || []);
+
+      if(!arr.length){
+        $("icuActivities").innerHTML = `<p class="subtitle">La API respondió, pero no se recibieron actividades en el periodo solicitado.</p>`;
+        icuSetStatus("Sin actividades","No se han encontrado actividades recientes para el rango indicado.");
+        return;
+      }
+
+      const rows = arr.slice(0,30).map(a=>{
+        const date = pick(a,["start_date_local","start_date","date","startDate"]) || "";
+        const name = pick(a,["name","title","type"]) || "Actividad";
+        const distance = pick(a,["distance","distance_km","distanceKm"]);
+        const duration = pick(a,["moving_time","elapsed_time","duration"]);
+        const load = pick(a,["icu_training_load","training_load","load","tl"]);
+        const power = pick(a,["weighted_average_watts","average_watts","avg_power","power"]);
+        return `<tr><td>${escapeHtml(String(date).slice(0,10))}</td><td>${escapeHtml(String(name))}</td><td>${formatDistance(distance)}</td><td>${formatDuration(duration)}</td><td>${power || "—"}</td><td>${load || "—"}</td></tr>`;
+      }).join("");
+
+      $("icuActivities").innerHTML = `<table><thead><tr><th>Fecha</th><th>Actividad</th><th>Distancia</th><th>Duración</th><th>Potencia</th><th>Carga</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+      icuTryPowerCurveFromActivities(arr);
+      icuSetStatus("Actividades consultadas",`Se han recibido ${arr.length} actividades desde ${oldest}.`);
+    }catch(e){
+      icuSetStatus("Error al consultar actividades", e.message, true);
+    }
+  }
+
+  function icuTryPowerCurveFromActivities(arr){
+    let best = {p5s:0,p15s:0,p1m:0,p5m:0,p20m:0,p60m:0};
+    const keys = {
+      p5s:["power_5s","best_power_5s","power5s","p5s"],
+      p15s:["power_15s","best_power_15s","power15s","p15s"],
+      p1m:["power_60s","best_power_60s","power1m","p1m"],
+      p5m:["power_300s","best_power_300s","power5m","p5m"],
+      p20m:["power_1200s","best_power_1200s","power20m","p20m"],
+      p60m:["power_3600s","best_power_3600s","power60m","p60m"]
+    };
+    arr.forEach(a=>{
+      Object.entries(keys).forEach(([target,names])=>{
+        const v = parseFloat(pick(a,names)) || 0;
+        if(v>best[target]) best[target]=v;
+      });
+    });
+    Object.entries(best).forEach(([k,v])=>{
+      if(v>0 && $(k)) $(k).value = Math.round(v);
+    });
+    update();
+  }
+
+  function formatDistance(v){
+    const n = parseFloat(v);
+    if(!Number.isFinite(n)) return "—";
+    if(n > 1000) return (n/1000).toFixed(1) + " km";
+    return n.toFixed(1) + " km";
+  }
+
+  function formatDuration(v){
+    const n = parseFloat(v);
+    if(!Number.isFinite(n)) return "—";
+    if(n > 10000) return Math.floor(n/3600) + " h " + Math.round((n%3600)/60) + " min";
+    if(n > 300) return Math.floor(n/60) + " h " + Math.round(n%60) + " min";
+    return n.toFixed(0) + " min";
+  }
+
+  function escapeHtml(str){
+    return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  }
+
+
+
+  /* ===== MFPP v4: mejoras de selección de atletas e importación metabólica completa ===== */
+  function deepCollectAthletes(node, out=[], seen=new Set()){
+    if(!node || typeof node !== "object") return out;
+    if(Array.isArray(node)){
+      node.forEach(x => deepCollectAthletes(x,out,seen));
+      return out;
+    }
+
+    const possibleId = pick(node,["id","athlete_id","athleteId","icu_athlete_id","icuAthleteId","external_id"]);
+    const possibleName = pick(node,["name","athlete_name","display_name","athleteName","username","full_name"]);
+    const possibleEmail = pick(node,["email","email_address"]);
+
+    const looksLikeAthlete = possibleId && (
+      possibleName || node.ftp !== undefined || node.eftp !== undefined || node.weight !== undefined ||
+      node.threshold_power !== undefined || node.athlete_id !== undefined || node.athleteId !== undefined
+    );
+
+    if(looksLikeAthlete){
+      const id = String(possibleId);
+      if(!seen.has(id)){
+        seen.add(id);
+        out.push({id, name:String(possibleName || id), email:String(possibleEmail || ""), raw:node});
+      }
+    }
+
+    Object.keys(node).forEach(k => {
+      if(["activities","events","streams"].includes(k)) return;
+      deepCollectAthletes(node[k],out,seen);
+    });
+    return out;
+  }
+
+  normalizeAthleteList = function(data){
+    const raw = Array.isArray(data) ? data : (data.athletes || data.items || data.following || data.clients || data.followers || data.shared || data.result || []);
+    let athletes = [];
+    if(Array.isArray(raw) && raw.length){
+      athletes = raw.map(a => {
+        const id = pick(a,["id","athlete_id","athleteId","icu_athlete_id","icuAthleteId","external_id"]);
+        const name = pick(a,["name","athlete_name","display_name","athleteName","username","full_name"]);
+        const email = pick(a,["email","email_address"]);
+        return {id:String(id || ""), name:String(name || id || "Atleta sin nombre"), email:String(email || ""), raw:a};
+      }).filter(a => a.id);
+    }
+    const deep = deepCollectAthletes(data);
+    const map = new Map();
+    [...athletes, ...deep].forEach(a => { if(a.id && !map.has(a.id)) map.set(a.id,a); });
+    return Array.from(map.values()).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  }
+
+  function deepFindNumber(node, names){
+    if(!node || typeof node !== "object") return "";
+    if(Array.isArray(node)){
+      for(const item of node){ const v = deepFindNumber(item,names); if(v !== "") return v; }
+      return "";
+    }
+    for(const n of names){
+      if(node[n] !== undefined && node[n] !== null && node[n] !== ""){
+        const v = parseFloat(node[n]);
+        if(Number.isFinite(v)) return v;
+      }
+    }
+    for(const k of Object.keys(node)){
+      const v = deepFindNumber(node[k], names);
+      if(v !== "") return v;
+    }
+    return "";
+  }
+
+  function bestFromAny(node, names){
+    let best = 0;
+    function walk(x){
+      if(!x || typeof x !== "object") return;
+      if(Array.isArray(x)){ x.forEach(walk); return; }
+      names.forEach(n => {
+        if(x[n] !== undefined && x[n] !== null){
+          const v = parseFloat(x[n]);
+          if(Number.isFinite(v) && v > best) best = v;
+        }
+      });
+      Object.keys(x).forEach(k => walk(x[k]));
+    }
+    walk(node);
+    return best || "";
+  }
+
+  async function icuFetchOptional(path){
+    try{ return await icuFetch(path); }catch(e){ return {__error:e.message, __path:path}; }
+  }
+
+  function fillIfAvailable(id, value, decimals=null){
+    if(value === "" || value === undefined || value === null || !$(id)) return false;
+    const n = parseFloat(value);
+    if(!Number.isFinite(n)) return false;
+    $(id).value = decimals === null ? Math.round(n) : n.toFixed(decimals);
+    return true;
+  }
+
+  // Lee los campos con los nombres que Intervals.icu devuelve de verdad.
+  // Comprobado contra /athlete/{id} y /athlete/{id}/power-curves?curves=90d&type=Ride
+  function icuRealFields(athlete, powerData){
+    const out = {};
+    const n = v => { const x = parseFloat(v); return Number.isFinite(x) ? x : null; };
+
+    // /athlete devuelve weight:null; el peso bueno esta en icu_weight.
+    if(n(athlete.icu_weight) !== null) out.weight = n(athlete.icu_weight);
+
+    // El FTP no esta en la raiz: vive en sportSettings, uno por deporte.
+    const ss = Array.isArray(athlete.sportSettings) ? athlete.sportSettings : [];
+    const ride = ss.find(x => Array.isArray(x.types) && x.types.indexOf("Ride") >= 0) || ss[0];
+    if(ride){
+      if(n(ride.ftp) !== null) out.ftp = n(ride.ftp);
+      if(n(ride.w_prime) !== null) out.frc = n(ride.w_prime) / 1000; // J -> kJ
+    }
+
+    // La curva de potencia trae CP, W', Pmax y un VO2max estimado dentro de list[0].
+    const curve = (powerData || []).map(p => (p && Array.isArray(p.list)) ? p.list[0] : null).filter(Boolean)[0];
+    if(curve){
+      if(out.weight === undefined && n(curve.weight) !== null) out.weight = n(curve.weight);
+      if(n(curve.vo2max_5m) !== null) out.vo2 = n(curve.vo2max_5m);
+
+      const models = Array.isArray(curve.powerModels) ? curve.powerModels : [];
+      const model = models.find(m => m.type === "ECP") || models.find(m => m.type === "MORTON_3P") || models[0];
+      if(model){
+        if(n(model.criticalPower) !== null) out.cp = n(model.criticalPower);
+        if(n(model.wPrime) !== null) out.frc = n(model.wPrime) / 1000; // J -> kJ
+        if(n(model.pMax) !== null) out.pmax = n(model.pMax);
+        if(out.ftp === undefined && n(model.ftp) !== null) out.ftp = n(model.ftp);
+      }
+
+      // secs[] y values[] son arrays paralelos: no existen claves tipo "power_5s".
+      const secs = curve.secs, vals = curve.values || curve.watts;
+      if(Array.isArray(secs) && Array.isArray(vals)){
+        out.curve = {};
+        [["p5s",5],["p15s",15],["p1m",60],["p5m",300],["p20m",1200],["p60m",3600]].forEach(pair => {
+          const i = secs.indexOf(pair[1]);
+          if(i >= 0 && n(vals[i]) !== null) out.curve[pair[0]] = n(vals[i]);
+        });
+      }
+    }
+    return out;
+  }
+
+  // Campos que describen al ciclista. Al cambiar de atleta hay que vaciarlos todos:
+  // dejar los del anterior hacia que el dashboard atribuyese datos ajenos.
+  const CAMPOS_METABOLICOS = ["weight","vo2","pvo2","vla","ftp","cp","frc","tte",
+                              "stamina","lt1","pmax","p5s","p15s","p1m","p5m","p20m","p60m"];
+
+  function icuLimpiarDatos(){
+    CAMPOS_METABOLICOS.forEach(id => {
+      if($(id)) $(id).value = "";
+      marcarEstimado(id, false);
+    });
+    if($("note")) $("note").value = "";
+  }
+
+  // Marca en naranja y con borde discontinuo los valores que no son medidos.
+  function marcarEstimado(id, esEstimado){
+    const el = $(id);
+    if(!el) return;
+    el.classList.toggle("estimado", !!esEstimado);
+    el.title = esEstimado
+      ? "Valor estimado a partir de otros datos. No lo ha medido Intervals.icu."
+      : "";
+  }
+
+  function applyMetabolicData(payload){
+    const athlete = payload.athlete || {};
+    const activities = payload.activities || [];
+    const powerData = payload.powerData || [];
+    const all = {athlete, activities, powerData};
+
+    // Se vacia antes de volcar: si no, los campos que la API no devuelve
+    // conservarian los del ciclista anterior o los del ejemplo.
+    icuLimpiarDatos();
+
+    const name = pick(athlete,["name","athlete_name","display_name","athleteName","username","full_name"]);
+    if(name) $("athlete").value = name;
+
+    const imported = [];
+    const missing = [];
+    function mark(label, ok){ ok ? imported.push(label) : missing.push(label); }
+
+    // Los nombres reales de la API van primero; la busqueda a ciegas queda de reserva.
+    const real = icuRealFields(athlete, powerData);
+    const prefer = (v, fb) => (v !== undefined && v !== null && v !== "") ? v : fb;
+
+    mark("Peso", fillIfAvailable("weight", prefer(real.weight, deepFindNumber(all,["icu_weight","weight","weight_kg","weightKg"])), 1));
+    mark("FTP/mFTP/eFTP", fillIfAvailable("ftp", prefer(real.ftp, deepFindNumber(all,["ftp","mftp","eftp","threshold_power","thresholdPower","cp"])), 0));
+    mark("CP", fillIfAvailable("cp", prefer(real.cp, deepFindNumber(all,["cp","critical_power","criticalPower"])), 0));
+    mark("FRC/W’", fillIfAvailable("frc", prefer(real.frc, deepFindNumber(all,["frc","w_prime","wprime","wPrime","w_prime_kj","wprime_kj"])), 1));
+    mark("TTE", fillIfAvailable("tte", deepFindNumber(all,["tte","time_to_exhaustion","timeToExhaustion"]), 1));
+    mark("Stamina", fillIfAvailable("stamina", deepFindNumber(all,["stamina","durability"]), 0));
+    mark("VO₂ máx", fillIfAvailable("vo2", prefer(real.vo2, deepFindNumber(all,["vo2max_5m","vo2max","vo2_max","vo2Max"])), 1));
+    mark("P@VO₂ máx", fillIfAvailable("pvo2", deepFindNumber(all,["p_vo2max","pvo2max","pVO2max","power_vo2max","vo2max_power"]), 0));
+    mark("VLa máx", fillIfAvailable("vla", deepFindNumber(all,["vlamax","vla_max","vlaMax"]), 2));
+    mark("LT1/VT1", fillIfAvailable("lt1", deepFindNumber(all,["lt1","vt1","aerobic_threshold_power","lthr_power"]), 0));
+    mark("Pmáx", fillIfAvailable("pmax", prefer(real.pmax, bestFromAny(all,["pMax","pmax","max_power","maxPower","power_max","peak_power"])), 0));
+
+    const curveKeys = {
+      p5s:["power_5s","best_power_5s","power5s","p5s","5s"],
+      p15s:["power_15s","best_power_15s","power15s","p15s","15s"],
+      p1m:["power_60s","best_power_60s","power1m","p1m","60s","1m"],
+      p5m:["power_300s","best_power_300s","power5m","p5m","300s","5m"],
+      p20m:["power_1200s","best_power_1200s","power20m","p20m","1200s","20m"],
+      p60m:["power_3600s","best_power_3600s","power60m","p60m","3600s","60m"]
+    };
+    Object.entries(curveKeys).forEach(([id,names]) => {
+      const ok = fillIfAvailable(id, prefer(real.curve && real.curve[id], bestFromAny(all,names)), 0);
+      mark(`Potencia ${id}`, ok);
+    });
+
+    const ftp = num("ftp"), p5m = num("p5m"), p20m = num("p20m"), p60m = num("p60m"), pmax = num("pmax");
+    if(!num("pvo2") && p5m) { $("pvo2").value = Math.round(p5m); marcarEstimado("pvo2", true); imported.push("P@VO₂ máx estimada desde 5 min"); }
+    if(!num("cp") && ftp) { $("cp").value = Math.round(ftp * 1.04); marcarEstimado("cp", true); imported.push("CP estimada desde FTP"); }
+    if(!num("lt1") && ftp) { $("lt1").value = Math.round(ftp * 0.70); marcarEstimado("lt1", true); missing.push("LT1 no venía de Intervals; se ha puesto una estimación inicial del 70% del FTP"); }
+    if(!num("stamina") && p60m && ftp) { $("stamina").value = Math.round(Math.min(100, (p60m/ftp)*100)); marcarEstimado("stamina", true); imported.push("Stamina estimada desde 60 min/FTP"); }
+    const p5s = num("p5s");
+    if(!num("pmax") && p5s) { $("pmax").value = Math.round(p5s); marcarEstimado("pmax", true); imported.push("Pmáx estimada desde 5 s"); }
+
+    update();
+    return {imported, missing};
+  }
+
+  icuLoadFullMetabolicAnalysis = async function(){
+    try{
+      const athleteId = icuAthlete();
+      icuSetStatus("Cargando análisis metabólico","Consultando atleta, actividades y posibles curvas de potencia...");
+      const days = parseInt($("icuDays").value || "180",10);
+      const oldest = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
+      const newest = new Date().toISOString().slice(0,10);
+
+      const athlete = await icuFetch(`/athlete/${encodeURIComponent(athleteId)}`);
+      const activitiesResp = await icuFetchOptional(`/athlete/${encodeURIComponent(athleteId)}/activities?oldest=${oldest}&newest=${newest}`);
+      const activities = Array.isArray(activitiesResp) ? activitiesResp : (activitiesResp.activities || activitiesResp.items || []);
+
+      // Rutas comprobadas contra la API real de Intervals.icu:
+      // power-curves exige los parametros curves y type (sin ellos responde 422).
+      const optionalPaths = [
+        `/athlete/${encodeURIComponent(athleteId)}/power-curves?curves=${days}d&type=Ride`,
+        `/athlete/${encodeURIComponent(athleteId)}/wellness?oldest=${oldest}&newest=${newest}`
+      ];
+      const powerData = [];
+      for(const ep of optionalPaths){
+        const r = await icuFetchOptional(ep);
+        if(!r.__error) powerData.push(r);
+      }
+
+      const result = applyMetabolicData({athlete, activities, powerData});
+      if(activities.length){
+        icuTryPowerCurveFromActivities(activities);
+      }
+
+      const missingCritical = [
+        ["VO₂ máx","vo2"],["VLa máx","vla"],["LT1/VT1","lt1"],["FRC/W’","frc"],["TTE","tte"]
+      ].filter(x => !num(x[1])).map(x=>x[0]);
+
+      $("icuPreview").innerHTML = `<h4>Análisis metabólico cargado</h4>
+        <p><b>Atleta:</b> ${escapeHtml(pick(athlete,["name","athlete_name","display_name","athleteName","username","full_name"]) || athleteId)}</p>
+        <p><b>Campos importados o estimados:</b></p><ul>${result.imported.map(x=>`<li>${escapeHtml(x)}</li>`).join("") || "<li>Ningún campo adicional detectado.</li>"}</ul>
+        <p><b>Campos que Intervals.icu puede no devolver y conviene revisar manualmente:</b></p><ul>${[...new Set([...result.missing, ...missingCritical])].map(x=>`<li>${escapeHtml(x)}</li>`).join("") || "<li>No quedan campos críticos vacíos.</li>"}</ul>
+        <details><summary>Datos técnicos recibidos</summary><pre style="white-space:pre-wrap;max-height:360px;overflow:auto">${escapeHtml(JSON.stringify({athlete, activities_count:activities.length, optional_loaded:powerData.length},null,2))}</pre></details>`;
+      icuSetStatus("Análisis cargado",`Se han cargado los datos disponibles del atleta seleccionado. Actividades revisadas: ${activities.length}.`);
+      if(activities.length) icuImportActivities();
+    }catch(e){
+      icuSetStatus("Error al cargar análisis metabólico", e.message, true);
+    }
+  }
+
+  document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+    document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".tabs").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active"); $(b.dataset.tab).classList.add("active");
+    setTimeout(update,50);
+  }));
+  fields.forEach(f=>{ if($(f)) $(f).addEventListener("input",update); });
+  if($("vo2base")) $("vo2base").addEventListener("input",update);
+  $("date").value = new Date().toISOString().slice(0,10);
+  icuLoadConfig();
+  if($("icuAccessCode")) $("icuAccessCode").value = localStorage.getItem("mfpp_access_code") || "";
+  // En la web publicada la clave la guarda el servidor: el campo sobra y confunde.
+  if(!esLocal() && $("icuApiKey")){
+    $("icuApiKey").value = "";
+    $("icuApiKey").disabled = true;
+    $("icuApiKey").placeholder = "No hace falta: la clave está en el servidor";
+  }
+  // Si hay config.local.js, sus valores mandan sobre lo guardado en el navegador.
+  (function aplicarConfigLocal(){
+    const cfg = window.MFPP_CONFIG;
+    if(!cfg) return;
+    if(cfg.coachId && $("icuCoachId")) $("icuCoachId").value = cfg.coachId;
+    if(cfg.apiKey && cfg.apiKey !== "PEGA_AQUI_TU_API_KEY" && $("icuApiKey")) $("icuApiKey").value = cfg.apiKey;
+    if(Array.isArray(cfg.atletasPermitidos) && cfg.atletasPermitidos.length && $("icuAllowedAthleteIds")){
+      $("icuAllowedAthleteIds").value = cfg.atletasPermitidos.join(", ");
+    }
+  })();
+  loadDemo();
+</script>
+</body>
+</html>

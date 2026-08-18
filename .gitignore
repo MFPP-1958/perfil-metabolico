@@ -1,0 +1,8 @@
+# NUNCA subir la clave de API a un repositorio.
+config.local.js
+
+# Restos de las pruebas con navegador y copias de seguridad locales.
+.playwright-mcp/
+*_BACKUP_*.html
+.DS_Store
+node_modules/

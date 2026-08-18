@@ -1,0 +1,24 @@
+# Configuracion de despliegue en Netlify.
+#
+# publish = "public" es deliberado: solo se publica esa carpeta. La clave de API
+# vive en config.local.js, que esta FUERA de public/, de modo que es imposible
+# publicarla por error aunque subas el proyecto entero.
+
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+# La raiz del sitio sirve el dashboard.
+[[redirects]]
+  from = "/"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    # El dashboard solo necesita Chart.js desde jsDelivr y su propia funcion.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://storage.googleapis.com; connect-src 'self'"
