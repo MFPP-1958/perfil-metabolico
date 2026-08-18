@@ -222,6 +222,7 @@
       <button class="active" data-tab="intervals">Intervals.icu</button>
       <button data-tab="inputs">Datos del ciclista</button>
       <button data-tab="perfil">Perfil metabólico</button>
+      <button data-tab="sesion">Entrenamientos</button>
       <button data-tab="resumen">Resumen</button>
       <button data-tab="prescripcion">Prescripción</button>
       <button data-tab="informe">Informe</button>
@@ -254,6 +255,48 @@
       </div>
       <div class="ba-etiqueta" id="baEtiqueta">Sin datos</div>
     </div>
+
+    <section id="sesion" class="tabs">
+      <div class="panel">
+        <h3>Elegir entrenamiento</h3>
+        <div class="formgrid" style="grid-template-columns:2fr 1fr 1fr">
+          <div>
+            <label>Entrenamiento</label>
+            <select id="sesSelect" onchange="analizarSesion()">
+              <option value="">Pulsa «Cargar entrenamientos»</option>
+            </select>
+          </div>
+          <div>
+            <label>Días hacia atrás</label>
+            <input id="sesDias" type="number" value="60"/>
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="btn primary" onclick="cargarEntrenamientos()">Cargar entrenamientos</button>
+          </div>
+        </div>
+        <div id="sesEstado" class="analysis-box" style="margin-top:14px">
+          <h4>Sin entrenamiento cargado</h4>
+          <p>Elige antes un ciclista en la pestaña Intervals.icu y pulsa «Cargar entrenamientos».</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Resumen de la sesión</h3>
+        <div class="indices-grid" id="sesResumen"></div>
+        <div id="sesZonas" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Desarrollo del entrenamiento</h3>
+        <div class="canvasWrap" style="height:340px"><canvas id="sesChart"></canvas></div>
+        <p class="small" id="sesChartNota"></p>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Intervalos</h3>
+        <div id="sesIntervalos"><p class="subtitle">Sin datos todavía.</p></div>
+      </div>
+    </section>
 
     <section id="resumen" class="tabs">
       <div class="grid cols2">
@@ -663,6 +706,209 @@
 
   // Indices con la formula a la vista y el ratio crudo como valor principal.
   // El porcentaje normalizado va debajo, para que nunca se confunda uno con otro.
+  // ---------- Analisis de una sesion de entrenamiento ----------
+
+  let sesChart = null;
+
+  // Los streams llegan a 1 Hz: una salida de 3 h son ~10.000 puntos. Dibujarlos
+  // todos no aporta nada y ralentiza el navegador, asi que se promedian por tramos.
+  function reducirSerie(datos, objetivo){
+    if(!Array.isArray(datos)) return [];
+    if(datos.length <= objetivo) return datos.map(v => Number.isFinite(v) ? v : null);
+    const paso = datos.length / objetivo, salida = [];
+    for(let i = 0; i < objetivo; i++){
+      const ini = Math.floor(i*paso), fin = Math.floor((i+1)*paso);
+      let suma = 0, n = 0;
+      for(let j = ini; j < fin && j < datos.length; j++){
+        const v = datos[j];
+        if(typeof v === "number" && Number.isFinite(v)){ suma += v; n++; }
+      }
+      salida.push(n ? suma/n : null);
+    }
+    return salida;
+  }
+
+  function formatoDuracion(seg){
+    if(!Number.isFinite(seg)) return "—";
+    const h = Math.floor(seg/3600), m = Math.round((seg%3600)/60);
+    return h ? `${h} h ${m} min` : `${m} min`;
+  }
+
+  async function cargarEntrenamientos(){
+    const estado = $("sesEstado");
+    try{
+      const athleteId = icuAthlete();
+      estado.innerHTML = `<h4>Cargando</h4><p>Consultando las actividades del ciclista...</p>`;
+
+      const dias = parseInt($("sesDias").value || "60", 10);
+      const oldest = new Date(Date.now() - dias*86400000).toISOString().slice(0,10);
+      const newest = new Date().toISOString().slice(0,10);
+
+      const acts = await icuFetch(`/athlete/${encodeURIComponent(athleteId)}/activities?oldest=${oldest}&newest=${newest}&limit=60`);
+      if(!Array.isArray(acts) || !acts.length) throw new Error("No hay actividades en ese rango.");
+
+      window.__sesActs = {};
+      acts.forEach(a => window.__sesActs[a.id] = a);
+
+      $("sesSelect").innerHTML = `<option value="">Selecciona un entrenamiento</option>` + acts.map(a => {
+        const f = (a.start_date_local || "").slice(0,10).split("-").reverse().join("/");
+        const km = a.distance ? (a.distance/1000).toFixed(0) + " km" : "";
+        const marca = a.device_watts ? "" : " · sin potencia";
+        return `<option value="${escapeHtml(a.id)}">${escapeHtml(f)} · ${escapeHtml((a.name||a.id).slice(0,42))} · ${km}${marca}</option>`;
+      }).join("");
+
+      const conPot = acts.filter(a => a.device_watts).length;
+      const conFC  = acts.filter(a => a.has_heartrate).length;
+      estado.innerHTML = `<h4>${acts.length} entrenamientos cargados</h4>
+        <p>Con potenciómetro: <b>${conPot}</b>. Con pulsómetro: <b>${conFC}</b>. Elige uno en el desplegable.</p>`;
+    }catch(e){
+      estado.innerHTML = `<h4>Error</h4><p style="color:var(--bad);font-weight:800">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  async function analizarSesion(){
+    const sel = $("sesSelect"), estado = $("sesEstado");
+    if(!sel || !sel.value) return;
+    const id = sel.value;
+    const a = (window.__sesActs || {})[id] || {};
+
+    try{
+      estado.innerHTML = `<h4>Analizando</h4><p>Descargando datos de la sesión...</p>`;
+
+      const [streams, ivs] = await Promise.all([
+        icuFetchOptional(`/activity/${encodeURIComponent(id)}/streams`),
+        icuFetchOptional(`/activity/${encodeURIComponent(id)}/intervals`)
+      ]);
+
+      // --- Resumen ---
+      const tarjetas = [
+        ["Duración", formatoDuracion(a.moving_time), "tiempo en movimiento"],
+        ["Distancia", a.distance ? (a.distance/1000).toFixed(1) + " km" : "—", ""],
+        ["Desnivel", a.total_elevation_gain != null ? Math.round(a.total_elevation_gain) + " m" : "—", "acumulado"],
+        ["Carga", a.icu_training_load != null ? a.icu_training_load : "—", "training load"],
+        ["Potencia media", a.icu_average_watts != null ? a.icu_average_watts + " W" : "—", ""],
+        ["Potencia normalizada", a.icu_weighted_avg_watts != null ? a.icu_weighted_avg_watts + " W" : "—", ""],
+        ["Intensidad", a.icu_intensity != null ? round(a.icu_intensity,0) + "%" : "—", "respecto al FTP"],
+        ["Variabilidad", a.icu_variability_index != null ? round(a.icu_variability_index,2) : "—", "NP / potencia media"],
+        ["Pulso medio", a.average_heartrate != null ? a.average_heartrate + " ppm" : "—", ""],
+        ["Cadencia media", a.average_cadence != null ? Math.round(a.average_cadence) + " rpm" : "—", ""],
+        ["Vaciado de W'", a.icu_max_wbal_depletion != null ? (a.icu_max_wbal_depletion/1000).toFixed(1) + " kJ" : "—", "máximo en la sesión"],
+        ["Trabajo sobre FTP", a.icu_joules_above_ftp != null ? Math.round(a.icu_joules_above_ftp/1000) + " kJ" : "—", ""]
+      ];
+      $("sesResumen").innerHTML = tarjetas.map(t =>
+        `<div class="indice"><div class="nom">${t[0]}</div><div class="val">${t[1]}</div><div class="form">${t[2]}</div></div>`
+      ).join("");
+
+      // --- Tiempo en zonas de potencia ---
+      const zt = a.icu_zone_times || [];
+      const totalZ = zt.reduce((x,z) => x + (z.secs||0), 0);
+      $("sesZonas").innerHTML = totalZ
+        ? `<label>Tiempo en zonas de potencia</label>` + zt.map(z => {
+            const pct = totalZ ? (z.secs/totalZ*100) : 0;
+            return `<div class="barrow"><b>${escapeHtml(z.id)}</b><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div><span>${formatoDuracion(z.secs)}</span></div>`;
+          }).join("")
+        : "";
+
+      // --- Grafico ---
+      pintarSesion(streams);
+
+      // --- Intervalos ---
+      pintarIntervalos(ivs);
+
+      const f = (a.start_date_local || "").slice(0,10).split("-").reverse().join("/");
+      estado.innerHTML = `<h4>${escapeHtml(a.name || id)}</h4>
+        <p>${escapeHtml(f)} · ${escapeHtml(a.type || "")} · origen ${escapeHtml(a.source || "?")}</p>`;
+
+    }catch(e){
+      estado.innerHTML = `<h4>Error al analizar</h4><p style="color:var(--bad);font-weight:800">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  function pintarSesion(streams){
+    const nota = $("sesChartNota");
+    if(!Array.isArray(streams) || streams.__error){
+      nota.textContent = "No se han podido descargar los datos segundo a segundo de esta sesión.";
+      if(sesChart){ sesChart.destroy(); sesChart = null; }
+      return;
+    }
+
+    const busca = t => (streams.find(x => x.type === t) || {}).data || [];
+    const tiempo = busca("time"), watts = busca("watts"), fc = busca("heartrate"), cad = busca("cadence");
+    const n = tiempo.length;
+    if(!n){ nota.textContent = "Esta sesión no tiene datos segundo a segundo."; return; }
+
+    const OBJETIVO = 700;
+    const etiquetas = reducirSerie(tiempo, OBJETIVO).map(t => (t/60).toFixed(0));
+
+    const series = [];
+    if(watts.length) series.push({label:"Potencia (W)", data:reducirSerie(watts,OBJETIVO), borderColor:"#6df2ff", backgroundColor:"rgba(109,242,255,.12)", yAxisID:"y", fill:true, borderWidth:1.5, pointRadius:0, tension:.25});
+    if(fc.length)    series.push({label:"Pulso (ppm)", data:reducirSerie(fc,OBJETIVO),    borderColor:"#ffb7b7", yAxisID:"y1", borderWidth:1.5, pointRadius:0, tension:.25});
+    if(cad.length)   series.push({label:"Cadencia (rpm)", data:reducirSerie(cad,OBJETIVO), borderColor:"#e8ff74", yAxisID:"y1", borderWidth:1, pointRadius:0, tension:.25, hidden:true});
+
+    if(sesChart) sesChart.destroy();
+    sesChart = new Chart($("sesChart"), {
+      type:"line",
+      data:{ labels:etiquetas, datasets:series },
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:false,
+        interaction:{ mode:"index", intersect:false },
+        scales:{
+          x:{ title:{display:true, text:"minutos"}, ticks:{maxTicksLimit:12} },
+          y:{ position:"left", title:{display:true, text:"vatios"} },
+          y1:{ position:"right", grid:{drawOnChartArea:false}, title:{display:true, text:"ppm / rpm"} }
+        }
+      }
+    });
+
+    const falta = [];
+    if(!watts.length) falta.push("potencia");
+    if(!fc.length)    falta.push("pulso");
+    if(!cad.length)   falta.push("cadencia");
+    nota.textContent = `${n.toLocaleString("es")} puntos reducidos a ${Math.min(n,OBJETIVO)} para dibujarlos.`
+      + (falta.length ? ` Esta sesión no registró ${falta.join(", ")}.` : "")
+      + " La cadencia está oculta: púlsala en la leyenda para verla.";
+  }
+
+  function pintarIntervalos(ivs){
+    const caja = $("sesIntervalos");
+    const lista = (ivs && ivs.icu_intervals) || [];
+    const trabajo = lista.filter(i => i.type === "WORK");
+    if(!trabajo.length){
+      caja.innerHTML = `<p class="subtitle">Intervals.icu no ha detectado intervalos de trabajo en esta sesión. Suele pasar en salidas continuas sin series.</p>`;
+      return;
+    }
+    caja.innerHTML = `<table><thead><tr>
+        <th>#</th><th>Duración</th><th>Potencia</th><th>Normalizada</th><th>Máx</th>
+        <th>Pulso</th><th>Cadencia</th><th>Zona</th><th>W' gastado</th><th>Lactato</th>
+      </tr></thead><tbody>
+      ${trabajo.map((i,n) => {
+        // Negativo significa que el ciclista recupero W' durante el intervalo.
+        // Sin este redondeo aparecian cosas como "-0.0 kJ".
+        let wbal = "—";
+        if(i.wbal_start != null && i.wbal_end != null){
+          const kj = (i.wbal_start - i.wbal_end)/1000;
+          wbal = Math.abs(kj) < 0.05 ? "0.0 kJ"
+               : (kj < 0 ? "+" + Math.abs(kj).toFixed(1) + " kJ" : kj.toFixed(1) + " kJ");
+        }
+        const lac = i.average_lactate != null ? i.average_lactate : (i.max_lactate != null ? i.max_lactate : null);
+        return `<tr>
+          <td>${n+1}</td>
+          <td>${formatoDuracion(i.moving_time)}</td>
+          <td><b>${i.average_watts != null ? i.average_watts + " W" : "—"}</b></td>
+          <td>${i.weighted_average_watts != null ? i.weighted_average_watts + " W" : "—"}</td>
+          <td>${i.max_watts != null ? i.max_watts + " W" : "—"}</td>
+          <td>${i.average_heartrate != null ? i.average_heartrate : "—"}</td>
+          <td>${i.average_cadence != null ? Math.round(i.average_cadence) : "—"}</td>
+          <td>${i.zone != null ? "Z" + i.zone : "—"}</td>
+          <td>${wbal}</td>
+          <td>${lac != null ? "<b>" + lac + "</b>" : "—"}</td>
+        </tr>`;
+      }).join("")}
+      </tbody></table>
+      <p class="small">Si registras lactato en un intervalo dentro de Intervals.icu, aparecerá en la última columna
+      y el test de VLa máx podrá leerlo.</p>`;
+  }
+
   // VLa max a partir de un esprint maximo, segun la Ec. 2 de Dunst, Hesse y
   // Ueberschär (2025): vLamax = ΔLactato / (T - t_alactico), con t_alactico de 2-3 s.
   function calcularVLaMax(){
