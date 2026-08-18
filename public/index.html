@@ -263,7 +263,7 @@
           <div>
             <label>Entrenamiento</label>
             <select id="sesSelect" onchange="analizarSesion()">
-              <option value="">Pulsa «Cargar entrenamientos»</option>
+              <option value="">Elige antes un ciclista en Intervals.icu</option>
             </select>
           </div>
           <div>
@@ -271,12 +271,13 @@
             <input id="sesDias" type="number" value="60"/>
           </div>
           <div style="display:flex;align-items:flex-end">
-            <button class="btn primary" onclick="cargarEntrenamientos()">Cargar entrenamientos</button>
+            <button class="btn" onclick="cargarEntrenamientos()">Recargar</button>
           </div>
         </div>
         <div id="sesEstado" class="analysis-box" style="margin-top:14px">
-          <h4>Sin entrenamiento cargado</h4>
-          <p>Elige antes un ciclista en la pestaña Intervals.icu y pulsa «Cargar entrenamientos».</p>
+          <h4>Sin ciclista seleccionado</h4>
+          <p>Elige un ciclista en la pestaña Intervals.icu y sus entrenamientos aparecerán aquí solos.
+          El botón sirve para recargarlos o para cambiar el número de días.</p>
         </div>
       </div>
 
@@ -745,7 +746,7 @@
       const newest = new Date().toISOString().slice(0,10);
 
       const acts = await icuFetch(`/athlete/${encodeURIComponent(athleteId)}/activities?oldest=${oldest}&newest=${newest}&limit=60`);
-      if(!Array.isArray(acts) || !acts.length) throw new Error("No hay actividades en ese rango.");
+      if(!Array.isArray(acts) || !acts.length) throw new Error("No hay actividades en ese rango de días.");
 
       window.__sesActs = {};
       acts.forEach(a => window.__sesActs[a.id] = a);
@@ -762,6 +763,7 @@
       estado.innerHTML = `<h4>${acts.length} entrenamientos cargados</h4>
         <p>Con potenciómetro: <b>${conPot}</b>. Con pulsómetro: <b>${conFC}</b>. Elige uno en el desplegable.</p>`;
     }catch(e){
+      $("sesSelect").innerHTML = `<option value="">No se pudieron cargar los entrenamientos</option>`;
       estado.innerHTML = `<h4>Error</h4><p style="color:var(--bad);font-weight:800">${escapeHtml(e.message)}</p>`;
     }
   }
@@ -1685,6 +1687,8 @@
     // Vaciar SIEMPRE antes de nada. Si la carga falla, es preferible un dashboard
     // en blanco a uno que muestre los datos de otro ciclista bajo este nombre.
     icuLimpiarDatos();
+    limpiarSesion();
+    limpiarVLa();
     $("athlete").value = a.name;
     $("icuActivities").innerHTML = `<p class="subtitle">Sin datos consultados todavía.</p>`;
     icuSaveConfig();
@@ -1692,6 +1696,9 @@
 
     $("icuPreview").innerHTML = `<h4>Cargando ${escapeHtml(a.name)}</h4><p>ID: ${escapeHtml(a.id)}</p>`;
     await icuLoadFullMetabolicAnalysis();
+
+    // El ciclista elegido queda listo en todas las pestañas, sin repetir la operacion.
+    await cargarEntrenamientos();
   }
 
 
@@ -1981,6 +1988,25 @@
   // dejar los del anterior hacia que el dashboard atribuyese datos ajenos.
   const CAMPOS_METABOLICOS = ["weight","vo2","pvo2","vla","ftp","cp","frc","tte",
                               "stamina","lt1","pmax","p5s","p15s","p1m","p5m","p20m","p60m"];
+
+  // Deja la pestaña de entrenamientos en blanco. Sin esto, al cambiar de ciclista
+  // seguian viendose las sesiones del anterior bajo el nombre del nuevo.
+  function limpiarSesion(){
+    window.__sesActs = {};
+    if(sesChart){ sesChart.destroy(); sesChart = null; }
+    if($("sesSelect")) $("sesSelect").innerHTML = `<option value="">Cargando entrenamientos...</option>`;
+    if($("sesResumen")) $("sesResumen").innerHTML = "";
+    if($("sesZonas")) $("sesZonas").innerHTML = "";
+    if($("sesChartNota")) $("sesChartNota").textContent = "";
+    if($("sesIntervalos")) $("sesIntervalos").innerHTML = `<p class="subtitle">Elige un entrenamiento.</p>`;
+  }
+
+  // El test de lactato es de un ciclista y de un dia concretos.
+  function limpiarVLa(){
+    ["laPre","laPost"].forEach(id => { if($(id)) $(id).value = ""; });
+    window.__vlamax = null;
+    if($("vlaGrid")) calcularVLaMax();
+  }
 
   function icuLimpiarDatos(){
     CAMPOS_METABOLICOS.forEach(id => {
