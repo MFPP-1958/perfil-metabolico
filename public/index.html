@@ -636,7 +636,10 @@
     const pmaxRel = d.weight ? d.pmax / d.weight : 0;
     const vo2Score = clamp((d.vo2-40)/(75-40)*100);
     const pvo2Score = clamp((d.pvo2 / Math.max(1,d.weight) - 3.5)/(6.5-3.5)*100);
-    const glycolytic = clamp((d.vla-0.35)/(2.2-0.35)*100);
+    // Rango fisiologico de la VLa max: 0,30 en perfiles muy aerobicos y ~1,20 en
+    // esprinters. El 0,35-2,20 anterior venia del atleta de ejemplo del video, cuyo
+    // 1,85 ya comprobamos que era implausible: aplastaba toda la escala util.
+    const glycolytic = clamp((d.vla-0.30)/(1.20-0.30)*100);
     const reserveAna = clamp((frcRel-0.025)/(0.11-0.025)*100);
     const base = clamp((lt1RelFtp-0.55)/(0.85-0.55)*100);
     const sustain = clamp((ftpRelVo2-0.68)/(0.88-0.68)*100);
@@ -1422,7 +1425,15 @@
 
   function updateSystems(d,c){
     $("systems").innerHTML =
-      systemCard("Producción glucolítica",c.glycolytic,["Requiere VLa máx, que Intervals.icu no proporciona: se introduce a mano.","A mayor producción, mayor coste metabólico en esfuerzos intensos.","No es malo: debe interpretarse según rol y categoría."],false,!!d.vla) +
+      systemCard("Producción glucolítica",c.glycolytic,
+        d.vla
+          ? [`VLa máx medida: <b>${round(d.vla,2)}</b> mmol·l⁻¹·s⁻¹.`,
+             "El porcentaje grande es una puntuación sobre el rango de referencia 0,30–1,20, no la VLa máx.",
+             "A mayor producción, mayor coste metabólico en esfuerzos intensos. No es malo: depende del rol y la categoría."]
+          : ["Requiere VLa máx, que Intervals.icu no proporciona: se mide con un test de esprint con lactato.",
+             "Puedes calcularla en el panel «Test de VLa máx» de esta misma pestaña.",
+             "Sin ella el modelo de Mader tampoco puede calcular los umbrales."],
+        false, !!d.vla) +
       systemCard("Base aeróbica relativa",c.base,[`Relación LT1 / mFTP: ${d.ftp ? Math.round(d.lt1/d.ftp*100) + "%" : "—"}.`,"El porcentaje grande es una puntuación sobre el rango de referencia 55–85%, no el ratio.","Clave en cadetes y juveniles."],false,!!(d.lt1 && d.ftp)) +
       systemCard("Sostenibilidad",c.sustain,[`Relación mFTP / P@VO₂ máx: ${d.pvo2 ? Math.round(d.ftp/d.pvo2*100) + "%" : "—"}.`,"El porcentaje grande es una puntuación sobre el rango de referencia 68–88%, no el ratio.","Mejora con subumbral, tempo y pacing."],false,!!(d.ftp && d.pvo2)) +
       systemCard("Durabilidad",c.durability,["Capacidad para mantener rendimiento con fatiga.","Importante en pruebas largas y vueltas por etapas.","Se entrena con volumen progresivo y controlado."],false,!!d.stamina);
