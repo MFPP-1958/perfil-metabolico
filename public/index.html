@@ -294,6 +294,35 @@
       </div>
 
       <div class="panel" style="margin-top:18px">
+        <h3>Prescrito frente a ejecutado</h3>
+        <div id="cumpLeido" class="analysis-box"></div>
+        <div class="formgrid" style="margin-top:14px">
+          <div>
+            <label>Series × repeticiones</label>
+            <input id="cumpReps" type="number" placeholder="repeticiones" oninput="evaluarCumplimiento()"/>
+          </div>
+          <div>
+            <label>Duración de cada una (min)</label>
+            <input id="cumpDur" type="number" step="0.1" oninput="evaluarCumplimiento()"/>
+          </div>
+          <div>
+            <label>Objetivo (% de la referencia)</label>
+            <input id="cumpPct" type="number" step="1" oninput="evaluarCumplimiento()"/>
+          </div>
+          <div>
+            <label>Referencia</label>
+            <select id="cumpRef" onchange="evaluarCumplimiento()">
+              <option value="FTP">FTP</option>
+              <option value="P@VO2max">P@VO₂ máx</option>
+              <option value="Pmáx">P máx</option>
+            </select>
+          </div>
+        </div>
+        <div class="indices-grid" id="cumpGrid" style="margin-top:16px"></div>
+        <div id="cumpVeredicto" class="analysis-box"></div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
         <h3>Intervalos</h3>
         <div id="sesIntervalos"><p class="subtitle">Sin datos todavía.</p></div>
       </div>
@@ -707,6 +736,159 @@
 
   // Indices con la formula a la vista y el ratio crudo como valor principal.
   // El porcentaje normalizado va debajo, para que nunca se confunda uno con otro.
+  // ---------- Prescripcion leida del titulo ----------
+  //
+  // Los entrenamientos no se prescriben todavia en Intervals.icu: la pauta viene
+  // escrita en el propio nombre de la actividad, con formatos del tipo
+  //   "Moncofa - FRC/FTP. (15')- 1 x ( 5 x 3' @ 106 % R-3' @ 60 % )"
+  // Validado contra los 234 titulos con prescripcion de los diez ciclistas:
+  // saca la estructura en el 88 % y el objetivo en el 72 %.
+
+  function normalizarTitulo(t){
+    return String(t || "")
+      .replace(/[\u00b4\u2018\u2019]/g, "'")
+      .replace(/[\u201c\u201d\u2033]/g, '"')
+      .replace(/[\u2013\u2014]/g, "-")
+      .replace(/\u00a0/g, " ")
+      .replace(/\s+/g, " ");
+  }
+
+  function _segundosPauta(valor, unidad){
+    if(valor.indexOf(":") >= 0){
+      const p = valor.split(":");
+      return parseInt(p[0],10)*60 + parseInt(p[1],10);
+    }
+    return parseInt(valor,10) * (unidad === "'" ? 60 : 1);
+  }
+
+  function interpretarTitulo(titulo){
+    const t = normalizarTitulo(titulo);
+    const r = {bloque:null, minutos:null, series:null, reps:null, segundos:null,
+               intensidad:null, referencia:null, zona:null, deducidos:false};
+    let m;
+
+    if((m = t.match(/\s-\s*(.+?)\s*(?:\(|\d+\s*x)/i))) r.bloque = m[1].replace(/^[\s.\-]+|[\s.\-]+$/g,"");
+    if((m = t.match(/\((\d+)\s*'\)/)))                    r.minutos = parseInt(m[1],10);
+
+    // Anidada: 3 x ( 2 x 2' ...   y tambien   1x(5x(30" ...
+    if((m = t.match(/(\d+)\s*x\s*\(\s*(\d+)\s*x\s*\(?\s*(\d+(?::\d+)?)\s*(['"])/i))){
+      r.series = parseInt(m[1],10); r.reps = parseInt(m[2],10);
+      r.segundos = _segundosPauta(m[3], m[4]);
+    }else if((m = t.match(/(\d+)\s*x\s*\(?\s*(\d+(?::\d+)?)\s*(['"])/i))){
+      r.series = 1; r.reps = parseInt(m[1],10);
+      r.segundos = _segundosPauta(m[2], m[3]);
+    }
+
+    if((m = t.match(/@\s*Z\s*(\d)/i))){ r.zona = parseInt(m[1],10); r.referencia = "Zona " + m[1]; }
+
+    m = t.match(/@\s*(\d+)\s*(?:-\s*(\d+))?\s*%/) || t.match(/(\d+)\s*(?:-\s*(\d+))?\s*%/);
+    if(m) r.intensidad = m[2] ? (parseInt(m[1],10) + parseInt(m[2],10))/2 : parseInt(m[1],10);
+
+    if(/P\s*@?\s*VO2\s*max/i.test(t))      r.referencia = "P@VO2max";
+    else if(/Pm[a\u00e1]x/i.test(t))         r.referencia = "Pmáx";
+    else if(!r.referencia && (/FTP/i.test(t) || r.intensidad !== null)) r.referencia = "FTP";
+
+    if(r.minutos === null && r.series && r.reps && r.segundos){
+      r.minutos = Math.round(r.series * r.reps * r.segundos / 60);
+      r.deducidos = true;
+    }
+    return r;
+  }
+
+  // Vatios objetivo. Las zonas de Intervals.icu son limites superiores en % del FTP.
+  function vatiosObjetivo(pct, referencia, zona){
+    const ftp = num("ftp"), pvo2 = num("pvo2"), pmax = num("pmax");
+    if(zona){
+      const z = window.__zonasPot;
+      if(!Array.isArray(z) || !ftp) return null;
+      const alto = z[zona-1], bajo = zona >= 2 ? z[zona-2] : 0;
+      if(alto == null) return null;
+      const medio = Math.min(alto, bajo + 30);  // Z7 llega a 999: se acota
+      return ftp * ((bajo + medio)/2) / 100;
+    }
+    if(!pct) return null;
+    if(referencia === "P@VO2max") return pvo2 ? pvo2 * pct/100 : null;
+    if(referencia === "Pmáx")     return pmax ? pmax * pct/100 : null;
+    return ftp ? ftp * pct/100 : null;
+  }
+
+  function evaluarCumplimiento(){
+    const grid = $("cumpGrid"), ver = $("cumpVeredicto");
+    if(!grid) return;
+    const p = window.__pauta;
+    const ivs = (window.__sesIntervalos || []).filter(i => i.type === "WORK" && i.average_watts);
+
+    if(!p){ grid.innerHTML = ""; ver.innerHTML = ""; return; }
+
+    const reps = num("cumpReps"), durMin = num("cumpDur"), pct = num("cumpPct");
+    const ref = $("cumpRef") ? $("cumpRef").value : "FTP";
+    const objetivoW = vatiosObjetivo(pct, ref, p.zona);
+
+    // Una sesion suele traer intervalos que no son de la pauta (calentamiento con
+    // algun repecho, un tramo en tempo...). Promediarlos todos falsea el resultado,
+    // asi que solo se comparan los que encajan en duracion con lo prescrito.
+    const segPres = durMin ? durMin*60 : (p.segundos || null);
+    let usadas = ivs, descartadas = 0;
+    if(segPres){
+      const encajan = ivs.filter(i => Math.abs((i.moving_time||0) - segPres) / segPres <= 0.35);
+      if(encajan.length){
+        usadas = (reps && encajan.length > reps) ? encajan.slice(0, reps) : encajan;
+        descartadas = ivs.length - usadas.length;
+      }
+    }
+
+    const nEje = usadas.length;
+    const durEje = nEje ? usadas.reduce((a,i)=>a+(i.moving_time||0),0)/nEje/60 : null;
+    const potEje = nEje ? usadas.reduce((a,i)=>a+(i.average_watts||0),0)/nEje : null;
+
+    const cumplPot = (objetivoW && potEje) ? potEje/objetivoW*100 : null;
+    const cumplDur = (durMin && durEje) ? durEje/durMin*100 : null;
+
+    const etiqueta = v => {
+      if(v === null) return ["—","warn"];
+      if(Math.abs(v-100) <= 5)  return ["EN OBJETIVO","good"];
+      if(Math.abs(v-100) <= 12) return [v > 100 ? "POR ENCIMA" : "POR DEBAJO","mid"];
+      return [v > 100 ? "MUY POR ENCIMA" : "MUY POR DEBAJO","bad"];
+    };
+
+    grid.innerHTML = [
+      ["Objetivo", objetivoW ? Math.round(objetivoW) + " W" : "—",
+        p.zona ? `Z${p.zona} sobre FTP` : (pct ? `${pct}% de ${ref}` : "sin objetivo")],
+      ["Potencia ejecutada", potEje ? Math.round(potEje) + " W" : "—",
+        `media de ${nEje} series` + (descartadas ? ` · ${descartadas} fuera de pauta` : "")],
+      ["Cumplimiento", cumplPot ? Math.round(cumplPot) + "%" : "—", "ejecutado / objetivo"],
+      ["Series", `${nEje} de ${reps || "—"}`, "ejecutadas / prescritas"],
+      ["Duración media", durEje ? round(durEje,1) + " min" : "—", durMin ? `prescrita ${round(durMin,1)} min` : ""],
+      ["Volumen de trabajo", (durEje && nEje) ? round(durEje*nEje,0) + " min" : "—",
+        p.minutos ? `prescrito ${p.minutos} min` : ""]
+    ].map(t => `<div class="indice"><div class="nom">${t[0]}</div><div class="val">${t[1]}</div><div class="form">${t[2]}</div></div>`).join("");
+
+    if(!nEje){
+      ver.innerHTML = `<h4>No hay series que comparar</h4>
+        <p>Intervals.icu no detectó intervalos de trabajo en esta sesión. O no se ejecutó la pauta,
+        o el esfuerzo fue demasiado continuo para que los detecte.</p>`;
+      return;
+    }
+
+    const [txtP, clsP] = etiqueta(cumplPot);
+    const [txtD, clsD] = etiqueta(cumplDur);
+    const faltan = (reps && nEje < reps) ? reps - nEje : 0;
+
+    ver.innerHTML = `<h4>Veredicto</h4>
+      <p>
+        <span class="badge ${clsP}">Potencia: ${txtP}</span>
+        <span class="badge ${clsD}">Duración: ${txtD}</span>
+        ${faltan ? `<span class="badge bad">Faltan ${faltan} series</span>` : ""}
+      </p>
+      ${cumplPot ? `<p>Las series salieron a <b>${Math.round(potEje)} W</b> frente a los
+        <b>${Math.round(objetivoW)} W</b> prescritos: un <b>${Math.round(cumplPot)}%</b> del objetivo.</p>` : ""}
+      ${descartadas ? `<p class="small">Se han dejado fuera <b>${descartadas}</b> intervalos cuya duración
+        no encaja con la pauta: suelen ser repechos o tramos sueltos ajenos a las series.</p>` : ""}
+      <p class="small">La pauta se lee del título de la actividad, porque hoy no se prescribe dentro de
+      Intervals.icu. Si la ha interpretado mal, corrige los campos de arriba y el veredicto se recalcula.
+      Cuando prescribas en Intervals.icu, esto pasará a leer el entrenamiento planificado.</p>`;
+  }
+
   // ---------- Analisis de una sesion de entrenamiento ----------
 
   let sesChart = null;
@@ -815,7 +997,11 @@
       pintarSesion(streams);
 
       // --- Intervalos ---
+      window.__sesIntervalos = (ivs && ivs.icu_intervals) || [];
       pintarIntervalos(ivs);
+
+      // --- Prescrito frente a ejecutado ---
+      volcarPauta(a.name);
 
       const f = (a.start_date_local || "").slice(0,10).split("-").reverse().join("/");
       estado.innerHTML = `<h4>${escapeHtml(a.name || id)}</h4>
@@ -824,6 +1010,36 @@
     }catch(e){
       estado.innerHTML = `<h4>Error al analizar</h4><p style="color:var(--bad);font-weight:800">${escapeHtml(e.message)}</p>`;
     }
+  }
+
+  // Lee la pauta del titulo y precarga los campos, que el entrenador puede corregir.
+  function volcarPauta(titulo){
+    const p = interpretarTitulo(titulo);
+    window.__pauta = p;
+    const leido = $("cumpLeido");
+
+    const partes = [];
+    if(p.bloque)   partes.push(`bloque <b>${escapeHtml(p.bloque)}</b>`);
+    if(p.series && p.reps && p.segundos){
+      const d = p.segundos >= 60 ? round(p.segundos/60,1) + " min" : p.segundos + " s";
+      partes.push(`<b>${p.series} × ${p.reps} × ${d}</b>`);
+    }
+    if(p.intensidad !== null) partes.push(`al <b>${p.intensidad}%</b>${p.referencia ? " de " + escapeHtml(p.referencia) : ""}`);
+    if(p.zona)                partes.push(`en <b>zona ${p.zona}</b>`);
+    if(p.minutos)             partes.push(`${p.minutos} min de trabajo${p.deducidos ? " (deducidos)" : ""}`);
+
+    leido.innerHTML = partes.length
+      ? `<h4>Lo que he entendido del título</h4><p>${partes.join(" · ")}</p>`
+      : `<h4>El título no contiene una pauta reconocible</h4>
+         <p>Suele pasar en salidas libres. Puedes escribir la pauta a mano en los campos de abajo.</p>`;
+
+    if($("cumpReps")) $("cumpReps").value = (p.series && p.reps) ? p.series * p.reps : "";
+    if($("cumpDur"))  $("cumpDur").value  = p.segundos ? (p.segundos/60).toFixed(1) : "";
+    if($("cumpPct"))  $("cumpPct").value  = p.intensidad !== null ? p.intensidad : "";
+    if($("cumpRef") && p.referencia && ["FTP","P@VO2max","Pmáx"].indexOf(p.referencia) >= 0){
+      $("cumpRef").value = p.referencia;
+    }
+    evaluarCumplimiento();
   }
 
   function pintarSesion(streams){
@@ -1953,6 +2169,8 @@
     const ride = ss.find(x => Array.isArray(x.types) && x.types.indexOf("Ride") >= 0) || ss[0];
     if(ride){
       if(n(ride.ftp) !== null) out.ftp = n(ride.ftp);
+      // Limites superiores de zona en % del FTP, para los objetivos tipo @Z4.
+      if(Array.isArray(ride.power_zones)) window.__zonasPot = ride.power_zones;
       if(n(ride.w_prime) !== null) out.frc = n(ride.w_prime) / 1000; // J -> kJ
     }
 
@@ -1999,6 +2217,9 @@
     if($("sesZonas")) $("sesZonas").innerHTML = "";
     if($("sesChartNota")) $("sesChartNota").textContent = "";
     if($("sesIntervalos")) $("sesIntervalos").innerHTML = `<p class="subtitle">Elige un entrenamiento.</p>`;
+    window.__pauta = null; window.__sesIntervalos = [];
+    ["cumpReps","cumpDur","cumpPct"].forEach(id => { if($(id)) $(id).value = ""; });
+    ["cumpLeido","cumpGrid","cumpVeredicto"].forEach(id => { if($(id)) $(id).innerHTML = ""; });
   }
 
   // El test de lactato es de un ciclista y de un dia concretos.
