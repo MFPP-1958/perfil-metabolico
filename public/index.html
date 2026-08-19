@@ -911,10 +911,20 @@
     return salida;
   }
 
+  // Notacion del entrenador: ' para minutos, " para segundos. Antes, un esprint
+  // de 15 s se mostraba como "0 min".
   function formatoDuracion(seg){
     if(!Number.isFinite(seg)) return "—";
+    seg = Math.round(seg);
+    if(seg < 60) return seg + '"';
+    if(seg < 3600){
+      const m = Math.floor(seg/60), s = seg % 60;
+      // Por debajo de 10 min los segundos importan (series de 1'30", 3'30"...).
+      if(m < 10 && s >= 5) return m + "' " + String(s).padStart(2,"0") + '"';
+      return Math.round(seg/60) + " min";
+    }
     const h = Math.floor(seg/3600), m = Math.round((seg%3600)/60);
-    return h ? `${h} h ${m} min` : `${m} min`;
+    return `${h} h ${m} min`;
   }
 
   async function cargarEntrenamientos(){
@@ -1109,11 +1119,15 @@
                : (kj < 0 ? "+" + Math.abs(kj).toFixed(1) + " kJ" : kj.toFixed(1) + " kJ");
         }
         const lac = i.average_lactate != null ? i.average_lactate : (i.max_lactate != null ? i.max_lactate : null);
+        // La normalizada se calcula sobre medias moviles de 30 s: por debajo de eso
+        // Intervals.icu devuelve un numero que no significa nada (499 W medios con
+        // 176 W "normalizados" en un esprint de 15 s).
+        const corta = (i.moving_time || 0) < 60;
         return `<tr>
           <td>${n+1}</td>
           <td>${formatoDuracion(i.moving_time)}</td>
           <td><b>${i.average_watts != null ? i.average_watts + " W" : "—"}</b></td>
-          <td>${i.weighted_average_watts != null ? i.weighted_average_watts + " W" : "—"}</td>
+          <td${corta ? ' title="La potencia normalizada necesita al menos 30 s de esfuerzo para significar algo"' : ""}>${(!corta && i.weighted_average_watts != null) ? i.weighted_average_watts + " W" : "—"}</td>
           <td>${i.max_watts != null ? i.max_watts + " W" : "—"}</td>
           <td>${i.average_heartrate != null ? i.average_heartrate : "—"}</td>
           <td>${i.average_cadence != null ? Math.round(i.average_cadence) : "—"}</td>
