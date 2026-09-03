@@ -143,6 +143,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .experimental-view .acknowledgement { display: flex; align-items: center; gap: 10px; margin: 22px 0 14px; font-weight: 700; }
 .experimental-view .acknowledgement input { width: 20px; height: 20px; }
 .experimental-view details { margin-top: 26px; padding-block: 14px; border-top: 1px solid var(--line); color: var(--muted); }
+.evolution-view table { margin-top: 28px; }
+.evolution-view td small { display: block; color: var(--muted); }
+.evolution-view .confidence-note { padding: 14px; border-left: 4px solid var(--data); background: #e8f0f1; }
 
 @media (max-width: 760px) {
   .login-shell { background: var(--nav); }

@@ -329,13 +329,13 @@ unchecked until a container runtime or a disposable Supabase project is provided
 **Interfaces:**
 - Produces: `classifyChange(previous, current, typicalError): ChangeAssessment`.
 
-- [ ] Write tests for changes below, within and above measurement error and for incompatible protocols.
-- [ ] Run tests and confirm failure.
-- [ ] Implement protocol-compatible comparisons and change classification.
-- [ ] Render timelines with source, model version, uncertainty and filters.
-- [ ] Suppress directional claims when observations are incompatible.
-- [ ] Run tests and accessibility checks.
-- [ ] Commit with `feat: add uncertainty aware athlete evolution`.
+- [x] Write tests for changes below, within and above measurement error and for incompatible protocols.
+- [x] Run tests and confirm failure.
+- [x] Implement protocol-compatible comparisons and change classification.
+- [x] Render timelines with source, model version, uncertainty and filters.
+- [x] Suppress directional claims when observations are incompatible.
+- [x] Run tests and accessibility checks.
+- [x] Commit with `feat: add uncertainty aware athlete evolution`.
 
 ---
 
