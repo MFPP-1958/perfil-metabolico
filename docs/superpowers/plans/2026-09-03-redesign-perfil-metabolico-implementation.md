@@ -246,14 +246,14 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - Produces: `fitPowerDuration(input, modelType): PowerDurationFit` with input points, residuals, RMSE, CP, W-prime, Pmax and warnings.
 - Produces: `assessCurveCompleteness(points): CurveQuality`.
 
-- [ ] Write numeric fixture tests for ECP and Morton model outputs and missing-domain warnings.
-- [ ] Run tests and confirm failure.
-- [ ] Implement model adapters without converting FTP into CP or 5-second power into Pmax.
-- [ ] Implement residual and curve-completeness checks.
-- [ ] Render observed/modelled curves, input points, units, period, sport, indoor state and uncertainty text.
-- [ ] Provide an accessible result table matching the graph.
-- [ ] Run numeric, component and accessibility tests.
-- [ ] Commit with `feat: add versioned power duration analysis`.
+- [x] Write numeric fixture tests for ECP and Morton model outputs and missing-domain warnings.
+- [x] Run tests and confirm failure.
+- [x] Implement model adapters without converting FTP into CP or 5-second power into Pmax.
+- [x] Implement residual and curve-completeness checks.
+- [x] Render observed/modelled curves, input points, units, period, sport, indoor state and uncertainty text.
+- [x] Provide an accessible result table matching the graph.
+- [x] Run numeric, component and accessibility tests.
+- [x] Commit with `feat: add versioned power duration analysis`.
 
 ### Task 10: Implement physiological durability
 
