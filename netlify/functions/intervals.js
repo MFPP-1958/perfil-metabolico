@@ -1,205 +1,158 @@
-// Proxy entre el dashboard y la API de Intervals.icu.
-//
-// Motivo: /athletes devuelve, para cada atleta, su icu_api_key y su email. Si el
-// navegador llamase directamente a la API con la clave del entrenador, esa clave y
-// las de los diez ciclistas quedarian visibles para cualquiera que abra la web.
-// Aqui la clave vive en una variable de entorno de Netlify y nunca baja al cliente,
-// y ademas se limpian los campos sensibles antes de responder.
+import { authenticateRequest, listAuthorizedAthleteIds } from './lib/authorization.js';
+import { bearerToken, jsonResponse } from './lib/http.js';
 
-const API = "https://intervals.icu/api/v1";
+const INTERVALS_API = 'https://intervals.icu/api/v1';
+const MAX_RESPONSE_BYTES = 5_000_000;
+const ATHLETE_ID = /^i\d+$/;
+const ACTIVITY_ID = /^i?\d+$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-// Rutas admitidas, todas comprobadas contra la API real. La lista es cerrada para
-// que nadie pueda usar la funcion como proxy abierto hacia cualquier endpoint con
-// tu clave (por ejemplo los PUT/POST que modifican cuentas ajenas).
-//
-// Los ids de atleta son i + digitos. Los de actividad pueden venir con o sin la i.
-const RUTAS_PERMITIDAS = [
-  // --- Atletas ---
-  /^\/athletes$/,
-  /^\/athlete\/i\d+$/,
-  /^\/athlete\/i\d+\/profile$/,
-  /^\/athlete\/i\d+\/sport-settings$/,
-  /^\/athlete\/i\d+\/athlete-summary$/,
-  /^\/athlete\/i\d+\/connections$/,
+const OPERATIONS = {
+  athletes: { path: () => '/athletes', query: [] },
+  athlete: { path: ({ athleteId }) => `/athlete/${athleteId}`, query: [], athlete: true },
+  sport_settings: { path: ({ athleteId }) => `/athlete/${athleteId}/sport-settings`, query: [], athlete: true },
+  power_curves: {
+    path: ({ athleteId }) => `/athlete/${athleteId}/power-curves`,
+    query: ['curves', 'type', 'subMaxEfforts', 'fatigue'],
+    athlete: true,
+  },
+  activities: {
+    path: ({ athleteId }) => `/athlete/${athleteId}/activities`,
+    query: ['oldest', 'newest', 'limit'],
+    athlete: true,
+  },
+  activity_streams: {
+    path: ({ activityId }) => `/activity/${activityId}/streams`,
+    query: ['types'],
+    athlete: true,
+    activity: true,
+  },
+  activity_intervals: {
+    path: ({ activityId }) => `/activity/${activityId}/intervals`,
+    query: [],
+    athlete: true,
+    activity: true,
+  },
+  planned_events: {
+    path: ({ athleteId }) => `/athlete/${athleteId}/events`,
+    query: ['oldest', 'newest', 'category'],
+    athlete: true,
+  },
+};
 
-  // --- Curvas y modelos del atleta ---
-  /^\/athlete\/i\d+\/power-curves$/,
-  /^\/athlete\/i\d+\/hr-curves$/,
-  /^\/athlete\/i\d+\/pace-curves$/,
-  /^\/athlete\/i\d+\/power-hr-curve$/,
-  /^\/athlete\/i\d+\/activity-power-curves$/,
-  /^\/athlete\/i\d+\/activity-hr-curves$/,
-  /^\/athlete\/i\d+\/mmp-model$/,
-
-  // --- Listados de actividades ---
-  /^\/athlete\/i\d+\/activities$/,
-  /^\/athlete\/i\d+\/activities-around$/,
-  /^\/athlete\/i\d+\/activities\/search$/,
-  /^\/athlete\/i\d+\/activities\/interval-search$/,
-  /^\/athlete\/i\d+\/activity-tags$/,
-
-  // --- Bienestar y calendario ---
-  /^\/athlete\/i\d+\/wellness$/,
-  /^\/athlete\/i\d+\/wellness\/\d{4}-\d{2}-\d{2}$/,
-  /^\/athlete\/i\d+\/events$/,
-  /^\/athlete\/i\d+\/event-tags$/,
-  /^\/athlete\/i\d+\/fitness-model-events$/,
-
-  // --- Una actividad concreta ---
-  /^\/activity\/i?\d+$/,
-  /^\/activity\/i?\d+\/streams$/,
-  /^\/activity\/i?\d+\/intervals$/,
-  /^\/activity\/i?\d+\/power-curve$/,
-  /^\/activity\/i?\d+\/power-curves$/,
-  /^\/activity\/i?\d+\/pace-curve$/,
-  /^\/activity\/i?\d+\/hr-curve$/,
-  /^\/activity\/i?\d+\/power-histogram$/,
-  /^\/activity\/i?\d+\/hr-histogram$/,
-  /^\/activity\/i?\d+\/pace-histogram$/,
-  /^\/activity\/i?\d+\/gap-histogram$/,
-  /^\/activity\/i?\d+\/power-vs-hr$/,
-  /^\/activity\/i?\d+\/time-at-hr$/,
-  /^\/activity\/i?\d+\/hr-load-model$/,
-  /^\/activity\/i?\d+\/power-spike-model$/,
-  /^\/activity\/i?\d+\/best-efforts$/,
-  /^\/activity\/i?\d+\/interval-stats$/,
-  /^\/activity\/i?\d+\/weather-summary$/,
-  /^\/activity\/i?\d+\/segments$/,
-  /^\/activity\/i?\d+\/map$/
-];
-
-const PARAMS_PERMITIDOS = new Set([
-  // rangos y limites
-  "oldest", "newest", "limit", "fields", "start", "end", "now",
-  // curvas
-  "curves", "type", "includeRanks", "pmType", "secs", "distances", "gap",
-  "subMaxEfforts", "fatigue",
-  // streams
-  "types", "includeDefaults",
-  // histogramas
-  "bucketSize",
-  // busquedas
-  "q", "tags", "route_id", "activity_id",
-  "minSecs", "maxSecs", "minIntensity", "maxIntensity", "minReps", "maxReps",
-  // eventos
-  "category", "resolve", "calendar_id",
-  // actividad
-  "intervals", "stream", "duration", "distance", "count", "minValue",
-  "excludeIntervals", "startIndex", "endIndex", "start_index", "end_index",
-  // mapa
-  "bounds", "boundsOnly", "weather", "descr_config"
+const SENSITIVE_FIELDS = new Set([
+  'icu_api_key', 'email', 'icu_friend_invite_token', 'has_password',
+  'strava_id', 'strava_authorized', 'concept2_user_id', 'coros_user_id',
+  'huawei_user_id', 'suunto_user_id', 'wahoo_user_id', 'zepp_user_id',
+  'zwift_user_id', 'google_scope', 'dropbox_scope', 'oura_scope',
+  'polar_scope', 'whoop_scope', 'push_notifications', 'has_push_subscriptions',
+  'sponsored_by_chat_id', 'menstrual_phase', 'menstrual_cycle_length',
 ]);
 
-// Campos que jamas deben llegar al navegador.
-const CAMPOS_SENSIBLES = new Set([
-  "icu_api_key", "email", "icu_friend_invite_token", "has_password",
-  "strava_id", "strava_authorized", "concept2_user_id", "coros_user_id",
-  "huawei_user_id", "suunto_user_id", "wahoo_user_id", "zepp_user_id",
-  "zwift_user_id", "google_scope", "dropbox_scope", "oura_scope",
-  "polar_scope", "suunto_scope", "whoop_scope", "push_notifications",
-  "has_push_subscriptions", "sponsored_by_chat_id"
-]);
-
-function limpiar(dato) {
-  if (Array.isArray(dato)) {
-    // Los streams son arrays enormes de numeros: no hay nada que limpiar dentro
-    // y recorrerlos elemento a elemento seria tirar tiempo.
-    if (dato.length && typeof dato[0] !== "object") return dato;
-    return dato.map(limpiar);
-  }
-  if (dato && typeof dato === "object") {
-    const salida = {};
-    for (const clave of Object.keys(dato)) {
-      if (CAMPOS_SENSIBLES.has(clave)) continue;
-      salida[clave] = limpiar(dato[clave]);
-    }
-    return salida;
-  }
-  return dato;
+export function sanitize(value) {
+  if (Array.isArray(value)) return value.map(sanitize);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !SENSITIVE_FIELDS.has(key))
+      .map(([key, nested]) => [key, sanitize(nested)]),
+  );
 }
 
-function respuesta(status, cuerpo) {
-  return {
-    statusCode: status,
+function validateRequest(query) {
+  const operation = OPERATIONS[query.operation];
+  if (!operation) return { error: 'Operación no permitida.' };
+  const allowed = new Set(['operation', 'athleteId', 'activityId', ...operation.query]);
+  if (Object.keys(query).some((key) => !allowed.has(key))) {
+    return { error: 'La solicitud contiene parámetros no permitidos.' };
+  }
+  if (operation.athlete && !ATHLETE_ID.test(query.athleteId ?? '')) {
+    return { error: 'El identificador del ciclista no es válido.' };
+  }
+  if (operation.activity && !ACTIVITY_ID.test(query.activityId ?? '')) {
+    return { error: 'El identificador de la actividad no es válido.' };
+  }
+  for (const dateKey of ['oldest', 'newest']) {
+    if (query[dateKey] && !ISO_DATE.test(query[dateKey])) {
+      return { error: `El parámetro ${dateKey} no es una fecha ISO válida.` };
+    }
+  }
+  if (query.limit && (!/^\d+$/.test(query.limit) || Number(query.limit) > 200)) {
+    return { error: 'El límite solicitado no es válido.' };
+  }
+  if (query.oldest && query.newest) {
+    const days = (Date.parse(query.newest) - Date.parse(query.oldest)) / 86_400_000;
+    if (days < 0 || days > 550) return { error: 'El intervalo temporal no es válido.' };
+  }
+  return { operation };
+}
+
+function upstreamUrl(operation, query) {
+  const params = new URLSearchParams();
+  for (const key of operation.query) {
+    if (query[key] !== undefined) params.set(key, query[key]);
+  }
+  const suffix = params.size ? `?${params}` : '';
+  return `${INTERVALS_API}${operation.path(query)}${suffix}`;
+}
+
+async function defaultFetchIntervals(url) {
+  const key = process.env.INTERVALS_API_KEY;
+  if (!key) throw new Error('Missing server configuration: INTERVALS_API_KEY');
+  const response = await fetch(url, {
     headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store"
+      Authorization: `Basic ${Buffer.from(`API_KEY:${key}`).toString('base64')}`,
+      Accept: 'application/json',
     },
-    body: JSON.stringify(cuerpo)
+    signal: AbortSignal.timeout(12_000),
+  });
+  const contentLength = Number(response.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_RESPONSE_BYTES) return { status: 413, body: '' };
+  const body = await response.text();
+  if (Buffer.byteLength(body, 'utf8') > MAX_RESPONSE_BYTES) return { status: 413, body: '' };
+  return { status: response.status, body };
+}
+
+export function createHandler(dependencies = {}) {
+  const authenticate = dependencies.authenticate ?? authenticateRequest;
+  const authorizedIds = dependencies.listAuthorizedAthleteIds ?? listAuthorizedAthleteIds;
+  const fetchIntervals = dependencies.fetchIntervals ?? defaultFetchIntervals;
+
+  return async function intervalsHandler(event) {
+    if (event.httpMethod !== 'GET') return jsonResponse(405, { error: 'Método no permitido.' });
+    try {
+      if (!bearerToken(event.headers)) {
+        return jsonResponse(401, { error: 'Sesión necesaria o caducada.' });
+      }
+      const user = await authenticate(event);
+      if (!user) return jsonResponse(401, { error: 'Sesión necesaria o caducada.' });
+      const query = event.queryStringParameters ?? {};
+      const validation = validateRequest(query);
+      if (validation.error) return jsonResponse(400, { error: validation.error });
+      const roster = await authorizedIds(user.id);
+      if (validation.operation.athlete && !roster.has(query.athleteId)) {
+        return jsonResponse(403, { error: 'Ciclista no autorizado.' });
+      }
+      const upstream = await fetchIntervals(upstreamUrl(validation.operation, query));
+      if (upstream.status < 200 || upstream.status >= 300) {
+        const status = upstream.status === 413 ? 413 : 502;
+        return jsonResponse(status, { error: 'No se pudo obtener el dato solicitado.' });
+      }
+      let data;
+      try {
+        data = JSON.parse(upstream.body);
+      } catch {
+        return jsonResponse(502, { error: 'La fuente devolvió una respuesta no válida.' });
+      }
+      const safe = sanitize(data);
+      const result = query.operation === 'athletes'
+        ? safe.filter((athlete) => roster.has(athlete.id))
+        : safe;
+      return jsonResponse(200, result);
+    } catch {
+      return jsonResponse(500, { error: 'No se pudo procesar la solicitud.' });
+    }
   };
 }
 
-exports.handler = async function (event) {
-  if (event.httpMethod !== "GET") {
-    return respuesta(405, { error: "Solo se admite GET." });
-  }
-
-  const clave = process.env.INTERVALS_API_KEY;
-  if (!clave) {
-    return respuesta(500, {
-      error: "Falta la variable de entorno INTERVALS_API_KEY en Netlify."
-    });
-  }
-
-  // Codigo de acceso opcional: si defines MFPP_ACCESS_CODE en Netlify, el
-  // dashboard tendra que enviarlo. Sin el, la web queda abierta a cualquiera.
-  const codigoEsperado = process.env.MFPP_ACCESS_CODE;
-  if (codigoEsperado) {
-    const enviado = (event.queryStringParameters || {}).code || "";
-    if (enviado !== codigoEsperado) {
-      return respuesta(401, { error: "Codigo de acceso incorrecto." });
-    }
-  }
-
-  const params = event.queryStringParameters || {};
-  const ruta = params.path || "";
-
-  const [camino, ...resto] = ruta.split("?");
-  if (!RUTAS_PERMITIDAS.some(r => r.test(camino))) {
-    return respuesta(400, { error: "Ruta no permitida: " + camino });
-  }
-
-  // Reconstruye la query admitiendo solo parametros conocidos.
-  const entrantes = new URLSearchParams(resto.join("?"));
-  const salientes = new URLSearchParams();
-  for (const [k, v] of entrantes) {
-    if (PARAMS_PERMITIDOS.has(k)) salientes.append(k, v);
-  }
-  const query = salientes.toString();
-  const url = API + camino + (query ? "?" + query : "");
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        Authorization: "Basic " + Buffer.from("API_KEY:" + clave).toString("base64"),
-        Accept: "application/json"
-      }
-    });
-
-    const texto = await res.text();
-    if (!res.ok) {
-      // El 422 mas habitual es intentar leer en detalle una actividad de Strava.
-      let pista = "";
-      if (res.status === 422 && texto.indexOf("Strava") >= 0) {
-        pista = " Intervals.icu no permite leer por API las actividades importadas"
-              + " de Strava. Solo funciona con las que llegan de Garmin, Wahoo,"
-              + " subida manual o desde el propio dispositivo.";
-      }
-      return respuesta(res.status, {
-        error: "Intervals.icu respondio " + res.status + "." + pista,
-        detalle: texto.slice(0, 300)
-      });
-    }
-
-    let datos;
-    try {
-      datos = JSON.parse(texto);
-    } catch (e) {
-      return respuesta(502, { error: "Intervals.icu no devolvio JSON valido." });
-    }
-
-    return respuesta(200, limpiar(datos));
-  } catch (e) {
-    return respuesta(502, { error: "No se pudo contactar con Intervals.icu: " + e.message });
-  }
-};
+export const handler = createHandler();

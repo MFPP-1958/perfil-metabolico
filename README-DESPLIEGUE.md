@@ -1,153 +1,67 @@
-# Dashboard Metabólico MFPP — despliegue en Netlify
+# Despliegue privado del perfil metabólico
 
-## Cómo está montado
+La aplicación se compila con Vite, se publica desde `dist/` y accede a Intervals.icu
+únicamente a través de funciones autenticadas. El navegador nunca recibe la clave de
+Intervals.icu ni una clave secreta de Supabase.
 
-```
-Perfil metabolico/
-├── public/                   ← lo ÚNICO que se publica en internet
-│   └── index.html                el dashboard
-├── netlify/functions/
-│   └── intervals.js              proxy: guarda la API key en el servidor
-├── netlify.toml                  configuración de Netlify
-├── config.local.js               TU API KEY — nunca se sube (está en .gitignore)
-├── config.local.example.js       plantilla para otro ordenador
-└── .gitignore
-```
+## Variables de entorno
 
-**Por qué `config.local.js` está fuera de `public/`:** Netlify solo publica `public/`.
-Aunque te equivoques y subas el proyecto entero por arrastre, la clave no puede acabar
-en internet, porque no está en la carpeta que se publica.
+Configura estas variables en Netlify:
 
-## Por qué hace falta el proxy
+| Variable | Ámbito | Uso |
+|---|---|---|
+| `INTERVALS_API_KEY` | Funciones | Lectura de Intervals.icu |
+| `SUPABASE_URL` | Funciones | Validación de sesión y autorización |
+| `SUPABASE_SECRET_KEY` | Funciones | Consulta administrativa del vínculo entrenador-ciclista |
+| `VITE_SUPABASE_URL` | Compilación/navegador | Supabase Auth |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Compilación/navegador | Clave pública de Supabase |
 
-`GET /api/v1/athletes` devuelve, para **cada uno de tus 11 atletas**, su `icu_api_key`
-y su `email`. Si el navegador llamase directamente a la API con tu clave, esa web
-publicaría las credenciales de tus diez ciclistas, y con permiso `WRITE` cualquiera
-podría modificar sus cuentas.
+`SUPABASE_SECRET_KEY` e `INTERVALS_API_KEY` no deben comenzar por `VITE_`, aparecer en
+archivos del repositorio ni copiarse al almacenamiento del navegador. El antiguo
+`MFPP_ACCESS_CODE` deja de utilizarse: un código en la URL no sustituye a una sesión.
 
-Con el proxy: el navegador llama a `/.netlify/functions/intervals`, la función añade la
-clave desde una variable de entorno, y antes de responder elimina `icu_api_key`, `email`
-y demás campos sensibles. La clave nunca baja al navegador.
+## Preparación de Supabase
 
-En local no hace falta: se usa `config.local.js` y la llamada va directa
-(intervals.icu permite CORS y refleja el origen, incluido `file://`).
+1. Crea el proyecto y aplica las migraciones versionadas de `supabase/migrations/`.
+2. Configura la URL pública de la aplicación y las URL de redirección de Auth.
+3. Crea la cuenta del entrenador y su fila en `coach_profiles`.
+4. Vincula cada ciclista con el entrenador en `coach_athletes`.
+5. Usa el RLS Tester para comprobar que una segunda cuenta no puede leer esos datos.
 
----
+Las claves actuales de Supabase pueden ser publicables (`sb_publishable_…`) o secretas
+(`sb_secret_…`). La clave secreta solo se usa en las funciones de servidor.
 
-## Pasos para publicarlo
+## Despliegue en Netlify
 
-### 1. Repositorio en GitHub (privado)
+1. Conecta el repositorio privado.
+2. Añade las variables anteriores en la configuración del sitio.
+3. Ejecuta un despliegue. `netlify.toml` usa `npm run build`, publica `dist/` y empaqueta
+   las funciones con esbuild.
+4. Comprueba inicio y cierre de sesión, aislamiento de ciclistas y cabeceras de seguridad.
 
-```bash
-cd "/Users/manuelfrancisperezperez/Desktop/Perfil metabolico"
-git init
-git add .
-git commit -m "Dashboard metabólico con proxy para Intervals.icu"
-```
-
-Comprueba **antes de subir** que la clave no va incluida:
+## Desarrollo local
 
 ```bash
-git ls-files | grep config.local.js
+npm install
+npm run dev
 ```
 
-No debe devolver nada. Si aparece `config.local.js`, para y avísame.
-
-Crea el repositorio en GitHub como **privado** y súbelo:
+Para ejecutar funciones y frontend juntos utiliza Netlify CLI y un archivo de variables
+local no versionado. Las pruebas no contactan con Supabase ni con Intervals.icu.
 
 ```bash
-git remote add origin https://github.com/TU_USUARIO/perfil-metabolico.git
-git branch -M main
-git push -u origin main
+npx netlify dev
+npm run test:run
 ```
 
-### 2. Conectar Netlify
+## Contrato del gateway de Intervals.icu
 
-1. Entra en https://app.netlify.com y regístrate con GitHub.
-2. **Add new site → Import an existing project → GitHub**.
-3. Autoriza Netlify y elige el repositorio `perfil-metabolico`.
-4. En la pantalla de configuración **no toques nada**: `netlify.toml` ya indica que
-   se publica `public/` y que las funciones están en `netlify/functions`.
-5. **Deploy site**.
+`/.netlify/functions/intervals` admite `GET`, exige `Authorization: Bearer <token>` y
+acepta solo operaciones con nombre: `athletes`, `athlete`, `sport_settings`,
+`power_curves`, `activities`, `activity_streams`, `activity_intervals` y
+`planned_events`. La función construye la ruta externa y verifica que el entrenador
+tenga acceso al ciclista antes de hacer la petición.
 
-Te dará una URL tipo `https://algo-aleatorio.netlify.app`. En **Site configuration →
-Change site name** puedes ponerle algo como `mfpp-metabolico`.
-
-### 3. La API key como variable de entorno
-
-Esto es lo que hace que funcione sin publicar la clave.
-
-1. **Site configuration → Environment variables → Add a variable**.
-2. Key: `INTERVALS_API_KEY`
-   Value: tu clave de intervals.icu (Settings → Developer).
-3. Guarda y ve a **Deploys → Trigger deploy → Deploy site** para que la coja.
-
-### 4. Proteger el acceso (recomendado)
-
-La web es pública: cualquiera con la URL vería los datos de tus ciclistas —menores
-incluidos—. Añade una segunda variable de entorno:
-
-- Key: `MFPP_ACCESS_CODE`
-- Value: la contraseña que quieras
-
-Con eso, la función rechaza cualquier consulta que no traiga el código. En el dashboard
-publicado se introduce una sola vez en el campo **"Código de acceso"** de la pestaña
-Intervals.icu, y queda guardado en ese navegador.
-
-No es seguridad fuerte (el código viaja en la URL de la llamada), pero evita que
-cualquiera que dé con la dirección vea los datos. Si necesitas algo serio,
-Netlify tiene autenticación por contraseña real en sus planes de pago.
-
----
-
-## El día a día
-
-A partir de aquí, cada cambio se publica solo:
-
-```bash
-git add .
-git commit -m "lo que hayas cambiado"
-git push
-```
-
-Netlify detecta el push y despliega en menos de un minuto. Recarga la web y ya está.
-
-### Probar en local antes de subir
-
-```bash
-cd "/Users/manuelfrancisperezperez/Desktop/Perfil metabolico"
-python3 -m http.server 8765
-```
-
-y abre http://localhost:8765/public/index.html — usa `config.local.js`, sin tocar Netlify.
-
-Para probar además el proxy tal como funcionará publicado:
-
-```bash
-npm install -g netlify-cli
-netlify dev
-```
-
----
-
-## Si algo falla
-
-| Síntoma | Causa habitual |
-|---|---|
-| "Falta la variable de entorno INTERVALS_API_KEY" | No la creaste, o no relanzaste el deploy después |
-| "Código de acceso incorrecto" | `MFPP_ACCESS_CODE` no coincide con el del campo |
-| "Ruta no permitida" | La función solo admite las rutas de `RUTAS_PERMITIDAS` en `netlify/functions/intervals.js` |
-| La API responde 401 | Clave caducada o regenerada en intervals.icu |
-| La API responde 422 en la curva | Faltan `curves` y `type`, que son obligatorios |
-
-## Rutas de la API verificadas
-
-| Para qué | Ruta |
-|---|---|
-| Listar tus ciclistas | `/athletes` (sin ID; la clave determina el acceso) |
-| Perfil de un ciclista | `/athlete/{id}` — el peso está en `icu_weight`, el FTP en `sportSettings[]` |
-| Curva de potencia | `/athlete/{id}/power-curves?curves=90d&type=Ride` — ambos parámetros obligatorios |
-| Actividades | `/athlete/{id}/activities?oldest=&newest=` |
-| Bienestar | `/athlete/{id}/wellness?oldest=&newest=` |
-
-No existen: `/power_curve`, `/power-curve`, `/power`, `/fitness`, `/athlete/{id}/athletes`.
+Las respuestas eliminan credenciales, correos, identificadores de conexiones y campos
+de bienestar especialmente sensibles. Los errores externos se normalizan y no exponen
+la URL, el cuerpo de respuesta ni secretos.

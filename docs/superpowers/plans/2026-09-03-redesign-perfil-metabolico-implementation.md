@@ -65,16 +65,16 @@
 - Produces: server-owned route handlers for athletes, athlete profile, activities, power curves, streams, intervals and planned events.
 - Consumes: `INTERVALS_API_KEY`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` and bearer access token.
 
-- [ ] Write tests that reject anonymous requests, arbitrary paths, unknown athletes, unsupported query keys and non-GET methods.
-- [ ] Write a test proving that sensitive Athlete and Wellness fields are never returned.
-- [ ] Run the function tests and confirm the current proxy fails the new authentication and athlete-authorization cases.
-- [ ] Replace the client-provided path proxy with named operations and server-side URL construction.
-- [ ] Validate the Supabase bearer token and authorization record before calling Intervals.icu.
-- [ ] Add bounded time ranges, response sizes, timeouts and safe error bodies.
-- [ ] Remove the query-string access code flow and the optional unauthenticated production mode.
-- [ ] Pin security headers and remove the production dependency on inline script execution from the new app entry point.
-- [ ] Run function tests and `npm run lint`.
-- [ ] Commit with `security: authenticate and constrain Intervals access`.
+- [x] Write tests that reject anonymous requests, arbitrary paths, unknown athletes, unsupported query keys and non-GET methods.
+- [x] Write a test proving that sensitive Athlete and Wellness fields are never returned.
+- [x] Run the function tests and confirm the current proxy fails the new authentication and athlete-authorization cases.
+- [x] Replace the client-provided path proxy with named operations and server-side URL construction.
+- [x] Validate the Supabase bearer token and authorization record before calling Intervals.icu.
+- [x] Add bounded time ranges, response sizes, timeouts and safe error bodies.
+- [x] Remove the query-string access code flow and the optional unauthenticated production mode.
+- [x] Pin security headers and remove the production dependency on inline script execution from the new app entry point.
+- [x] Run function tests and `npm run lint`.
+- [x] Commit with `security: authenticate and constrain Intervals access`.
 
 ### Task 3: Preserve the prototype and correct dangerous legacy behavior
 
