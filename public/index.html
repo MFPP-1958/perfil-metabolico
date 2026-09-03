@@ -5,13 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>MFPP Cycling Specialist | Dashboard Metabólico</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    // La configuracion local (con la API key) solo se carga en tu ordenador.
-    // Publicado en Netlify no existe: alli la clave la guarda la funcion del servidor.
-    if(["localhost","127.0.0.1",""].indexOf(location.hostname) >= 0){
-      document.write('<script src="../config.local.js"><\/script>');
-    }
-  </script>
   <style>
     :root{
       --bg:#071521;
@@ -407,8 +400,9 @@
         <div class="panel">
           <h3>Conexión con Intervals.icu</h3>
           <div class="alert">
-            Esta integración puede recibir más elementos de Intervals.icu, pero el dashboard solo mostrará los IDs que indiques como ciclistas entrenados. 
-            La clave API y el filtro de IDs se guardan solo en este navegador mediante almacenamiento local.
+            Prototipo legado en modo de referencia. La conexión directa y el almacenamiento
+            de credenciales están desactivados. La nueva aplicación utiliza una sesión
+            autenticada y una función de servidor.
           </div>
           <div class="formgrid" style="margin-top:16px; grid-template-columns:repeat(2,1fr)">
             <div>
@@ -417,7 +411,7 @@
             </div>
             <div>
               <label>API Key de Intervals.icu</label>
-              <input id="icuApiKey" type="password" placeholder="Pega aquí tu API key"/>
+              <input id="icuApiKey" type="password" disabled placeholder="Desactivada en el prototipo legado"/>
             </div>
             <div>
               <label>Seleccionar ciclista real</label>
@@ -450,7 +444,7 @@
             </div>
             <div>
               <label>Código de acceso (solo web publicada)</label>
-              <input id="icuAccessCode" type="password" placeholder="Solo si configuraste MFPP_ACCESS_CODE" oninput="icuGuardarCodigo()"/>
+              <input id="icuAccessCode" type="password" disabled placeholder="Sustituido por autenticación"/>
             </div>
             <div>
               <label>Días de actividades a consultar</label>
@@ -458,14 +452,14 @@
             </div>
           </div>
           <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
-            <button class="btn primary" onclick="icuSaveConfig()">Guardar conexión</button>
-            <button class="btn" onclick="icuLoadAthleteList()">Cargar solo mis atletas</button>
-            <button class="btn" onclick="icuSaveAllowedAthletes()">Guardar mis 2 ciclistas</button>
-            <button class="btn" onclick="icuTestConnection()">Probar conexión</button>
-            <button class="btn" onclick="icuImportAthlete()">Importar datos básicos</button>
-            <button class="btn primary" onclick="icuLoadFullMetabolicAnalysis()">Cargar análisis metabólico</button>
-            <button class="btn" onclick="icuImportActivities()">Consultar actividades</button>
-            <button class="btn" onclick="icuClearConfig()">Borrar API Key</button>
+            <button class="btn primary" type="button" disabled>Guardar conexión</button>
+            <button class="btn" type="button" disabled>Cargar solo mis atletas</button>
+            <button class="btn" type="button" disabled>Guardar ciclistas</button>
+            <button class="btn" type="button" disabled>Probar conexión</button>
+            <button class="btn" type="button" disabled>Importar datos básicos</button>
+            <button class="btn primary" type="button" disabled>Cargar análisis metabólico</button>
+            <button class="btn" type="button" disabled>Consultar actividades</button>
+            <button class="btn" type="button" disabled>Borrar API Key</button>
           </div>
           <div id="icuStatus" class="analysis-box" style="margin-top:16px">
             <h4>Estado</h4>
@@ -566,7 +560,7 @@
             <input id="vo2base" type="number" step="0.1" value="5"/>
           </div>
           <div style="display:flex;align-items:flex-end">
-            <button class="btn" onclick="aplicarMaderALT1()">Usar FATmax como LT1</button>
+            <button class="btn" type="button" disabled title="El modelo experimental no puede modificar LT1">FATmax experimental: sin aplicar a LT1</button>
           </div>
         </div>
         <div class="indices-grid" id="maderGrid"></div>
@@ -577,7 +571,7 @@
     <section id="prescripcion" class="tabs">
       <div class="grid cols2">
         <div class="panel">
-          <h3>Foco de entrenamiento recomendado</h3>
+          <h3>Borrador orientativo sin aprobar</h3>
           <div id="trainingFocus" class="analysis-box"></div>
         </div>
         <div class="panel">
@@ -724,7 +718,7 @@
     updateRadar(metrics);
     updatePD(d);
     updateSystems(d,c);
-    updatePrescription(d,c);
+    clearLegacyPrescription();
     updateReports(d,c);
     renderHistory();
   }
@@ -1439,6 +1433,12 @@
       systemCard("Durabilidad",c.durability,["Capacidad para mantener rendimiento con fatiga.","Importante en pruebas largas y vueltas por etapas.","Se entrena con volumen progresivo y controlado."],false,!!d.stamina);
   }
 
+  function clearLegacyPrescription(){
+    $("trainingFocus").innerHTML = "<h4>Prescripción desactivada</h4><p>Este prototipo no dispone del contexto, la trazabilidad ni la aprobación profesional necesarias para generar una prescripción.</p>";
+    $("categoryAdvice").innerHTML = "<p>Usa la nueva aplicación para preparar, revisar y aprobar una propuesta.</p>";
+    $("sessions").innerHTML = "";
+  }
+
   function updatePrescription(d,c){
     let focus, avoid, methods, indicators;
     if(c.glycolytic>70 && c.base<50){
@@ -1510,7 +1510,7 @@
   function renderHistory(){
     const list=JSON.parse(localStorage.getItem("mfpp_tests")||"[]");
     if(!list.length){ $("history").innerHTML="<p class='subtitle'>Todavía no hay tests guardados.</p>"; return; }
-    $("history").innerHTML = `<div class="grid">` + list.map((t,i)=>`<div class="analysis-box"><h4>${t.athlete} · ${t.date || "sin fecha"}</h4><p>${t.category} · ${t.modality} · mFTP ${t.ftp} W · VO₂ máx ${t.vo2} · VLa máx ${t.vla}</p><button class="btn" onclick="loadHistory(${i})">Cargar</button> <button class="btn" onclick="deleteHistory(${i})">Eliminar</button></div>`).join("") + `</div>`;
+    $("history").innerHTML = `<div class="grid">` + list.map((t,i)=>`<div class="analysis-box"><h4>${escapeHtml(String(t.athlete || "Atleta"))} · ${escapeHtml(String(t.date || "sin fecha"))}</h4><p>${escapeHtml(String(t.category || ""))} · ${escapeHtml(String(t.modality || ""))} · mFTP ${Number(t.ftp) || "—"} W · VO₂ máx ${Number(t.vo2) || "—"} · VLa máx ${Number(t.vla) || "—"}</p><button class="btn" onclick="loadHistory(${i})">Cargar</button> <button class="btn" onclick="deleteHistory(${i})">Eliminar</button></div>`).join("") + `</div>`;
   }
 
   function loadHistory(i){
@@ -1556,7 +1556,7 @@
   }
 
   function icuSetStatus(title,msg,isError=false){
-    $("icuStatus").innerHTML = `<h4>${title}</h4><p style="${isError?'color:var(--bad);font-weight:800':''}">${msg}</p>`;
+    $("icuStatus").innerHTML = `<h4>${escapeHtml(title)}</h4><p style="${isError?'color:var(--bad);font-weight:800':''}">${escapeHtml(msg)}</p>`;
   }
 
   function icuSaveConfig(){
@@ -2072,13 +2072,13 @@
   function formatDuration(v){
     const n = parseFloat(v);
     if(!Number.isFinite(n)) return "—";
-    if(n > 10000) return Math.floor(n/3600) + " h " + Math.round((n%3600)/60) + " min";
-    if(n > 300) return Math.floor(n/60) + " h " + Math.round(n%60) + " min";
-    return n.toFixed(0) + " min";
+    if(n >= 3600) return Math.floor(n/3600) + " h " + Math.floor((n%3600)/60) + " min";
+    if(n >= 60) return Math.floor(n/60) + " min " + Math.round(n%60) + " s";
+    return Math.round(n) + " s";
   }
 
   function escapeHtml(str){
-    return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+    return String(str ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
   }
 
 
@@ -2384,25 +2384,7 @@
   fields.forEach(f=>{ if($(f)) $(f).addEventListener("input",update); });
   if($("vo2base")) $("vo2base").addEventListener("input",update);
   $("date").value = new Date().toISOString().slice(0,10);
-  icuLoadConfig();
-  if($("icuAccessCode")) $("icuAccessCode").value = localStorage.getItem("mfpp_access_code") || "";
-  // En la web publicada la clave la guarda el servidor: el campo sobra y confunde.
-  if(!esLocal() && $("icuApiKey")){
-    $("icuApiKey").value = "";
-    $("icuApiKey").disabled = true;
-    $("icuApiKey").placeholder = "No hace falta: la clave está en el servidor";
-  }
-  // Si hay config.local.js, sus valores mandan sobre lo guardado en el navegador.
-  (function aplicarConfigLocal(){
-    const cfg = window.MFPP_CONFIG;
-    if(!cfg) return;
-    if(cfg.coachId && $("icuCoachId")) $("icuCoachId").value = cfg.coachId;
-    if(cfg.apiKey && cfg.apiKey !== "PEGA_AQUI_TU_API_KEY" && $("icuApiKey")) $("icuApiKey").value = cfg.apiKey;
-    if(Array.isArray(cfg.atletasPermitidos) && cfg.atletasPermitidos.length && $("icuAllowedAthleteIds")){
-      $("icuAllowedAthleteIds").value = cfg.atletasPermitidos.join(", ");
-    }
-  })();
-  loadDemo();
+  icuSetStatus("Prototipo legado", "La conexión externa está desactivada. Usa la nueva aplicación autenticada.");
 </script>
 </body>
 </html>

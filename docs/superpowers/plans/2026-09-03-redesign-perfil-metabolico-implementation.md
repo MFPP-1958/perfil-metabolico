@@ -87,13 +87,13 @@
 **Interfaces:**
 - Produces: a read-only legacy reference under `legacy/` and a neutral application entry point.
 
-- [ ] Write tests that detect automatic demo loading, unsafe athlete-name HTML insertion and the incorrect seconds-to-hours conversion.
-- [ ] Run the tests and confirm each test fails against the current HTML.
-- [ ] Move the unused historical dashboard into `legacy/` and document that it is not published.
-- [ ] Stop loading the demo automatically, escape all imported/user text and correct duration formatting.
-- [ ] Disable automatic prescriptions and direct FATmax-to-LT1 application in the legacy screen.
-- [ ] Run legacy safety tests and inspect the page at desktop and mobile widths.
-- [ ] Commit with `fix: contain unsafe legacy dashboard behavior`.
+- [x] Write tests that detect automatic demo loading, unsafe athlete-name HTML insertion and the incorrect seconds-to-hours conversion.
+- [x] Run the tests and confirm each test fails against the current HTML.
+- [x] Move the unused historical dashboard into `legacy/` and document that it is not published.
+- [x] Stop loading the demo automatically, escape all imported/user text and correct duration formatting.
+- [x] Disable automatic prescriptions and direct FATmax-to-LT1 application in the legacy screen.
+- [x] Run legacy safety tests and inspect the page at desktop and mobile widths.
+- [x] Commit with `fix: contain unsafe legacy dashboard behavior`.
 
 ---
 

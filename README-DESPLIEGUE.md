@@ -4,6 +4,10 @@ La aplicación se compila con Vite, se publica desde `dist/` y accede a Interval
 únicamente a través de funciones autenticadas. El navegador nunca recibe la clave de
 Intervals.icu ni una clave secreta de Supabase.
 
+El prototipo anterior se conserva como referencia en `legacy/dashboard-v7.html`. Esa
+carpeta no se publica. `public/index.html` también queda fuera de la entrada de producción
+y tiene desactivadas la conexión directa, la carga automática de demo y la prescripción.
+
 ## Variables de entorno
 
 Configura estas variables en Netlify:
