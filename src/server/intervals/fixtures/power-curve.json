@@ -1,0 +1,15 @@
+{
+  "list": [{
+    "id": "90d",
+    "start_date_local": "2026-06-01",
+    "end_date_local": "2026-09-01",
+    "weight": 58.2,
+    "secs": [5, 60, 300, 1200, 3600],
+    "values": [925, 510, 320, 270, 245],
+    "vo2max_5m": 64.8,
+    "powerModels": [
+      { "type": "ECP", "criticalPower": 267, "wPrime": 17200, "pMax": 1040, "ftp": 254 },
+      { "type": "MORTON_3P", "criticalPower": 263, "wPrime": 18100, "pMax": 1085, "ftp": 251 }
+    ]
+  }]
+}

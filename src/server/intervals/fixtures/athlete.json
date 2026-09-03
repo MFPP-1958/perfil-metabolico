@@ -1,0 +1,9 @@
+{
+  "id": "i123",
+  "name": "Ciclista sintética",
+  "icu_weight": 58.2,
+  "sportSettings": [
+    { "types": ["Ride"], "ftp": 255, "w_prime": 16000 },
+    { "types": ["Run"], "ftp": null, "w_prime": null }
+  ]
+}

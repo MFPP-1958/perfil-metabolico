@@ -1,0 +1,8 @@
+{
+  "id": 811,
+  "athlete_id": "i123",
+  "start_date_local": "2026-09-05T09:00:00",
+  "name": "3 x 12 min subumbral",
+  "category": "WORKOUT",
+  "workout_doc": { "steps": [{ "duration": 720, "power": { "start": 88, "end": 92, "units": "%ftp" } }] }
+}

@@ -12,6 +12,7 @@ create table public.athletes (
   created_by uuid not null references public.coach_profiles(id),
   intervals_athlete_id text unique check (intervals_athlete_id ~ '^i[0-9]+$'),
   display_name text not null check (char_length(display_name) between 1 and 120),
+  latest_sync_key text,
   date_of_birth date,
   sex text check (sex is null or sex in ('female', 'male', 'intersex', 'undisclosed')),
   created_at timestamptz not null default now(),

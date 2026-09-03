@@ -1,0 +1,13 @@
+{
+  "id": "i9001",
+  "icu_athlete_id": "i123",
+  "name": "Tempo sintético",
+  "type": "Ride",
+  "start_date": "2026-08-30T08:00:00Z",
+  "moving_time": 5400,
+  "distance": 45210,
+  "trainer": false,
+  "icu_average_watts": 218,
+  "average_heartrate": 151,
+  "average_cadence": 88
+}

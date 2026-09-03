@@ -193,15 +193,16 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - Produces: `IntervalsClient.getAthlete`, `getActivities`, `getPowerCurves`, `getActivityStreams`, `getActivityIntervals`, `getPlannedWorkouts`.
 - Produces: `mapSportSettings`, `mapPowerCurve`, `mapActivity`, `mapPlannedWorkout`.
 
-- [ ] Create anonymized fixtures covering null fields, indoor/outdoor FTP, multiple sports, ECP and Morton models, missing efforts and partial API failure.
-- [ ] Write mapper tests asserting explicit field origins and distinct metric codes.
-- [ ] Run mapper tests and confirm failure.
-- [ ] Implement strict Zod parsing and explicit field mapping; reject unknown response shapes with a safe diagnostic.
-- [ ] Implement authenticated functions with server-side athlete checks, bounded concurrency, timeout and partial-result reporting.
-- [ ] Persist only normalized fields and synchronization metadata.
-- [ ] Add cancellation keys so stale synchronization results cannot replace a newer athlete request.
-- [ ] Run adapter, function and database tests.
-- [ ] Commit with `feat: synchronize typed Intervals athlete data`.
+- [x] Create anonymized fixtures covering null fields, indoor/outdoor FTP, multiple sports, ECP and Morton models, missing efforts and partial API failure.
+- [x] Write mapper tests asserting explicit field origins and distinct metric codes.
+- [x] Write synchronization tests for authorization, partial failure and stale-request cancellation.
+- [x] Run mapper tests and confirm failure.
+- [x] Implement strict Zod parsing and explicit field mapping; reject unknown response shapes with a safe diagnostic.
+- [x] Implement authenticated functions with server-side athlete checks, bounded concurrency, timeout and partial-result reporting.
+- [x] Persist only normalized fields and synchronization metadata.
+- [x] Add cancellation keys so stale synchronization results cannot replace a newer athlete request.
+- [x] Run adapter, function and database tests.
+- [x] Commit with `feat: synchronize typed Intervals athlete data`.
 
 ### Task 8: Build athlete selection, data quality and observation entry
 
