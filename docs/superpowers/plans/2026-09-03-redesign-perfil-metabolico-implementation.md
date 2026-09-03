@@ -353,14 +353,14 @@ unchecked until a container runtime or a disposable Supabase project is provided
 **Interfaces:**
 - Produces: `alignWorkout(planned, completed): SessionAlignment` with warm-up, work, recovery and cooldown blocks.
 
-- [ ] Write tests for exact match, skipped repetition, early stop, extra repetition, mixed targets and title-only fallback.
-- [ ] Run tests and confirm failure.
-- [ ] Implement ordered block alignment using structured workout data first.
-- [ ] Keep title parsing as a manual fallback with an explicit low-confidence label.
-- [ ] Calculate block-specific duration, power, variability, HR, cadence, RPE and compliance.
-- [ ] Render partial failures and permit coach notes.
-- [ ] Run unit, component and accessibility tests.
-- [ ] Commit with `feat: compare structured workouts with completed sessions`.
+- [x] Write tests for exact match, skipped repetition, early stop, extra repetition, mixed targets and title-only fallback.
+- [x] Run tests and confirm failure.
+- [x] Implement ordered block alignment using structured workout data first.
+- [x] Keep title parsing as a manual fallback with an explicit low-confidence label.
+- [x] Calculate block-specific duration, power, variability, HR, cadence, RPE and compliance.
+- [x] Render partial failures and permit coach notes.
+- [x] Run unit, component and accessibility tests.
+- [x] Commit with `feat: compare structured workouts with completed sessions`.
 
 ### Task 15: Create explainable, coach-approved prescriptions
 
