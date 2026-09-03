@@ -6,3 +6,4 @@ config.local.js
 *_BACKUP_*.html
 .DS_Store
 node_modules/
+.worktrees/
