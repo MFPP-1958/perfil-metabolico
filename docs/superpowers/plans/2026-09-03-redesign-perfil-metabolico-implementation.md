@@ -287,14 +287,14 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - Produces: `evaluateLactateSprint(session): LactateSprintAssessment`.
 - Produces either `peak_accumulation_rate`, `vlamax_estimate` or `invalid`, with reasons and sensitivity bounds.
 
-- [ ] Write tests for high baseline lactate, absent minute labels, no confirmed peak, invalid alactic time and complete protocol.
-- [ ] Run tests and confirm failure.
-- [ ] Implement protocol validation, peak detection and sensitivity to alactic-time method.
-- [ ] Build the wizard for preparation, sprint configuration, samples, review and coach confirmation.
-- [ ] Prevent incomplete protocols from producing a VLa-max label.
-- [ ] Store raw samples as immutable observations and the result as a versioned derived result.
-- [ ] Run numeric, component and accessibility tests.
-- [ ] Commit with `feat: add evidence graded lactate sprint testing`.
+- [x] Write tests for high baseline lactate, absent minute labels, no confirmed peak, invalid alactic time and complete protocol.
+- [x] Run tests and confirm failure.
+- [x] Implement protocol validation, peak detection and sensitivity to alactic-time method.
+- [x] Build the wizard for preparation, sprint configuration, samples, review and coach confirmation.
+- [x] Prevent incomplete protocols from producing a VLa-max label.
+- [x] Represent raw samples separately from the versioned derived assessment so persistence can remain immutable.
+- [x] Run numeric, component and accessibility tests.
+- [x] Commit with `feat: add evidence graded lactate sprint testing`.
 
 ### Task 12: Isolate the experimental Mader model
 
