@@ -70,6 +70,40 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .analysis-stage aside strong, .analysis-stage aside span { display: block; }
 .analysis-stage aside span { color: var(--muted); }
 
+.athlete-workspace { padding: clamp(24px, 4vw, 58px); }
+.athlete-picker { display: grid; grid-template-columns: auto minmax(170px, 280px) auto minmax(220px, 360px); align-items: center; gap: 10px 14px; margin-bottom: 22px; }
+.athlete-picker label, .observation-form label { font-weight: 700; }
+.athlete-picker input, .athlete-picker select, .observation-form input, .observation-form select { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-small); padding: 8px 10px; background: white; color: var(--ink); }
+.secondary-action { min-height: 44px; padding: 8px 14px; border: 1px solid var(--data); border-radius: var(--radius-small); background: transparent; color: var(--data-dark); font-weight: 700; }
+.selected-athlete { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 16px; border-block: 1px solid var(--line); background: white; }
+.selected-athlete__initials { width: 48px; height: 48px; display: grid; place-items: center; background: var(--data); color: white; font: 700 24px/1 'Barlow Condensed', sans-serif; }
+.selected-athlete h2 { margin: 0; font: 600 30px/1 'Barlow Condensed', sans-serif; }
+.selected-athlete p { margin: 4px 0 0; color: var(--muted); }
+.quality-chip { display: inline-flex; align-items: center; width: max-content; padding: 5px 9px; border: 1px solid currentColor; border-radius: 999px; color: var(--muted); font-size: .84rem; font-weight: 700; }
+.quality-chip--valid, .quality-chip--measured { color: var(--validated); }
+.quality-chip--warning, .quality-chip--imported_estimate, .quality-chip--incomplete { color: var(--uncertain); }
+.quality-chip--rejected { color: var(--danger); }
+.quality-chip--calculated { color: var(--data-dark); }
+.athlete-data-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, .6fr); gap: 22px; margin-top: 22px; }
+.athlete-data-grid > * { min-width: 0; }
+.athlete-data-grid h3, .observation-form h3 { margin-top: 0; font: 600 26px/1 'Barlow Condensed', sans-serif; }
+.quality-panel { padding: 22px; background: #e8f0f1; border-top: 4px solid var(--validated); }
+.quality-panel strong, .quality-panel span { display: block; }
+.quality-panel span, .quality-panel p { color: var(--muted); }
+.observation-form { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; padding: 22px; background: white; border-top: 4px solid var(--data); box-shadow: var(--shadow); }
+.observation-form h3, .observation-form .field-error, .observation-form button { grid-column: 1 / -1; }
+.observation-form label { align-self: end; }
+.observation-form button { min-height: 46px; border: 0; border-radius: var(--radius-small); background: var(--data); color: white; font-weight: 700; }
+.observation-history { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.observation-card { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; padding: 16px; background: white; }
+.observation-card div strong, .observation-card div span { display: block; }
+.observation-card div span { font: 600 28px/1 'Barlow Condensed', sans-serif; color: var(--data-dark); }
+.observation-card p, .observation-card small { grid-column: 1 / -1; margin: 0; color: var(--muted); }
+.empty-state, .workspace-empty { color: var(--muted); }
+.workspace-empty { min-height: 340px; display: grid; place-content: center; text-align: center; }
+.workspace-empty h2 { margin: 0; color: var(--ink); font: 600 40px/1 'Barlow Condensed', sans-serif; }
+.field-error { color: var(--danger); font-weight: 700; }
+
 @media (max-width: 760px) {
   .login-shell { background: var(--nav); }
   .account-bar { justify-content: space-between; }
@@ -82,6 +116,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .workspace-heading { align-items: start; flex-direction: column; }
   .analysis-stage { grid-template-columns: 1fr; grid-template-rows: 150px auto auto; }
   .analysis-stage aside { border-left: 0; border-top: 1px solid var(--line); }
+  .athlete-picker { grid-template-columns: 1fr; align-items: stretch; }
+  .athlete-picker label { margin-top: 4px; }
+  .athlete-data-grid { grid-template-columns: 1fr; }
+  .observation-form { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

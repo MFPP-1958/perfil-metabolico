@@ -7,7 +7,7 @@ export const observationSchema = z.object({
   id: z.uuid(),
   athleteId: z.uuid(),
   metricCode: z.enum(metricCodes),
-  value: z.number().finite().nonnegative(),
+  value: z.number().finite(),
   unit: z.string().min(1),
   observedAt: z.iso.datetime(),
   origin: z.enum(['manual', 'intervals_icu', 'laboratory', 'field_test', 'device', 'calculated']),

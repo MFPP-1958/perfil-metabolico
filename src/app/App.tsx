@@ -1,5 +1,6 @@
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
 import { AuthGate } from '../auth/AuthGate';
+import { AthleteWorkspace } from '../features/athletes/AthleteWorkspace';
 import { appRoutes, type AppRoute } from './routes';
 
 function EmptyWorkspace({ route }: { route: AppRoute }) {
@@ -53,7 +54,7 @@ function Application() {
       </aside>
       <main className="main-area">
         <Routes>
-          {appRoutes.map((route) => <Route key={route.path} path={route.path} element={<EmptyWorkspace route={route} />} />)}
+          {appRoutes.map((route) => <Route key={route.path} path={route.path} element={route.path === '/' ? <AthleteWorkspace /> : <EmptyWorkspace route={route} />} />)}
         </Routes>
       </main>
     </div>

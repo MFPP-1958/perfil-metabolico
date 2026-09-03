@@ -219,14 +219,14 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - Consumes: domain observation schemas and authenticated athlete API.
 - Produces: athlete-scoped context and immutable observation creation flow.
 
-- [ ] Write tests for empty startup, athlete switching, stale request cancellation, provenance display and validation errors.
-- [ ] Run tests and confirm failure.
-- [ ] Implement searchable athlete selection and a persistent identity/period header.
-- [ ] Implement quality chips using text and icons as well as color.
-- [ ] Implement protocol-aware observation forms and immutable history.
-- [ ] Add a separate, unmistakable demo mode using synthetic data.
-- [ ] Run tests, axe checks and responsive browser verification.
-- [ ] Commit with `feat: add athlete workspace and traceable observations`.
+- [x] Write tests for empty startup, athlete switching, stale request cancellation, provenance display and validation errors.
+- [x] Run tests and confirm failure.
+- [x] Implement searchable athlete selection and a persistent identity/period header.
+- [x] Implement quality chips using text and shape as well as color.
+- [x] Implement protocol-aware observation forms and immutable history.
+- [x] Add a separate, unmistakable demo mode using synthetic data.
+- [x] Run tests, axe checks and responsive browser verification.
+- [x] Commit with `feat: add athlete workspace and traceable observations`.
 
 ---
 

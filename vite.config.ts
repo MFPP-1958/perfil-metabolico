@@ -9,7 +9,9 @@ export default defineConfig({
           && warning.id?.includes('/react-router/');
         const isReactRouterSourceMap = warning.code === 'SOURCEMAP_ERROR'
           && warning.id?.includes('/react-router/');
-        if (isReactRouterDirective || isReactRouterSourceMap) return;
+        const isZodAnnotation = warning.code === 'INVALID_ANNOTATION'
+          && warning.id?.includes('/zod/');
+        if (isReactRouterDirective || isReactRouterSourceMap || isZodAnnotation) return;
         warn(warning);
       },
     },
