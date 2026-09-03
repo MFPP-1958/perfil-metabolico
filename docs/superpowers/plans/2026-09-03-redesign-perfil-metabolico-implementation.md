@@ -375,14 +375,14 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - Produces: `generatePrescriptionDraft(context): PrescriptionDraft`.
 - Produces: approval transition `draft -> approved` with coach, timestamp and immutable evidence snapshot.
 
-- [ ] Write tests proving missing goals, phase or availability block generation and that no draft is approved automatically.
-- [ ] Write tests for minor age bands preventing permanent phenotype labels and automatic specialization.
-- [ ] Run tests and confirm failure.
-- [ ] Implement a compact rule catalog with cited rationale, dosage, progression, cancellation and evaluation criteria.
-- [ ] Build an editor that exposes evidence, missing context and coach overrides.
-- [ ] Persist draft and approval as separate audited actions.
-- [ ] Run unit, component, RLS and accessibility tests.
-- [ ] Commit with `feat: add explainable coach approved prescriptions`.
+- [x] Write tests proving missing goals, phase or availability block generation and that no draft is approved automatically.
+- [x] Write tests for minor age bands preventing permanent phenotype labels and automatic specialization.
+- [x] Run tests and confirm failure.
+- [x] Implement a compact rule catalog with cited rationale, dosage, progression, cancellation and evaluation criteria.
+- [x] Build an editor that exposes evidence, missing context and coach overrides.
+- [x] Persist draft and approval as separate audited actions.
+- [x] Run unit, component, RLS and accessibility tests.
+- [x] Commit with `feat: add explainable coach approved prescriptions`.
 
 ### Task 16: Generate audience-specific reports
 

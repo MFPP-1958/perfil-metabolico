@@ -148,6 +148,13 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .evolution-view .confidence-note { padding: 14px; border-left: 4px solid var(--data); background: #e8f0f1; }
 .coach-notes { display: grid; gap: 8px; margin-top: 22px; font-weight: 700; }
 .coach-notes textarea { width: 100%; border: 1px solid var(--line); border-radius: var(--radius-small); padding: 12px; resize: vertical; font: inherit; }
+.prescription-context { display: flex; flex-wrap: wrap; margin: 28px 0; border-block: 1px solid var(--line); background: white; }
+.prescription-context p { min-width: 180px; flex: 1; margin: 0; padding: 16px; }
+.prescription-context strong { display: block; color: var(--muted); }
+.prescription-card { padding: 22px; border-left: 5px solid var(--data); background: white; box-shadow: var(--shadow); }
+.prescription-card h2 { margin-top: 0; font: 600 30px/1 'Barlow Condensed', sans-serif; }
+.prescription-card small { color: var(--muted); }
+.prescription-editor > .primary-action { margin-top: 16px; }
 
 @media (max-width: 760px) {
   .login-shell { background: var(--nav); }
