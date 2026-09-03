@@ -11,6 +11,7 @@ export interface AthleteDetail extends AthleteSummary { observations: Observatio
 export interface AthleteApi {
   list(): Promise<AthleteSummary[]>;
   load(id: string, signal?: AbortSignal): Promise<AthleteDetail>;
+  createObservation?(observation: Observation): Promise<Observation>;
 }
 
 const defaultApi: AthleteApi = {
@@ -18,16 +19,22 @@ const defaultApi: AthleteApi = {
     const token = await getAccessToken();
     const response = await fetch('/.netlify/functions/athletes', { headers: { Authorization: `Bearer ${token}` } });
     if (!response.ok) throw new Error('No se pudo cargar la lista de ciclistas.');
-    const athletes = await response.json() as { id: string; name: string }[];
-    return athletes.map((athlete) => ({ id: athlete.id, intervalsId: athlete.id, name: athlete.name }));
+    return response.json() as Promise<AthleteSummary[]>;
   },
   async load(id, signal) {
     const token = await getAccessToken();
     const query = new URLSearchParams({ athleteId: id });
     const response = await fetch(`/.netlify/functions/athletes?${query}`, { headers: { Authorization: `Bearer ${token}` }, signal });
     if (!response.ok) throw new Error('No se pudo cargar el ciclista.');
-    const athlete = await response.json() as { id: string; name: string };
-    return { id: athlete.id, intervalsId: athlete.id, name: athlete.name, observations: [] };
+    return response.json() as Promise<AthleteDetail>;
+  },
+  async createObservation(observation) {
+    const token = await getAccessToken();
+    const response = await fetch('/.netlify/functions/observations', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(observation),
+    });
+    if (!response.ok) throw new Error('No se pudo guardar la observación.');
+    return response.json() as Promise<Observation>;
   },
 };
 
@@ -67,6 +74,15 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
     setError('');
   }
 
+  function addObservation(observation: Observation) {
+    setAthlete((current) => current ? { ...current, observations: [observation, ...current.observations] } : current);
+    if (!api.createObservation || athlete?.intervalsId === 'demo') return;
+    void api.createObservation(observation).catch(() => {
+      setAthlete((current) => current ? { ...current, observations: current.observations.filter((item) => item.id !== observation.id) } : current);
+      setError('La observación no se guardó y se ha retirado del historial.');
+    });
+  }
+
   return (
     <section className="athlete-workspace" aria-labelledby="athlete-workspace-title">
       <header className="workspace-heading">
@@ -81,7 +97,7 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
           <div className="athlete-data-grid">
             <div><h3>Historial inmutable</h3><ObservationHistory observations={athlete.observations} /></div>
             <DataQualityPanel observations={athlete.observations} />
-            <ObservationForm athleteId={athlete.id} onAdd={(observation) => setAthlete((current) => current ? { ...current, observations: [observation, ...current.observations] } : current)} />
+            <ObservationForm athleteId={athlete.id} onAdd={addObservation} />
           </div>
         </>
       ) : <div className="workspace-empty"><h2>Selecciona un ciclista</h2><p>El análisis permanece vacío para evitar atribuir datos a la persona equivocada.</p></div>}

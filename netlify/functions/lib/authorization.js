@@ -21,13 +21,14 @@ export async function authenticateRequest(event, fetchImpl = fetch) {
   return typeof user?.id === 'string' ? { id: user.id } : null;
 }
 
-export async function listAuthorizedAthleteIds(userId, fetchImpl = fetch) {
+export async function listAuthorizedAthleteIds(userId, fetchImpl = fetch, requiredRole) {
   const url = requiredEnvironment('SUPABASE_URL');
   const secretKey = requiredEnvironment('SUPABASE_SECRET_KEY');
   const query = new URLSearchParams({
     select: 'athletes!inner(intervals_athlete_id)',
     coach_id: `eq.${userId}`,
   });
+  if (requiredRole) query.set('role', `eq.${requiredRole}`);
   const response = await fetchImpl(`${url}/rest/v1/coach_athletes?${query}`, {
     headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` },
     signal: AbortSignal.timeout(8_000),

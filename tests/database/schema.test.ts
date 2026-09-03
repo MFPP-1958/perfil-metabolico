@@ -43,4 +43,26 @@ describe('database schema', () => {
     expect(core).toContain('activities_athlete_start_idx');
     expect(core).toContain('coach_athletes_athlete_idx');
   });
+
+  it('minimizes age data and keeps observations immutable', () => {
+    const core = sql('01_core.sql');
+    const rls = sql('02_rls.sql');
+    expect(core).toContain('age_band text');
+    expect(core).not.toContain('date_of_birth');
+    expect(rls).not.toContain('observations_delete_owned');
+  });
+
+  it('prevents mutation of approved or acknowledged evidence', () => {
+    const core = sql('01_core.sql');
+    expect(core).toContain('prevent_approved_prescription_mutation');
+    expect(core).toContain('prevent_acknowledged_result_mutation');
+    expect(core).toContain('new.evidence_snapshot is distinct from old.evidence_snapshot');
+  });
+
+  it('keeps viewer relationships read-only', () => {
+    const rls = sql('02_rls.sql');
+    expect(rls).toContain('coach_can_edit_athlete');
+    expect(rls).toContain("ca.role = 'coach'");
+    expect(rls).toContain('coach_can_edit_athlete(athlete_id)');
+  });
 });

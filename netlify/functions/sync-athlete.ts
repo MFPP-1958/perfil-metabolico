@@ -19,12 +19,11 @@ interface LoadedAthleteData {
 interface SyncDependencies {
   authenticate(event: SyncEvent): Promise<{ id: string } | null>;
   authorize(coachId: string, athleteId: string): Promise<boolean>;
+  beginSync(athleteId: string, syncKey: string): Promise<void>;
   isLatestSync(athleteId: string, syncKey: string): Promise<boolean>;
   load(athleteId: string): Promise<LoadedAthleteData>;
   persist(coachId: string, athleteId: string, syncKey: string, data: LoadedAthleteData): Promise<void>;
 }
-
-const latestKeys = new Map<string, string>();
 
 async function fetchIntervals(path: string) {
   const key = process.env.INTERVALS_API_KEY;
@@ -35,6 +34,31 @@ async function fetchIntervals(path: string) {
   });
   if (!response.ok) throw new Error(`Intervals operation failed: ${response.status}`);
   return response.json() as Promise<unknown>;
+}
+
+function supabaseServiceConfiguration() {
+  const url = process.env.SUPABASE_URL?.replace(/\/$/, '');
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) throw new Error('Missing Supabase configuration');
+  return { url, key, headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } };
+}
+
+async function beginSyncDefault(athleteId: string, syncKey: string) {
+  const { url, headers } = supabaseServiceConfiguration();
+  const response = await fetch(`${url}/rest/v1/athletes?intervals_athlete_id=eq.${athleteId}`, {
+    method: 'PATCH', headers, body: JSON.stringify({ latest_sync_key: syncKey, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8_000),
+  });
+  if (!response.ok) throw new Error('Unable to start synchronized athlete request');
+}
+
+async function isLatestSyncDefault(athleteId: string, syncKey: string) {
+  const { url, headers } = supabaseServiceConfiguration();
+  const response = await fetch(`${url}/rest/v1/athletes?select=latest_sync_key&intervals_athlete_id=eq.${athleteId}&limit=1`, {
+    headers, signal: AbortSignal.timeout(8_000),
+  });
+  if (!response.ok) throw new Error('Unable to check synchronized athlete request');
+  const rows = await response.json() as { latest_sync_key?: string }[];
+  return rows[0]?.latest_sync_key === syncKey;
 }
 
 async function loadDefault(athleteId: string): Promise<LoadedAthleteData> {
@@ -71,7 +95,7 @@ async function persistDefault(coachId: string, athleteId: string, syncKey: strin
       apikey: key,
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates,return=representation',
+      Prefer: 'resolution=ignore-duplicates,return=representation',
     },
     body: JSON.stringify({
       created_by: coachId,
@@ -83,7 +107,14 @@ async function persistDefault(coachId: string, athleteId: string, syncKey: strin
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error('Unable to persist synchronized athlete');
-  const rows = await response.json() as { id: string }[];
+  let rows = await response.json() as { id: string }[];
+  if (!rows[0]?.id) {
+    const lookup = await fetch(`${url}/rest/v1/athletes?select=id&intervals_athlete_id=eq.${athleteId}&limit=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8_000),
+    });
+    if (!lookup.ok) throw new Error('Unable to resolve synchronized athlete');
+    rows = await lookup.json() as { id: string }[];
+  }
   if (!rows[0]?.id) throw new Error('Synchronized athlete did not return an id');
   const databaseAthleteId = rows[0].id;
   const headers = {
@@ -182,8 +213,9 @@ async function persistDefault(coachId: string, athleteId: string, syncKey: strin
 
 const defaults: SyncDependencies = {
   authenticate: authenticateRequest,
-  authorize: async (coachId, athleteId) => (await listAuthorizedAthleteIds(coachId)).has(athleteId),
-  isLatestSync: async (athleteId, syncKey) => latestKeys.get(athleteId) === syncKey,
+  authorize: async (coachId, athleteId) => (await listAuthorizedAthleteIds(coachId, fetch, 'coach')).has(athleteId),
+  beginSync: beginSyncDefault,
+  isLatestSync: isLatestSyncDefault,
   load: loadDefault,
   persist: persistDefault,
 };
@@ -199,7 +231,7 @@ export function createSyncHandler(dependencies: Partial<SyncDependencies> = {}) 
     const user = await deps.authenticate(event);
     if (!user) return jsonResponse(401, { error: 'Sesión necesaria o caducada.' });
     if (!(await deps.authorize(user.id, query.athleteId))) return jsonResponse(403, { error: 'Ciclista no autorizado.' });
-    latestKeys.set(query.athleteId, query.syncKey);
+    await deps.beginSync(query.athleteId, query.syncKey);
     const data = await deps.load(query.athleteId);
     if (!(await deps.isLatestSync(query.athleteId, query.syncKey))) {
       return jsonResponse(409, { error: 'Sincronización sustituida por una solicitud más reciente.' });

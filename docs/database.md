@@ -18,8 +18,9 @@ diverjan.
 
 ## Modelo de autorización
 
-`coach_athletes` define el acceso. La función `coach_can_access_athlete` comprueba esa
-relación y las políticas RLS la aplican a toda fila clínica. Las políticas se limitan al
+`coach_athletes` define el acceso. `coach_can_access_athlete` permite lectura a relaciones
+`coach` y `viewer`; `coach_can_edit_athlete` limita las escrituras al rol `coach`. Solo el
+propietario del atleta puede cambiar roles, por lo que un visor no puede ascenderse. Las políticas se limitan al
 rol `authenticated` y usan `(select auth.uid())` para evitar recalcular la identidad por
 fila. `anon` no conserva privilegios sobre las tablas profesionales.
 
@@ -28,10 +29,11 @@ utiliza una clave publicable, siempre bajo RLS.
 
 ## Inmutabilidad
 
-Las observaciones no tienen política de actualización. Una corrección crea una nueva
-observación y conserva la anterior. Los resultados derivados solo permiten actualizar
-el reconocimiento profesional. Las prescripciones nacen como borrador; la aprobación
-exige entrenador y fecha coherentes.
+Las observaciones no tienen política de actualización ni borrado individual. Una corrección
+crea otra observación. Los disparadores bloquean cualquier cambio posterior al reconocimiento
+de un resultado o a la aprobación de una prescripción; la evidencia se edita antes de esa
+transición. El borrado completo de un atleta sigue disponible para atender el derecho de
+supresión y elimina sus datos relacionados en cascada.
 
 ## Comprobación antes de producción
 

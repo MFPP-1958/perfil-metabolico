@@ -16,6 +16,25 @@ $$;
 revoke all on function public.coach_can_access_athlete(uuid) from public, anon;
 grant execute on function public.coach_can_access_athlete(uuid) to authenticated;
 
+create or replace function public.coach_can_edit_athlete(target_athlete_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.coach_athletes ca
+    where ca.coach_id = (select auth.uid())
+      and ca.athlete_id = target_athlete_id
+      and ca.role = 'coach'
+  );
+$$;
+
+revoke all on function public.coach_can_edit_athlete(uuid) from public, anon;
+grant execute on function public.coach_can_edit_athlete(uuid) to authenticated;
+
 alter table public.coach_profiles enable row level security;
 alter table public.athletes enable row level security;
 alter table public.coach_athletes enable row level security;
@@ -59,42 +78,46 @@ for insert to authenticated with check (
   )
 );
 create policy coach_athletes_update_own on public.coach_athletes
-for update to authenticated using (coach_id = (select auth.uid())) with check (coach_id = (select auth.uid()));
+for update to authenticated using (
+  exists (select 1 from public.athletes a where a.id = athlete_id and a.created_by = (select auth.uid()))
+) with check (
+  exists (select 1 from public.athletes a where a.id = athlete_id and a.created_by = (select auth.uid()))
+);
 create policy coach_athletes_delete_own on public.coach_athletes
-for delete to authenticated using (coach_id = (select auth.uid()));
+for delete to authenticated using (
+  coach_id = (select auth.uid())
+  or exists (select 1 from public.athletes a where a.id = athlete_id and a.created_by = (select auth.uid()))
+);
 
 create policy test_sessions_select_authorized on public.test_sessions
 for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
 create policy test_sessions_insert_authorized on public.test_sessions
 for insert to authenticated with check (
-  created_by = (select auth.uid()) and (select public.coach_can_access_athlete(athlete_id))
+  created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id))
 );
 create policy test_sessions_update_owned on public.test_sessions
 for update to authenticated using (created_by = (select auth.uid())) with check (
-  created_by = (select auth.uid()) and (select public.coach_can_access_athlete(athlete_id))
+  created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id))
 );
 create policy test_sessions_delete_owned on public.test_sessions
-for delete to authenticated using (created_by = (select auth.uid()));
+for delete to authenticated using (created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id)));
 
 create policy observations_select_authorized on public.observations
 for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
 create policy observations_insert_authorized on public.observations
 for insert to authenticated with check (
-  created_by = (select auth.uid()) and (select public.coach_can_access_athlete(athlete_id))
+  created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id))
 );
-create policy observations_delete_owned on public.observations
-for delete to authenticated using (created_by = (select auth.uid()));
-
 create policy derived_results_select_authorized on public.derived_results
 for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
 create policy derived_results_insert_authorized on public.derived_results
 for insert to authenticated with check (
-  created_by = (select auth.uid()) and (select public.coach_can_access_athlete(athlete_id))
+  created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id))
 );
 create policy derived_results_update_owned on public.derived_results
 for update to authenticated using (created_by = (select auth.uid())) with check (
   created_by = (select auth.uid())
-  and (select public.coach_can_access_athlete(athlete_id))
+  and (select public.coach_can_edit_athlete(athlete_id))
   and (acknowledged_by is null or acknowledged_by = (select auth.uid()))
 );
 
@@ -109,7 +132,7 @@ for select to authenticated using ((select public.coach_can_access_athlete(athle
 create policy prescriptions_insert_authorized on public.prescriptions
 for insert to authenticated with check (
   created_by = (select auth.uid())
-  and (select public.coach_can_access_athlete(athlete_id))
+  and (select public.coach_can_edit_athlete(athlete_id))
   and status = 'draft'
   and approved_by is null
   and approved_at is null
@@ -117,7 +140,7 @@ for insert to authenticated with check (
 create policy prescriptions_update_owned on public.prescriptions
 for update to authenticated using (created_by = (select auth.uid())) with check (
   created_by = (select auth.uid())
-  and (select public.coach_can_access_athlete(athlete_id))
+  and (select public.coach_can_edit_athlete(athlete_id))
   and (approved_by is null or approved_by = (select auth.uid()))
 );
 
@@ -125,15 +148,15 @@ create policy reports_select_authorized on public.reports
 for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
 create policy reports_insert_authorized on public.reports
 for insert to authenticated with check (
-  created_by = (select auth.uid()) and (select public.coach_can_access_athlete(athlete_id))
+  created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id))
 );
 create policy reports_delete_owned on public.reports
-for delete to authenticated using (created_by = (select auth.uid()));
+for delete to authenticated using (created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id)));
 
 create policy audit_events_select_own on public.audit_events
 for select to authenticated using (coach_id = (select auth.uid()));
 create policy audit_events_insert_own on public.audit_events
 for insert to authenticated with check (
   coach_id = (select auth.uid())
-  and (athlete_id is null or (select public.coach_can_access_athlete(athlete_id)))
+  and (athlete_id is null or (select public.coach_can_edit_athlete(athlete_id)))
 );

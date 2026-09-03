@@ -21,7 +21,7 @@ El procedimiento operativo de restauración es: congelar escrituras, seleccionar
 
 ## Retención, exportación y borrado
 
-Revisar atletas inactivos cada seis meses. Conservar observaciones e informes mientras exista la relación de entrenamiento y durante el plazo documentado para atender responsabilidades. Ante una solicitud, exportar JSON/CSV y los informes PDF del atleta, verificar identidad y dejar constancia. El borrado elimina primero informes y prescripciones, luego actividades y observaciones, la relación entrenador-atleta y finalmente el atleta; se conserva solo el registro legal mínimo disociado. Confirmar la eliminación en copias cuando venza su retención.
+Revisar atletas inactivos cada seis meses. Conservar observaciones e informes mientras exista la relación de entrenamiento y durante el plazo documentado para atender responsabilidades. Ante una solicitud, exportar JSON/CSV y los informes PDF del atleta, verificar identidad y dejar constancia. El borrado autorizado elimina al atleta en una transacción; las claves foráneas eliminan en cascada sus observaciones, actividades, informes y relaciones. Las observaciones no admiten borrado individual, para que una corrección conserve el historial. Se mantiene solo el registro legal mínimo disociado y se confirma la eliminación en copias cuando venza su retención.
 
 ## Incidentes
 

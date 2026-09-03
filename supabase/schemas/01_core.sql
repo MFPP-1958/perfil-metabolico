@@ -13,7 +13,7 @@ create table public.athletes (
   intervals_athlete_id text unique check (intervals_athlete_id ~ '^i[0-9]+$'),
   display_name text not null check (char_length(display_name) between 1 and 120),
   latest_sync_key text,
-  date_of_birth date,
+  age_band text check (age_band is null or age_band in ('infantil', 'cadete', 'juvenil', 'sub23', 'elite', 'master', 'undisclosed')),
   sex text check (sex is null or sex in ('female', 'male', 'intersex', 'undisclosed')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -128,6 +128,63 @@ create table public.prescriptions (
 );
 
 create index prescriptions_athlete_created_idx on public.prescriptions (athlete_id, created_at desc);
+
+create or replace function public.prevent_approved_prescription_mutation()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if old.status = 'approved' then
+    raise exception 'Approved prescriptions are immutable';
+  end if;
+  if new.status = 'approved' and (
+    new.athlete_id is distinct from old.athlete_id
+    or new.goal is distinct from old.goal
+    or new.content is distinct from old.content
+    or new.evidence_snapshot is distinct from old.evidence_snapshot
+  ) then
+    raise exception 'Edit the draft before approving it';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger prescriptions_immutable_after_approval
+before update on public.prescriptions
+for each row execute function public.prevent_approved_prescription_mutation();
+
+revoke all on function public.prevent_approved_prescription_mutation() from public, anon, authenticated;
+
+create or replace function public.prevent_acknowledged_result_mutation()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if old.acknowledged_at is not null then
+    raise exception 'Acknowledged results are immutable';
+  end if;
+  if new.acknowledged_at is not null and (
+    new.athlete_id is distinct from old.athlete_id
+    or new.metric_code is distinct from old.metric_code
+    or new.value is distinct from old.value
+    or new.unit is distinct from old.unit
+    or new.algorithm_name is distinct from old.algorithm_name
+    or new.algorithm_version is distinct from old.algorithm_version
+    or new.input_observation_ids is distinct from old.input_observation_ids
+  ) then
+    raise exception 'Recalculate the result before acknowledging it';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger derived_results_immutable_after_acknowledgement
+before update on public.derived_results
+for each row execute function public.prevent_acknowledged_result_mutation();
+
+revoke all on function public.prevent_acknowledged_result_mutation() from public, anon, authenticated;
 
 create table public.reports (
   id uuid primary key default extensions.gen_random_uuid(),
