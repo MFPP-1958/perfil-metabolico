@@ -8,6 +8,7 @@ max_rows = 1000
 
 [db]
 major_version = 17
+schema_paths = ["./schemas/*.sql"]
 
 [auth]
 enabled = true

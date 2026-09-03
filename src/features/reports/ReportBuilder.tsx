@@ -16,7 +16,7 @@ export function ReportBuilder({ data }: { data: ReportData }) {
       <section><h2>Resultados aprobados</h2><table aria-label="Resultados incluidos en el informe"><thead><tr><th>Métrica</th><th>Valor</th><th>Método</th></tr></thead><tbody>{report.results.map((result) => <tr key={result.id}><td>{result.metric}</td><td>{result.value} {result.unit}</td><td>{result.modelVersion}</td></tr>)}</tbody></table></section>
       {report.prescription && <section><h2>Trabajo acordado</h2><p>{report.prescription.summary}</p><small>Aprobación: {report.prescription.approvedBy}</small></section>}
       <section><h2>Qué limita la interpretación</h2>{report.results.map((result) => <p key={result.id}>{result.metric}: {result.limitation}</p>)}</section>
-      <footer><strong>Fuentes del dato</strong><ul>{report.citations.map((citation) => <li key={citation}>{citation}</li>)}</ul><small>Instantánea {report.snapshot.id}. Los cambios posteriores no modifican este informe.</small></footer>
+      <footer><strong>Fuentes del dato</strong><ul>{report.citations.map((citation) => <li key={citation}>{citation}</li>)}</ul><small>Instantánea cerrada el {new Date(report.snapshot.generatedAt).toLocaleString('es-ES')}. Los cambios posteriores no modifican este informe.</small></footer>
     </article>}
   </section>;
 }

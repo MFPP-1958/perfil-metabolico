@@ -401,7 +401,7 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - [x] Implement report snapshots from approved results only.
 - [x] Build print-specific templates without settings, credentials, navigation or unrelated tabs.
 - [x] Add plain-language explanations and limitations appropriate to each audience.
-- [ ] Verify PDF output visually at A4 and confirm no clipped tables or charts.
+- [x] Verify PDF output visually at A4 and confirm no clipped tables or charts.
 - [x] Run report, accessibility and build tests.
 - [x] Commit with `feat: generate reproducible athlete reports`.
 
@@ -422,17 +422,22 @@ unchecked until a container runtime or a disposable Supabase project is provided
 **Interfaces:**
 - Produces: reproducible CI and operational acceptance evidence for the complete application.
 
-- [ ] Write end-to-end tests for authentication, athlete isolation, synchronization, test entry, analysis, session review, prescription approval and report generation.
-- [ ] Add automated axe scans for every primary route and keyboard traversal checks.
-- [ ] Add CI jobs for lockfile install, typecheck, lint, unit tests, database tests, build and E2E tests.
-- [ ] Add dependency audit, secret scan and production-header assertions.
-- [ ] Document environment setup, key rotation, backups, restore drill, retention, export, deletion and incident response.
-- [ ] Document every model version, evidence category, inputs, outputs and limitations.
-- [ ] Run the complete verification suite from a clean install.
-- [ ] Inspect desktop, tablet, mobile, 200% zoom, keyboard navigation, screen-reader names and A4 reports.
+- [x] Write end-to-end tests for authentication, athlete isolation, synchronization, test entry, analysis, session review, prescription approval and report generation.
+- [x] Add automated axe scans for every primary route and keyboard traversal checks.
+- [x] Add CI jobs for lockfile install, typecheck, lint, unit tests, database tests, build and E2E tests.
+- [x] Add dependency audit, secret scan and production-header assertions.
+- [x] Document environment setup, key rotation, backups, restore drill, retention, export, deletion and incident response.
+- [x] Document every model version, evidence category, inputs, outputs and limitations.
+- [x] Run the complete verification suite from a clean install.
+- [x] Inspect desktop, tablet, mobile, 200% zoom, keyboard navigation, screen-reader names and A4 reports.
 - [ ] Confirm all 15 acceptance criteria in the approved specification with recorded evidence.
 - [ ] Archive the legacy dashboard only after confirming no unique workflow remains.
 - [ ] Commit with `release: complete professional metabolic profile application`.
+
+External acceptance note: criteria 14 and 15 cannot be closed in code. A real Supabase
+project/container runtime is required for migration, RLS/advisor and restore tests; the
+privacy checklist requires decisions from the data controller and legal review. See
+`docs/acceptance-status.md`.
 
 ## Execution Order and Checkpoints
 

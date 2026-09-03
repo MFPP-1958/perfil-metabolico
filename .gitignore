@@ -8,4 +8,7 @@ config.local.js
 node_modules/
 .worktrees/
 dist/
+playwright-report/
+test-results/
+tmp/
 *.tsbuildinfo

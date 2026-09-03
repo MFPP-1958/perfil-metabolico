@@ -12,9 +12,11 @@
 
 @page { size: A4; margin: 16mm; }
 @media print {
-  body { background: white; }
-  .account-bar, .navigation-shell, .report-controls { display: none !important; }
-  .app-layout { display: block; }
+  html body, .session-root, .main-area, .report-builder { background: white !important; }
+  .account-bar, .navigation-shell, .report-controls, .demo-banner { display: none !important; }
+  body .app-layout { display: block !important; }
+  .session-root, body .app-layout { min-height: 0 !important; }
+  .main-area, .report-builder { width: 100% !important; }
   .report-builder { padding: 0; }
   .print-report { max-width: none; padding: 0; box-shadow: none; color: #000; }
   .print-report table, .print-report section { break-inside: avoid; }

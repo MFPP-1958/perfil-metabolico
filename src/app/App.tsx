@@ -1,7 +1,10 @@
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { AuthGate } from '../auth/AuthGate';
+import type { AuthAdapter } from '../auth/AuthGate';
 import { AthleteWorkspace } from '../features/athletes/AthleteWorkspace';
 import { appRoutes, type AppRoute } from './routes';
+import { DurabilityDemo, EvolutionDemo, PowerDemo, PrescriptionDemo, ReportsDemo, SessionsDemo, TestsDemo } from './DemoViews';
 
 function EmptyWorkspace({ route }: { route: AppRoute }) {
   return (
@@ -38,6 +41,10 @@ function EmptyWorkspace({ route }: { route: AppRoute }) {
 }
 
 function Application() {
+  const routeContent: Record<string, ReactNode> = {
+    '/potencia': <PowerDemo />, '/durabilidad': <DurabilityDemo />, '/tests': <TestsDemo />, '/sesiones': <SessionsDemo />,
+    '/prescripcion': <PrescriptionDemo />, '/evolucion': <EvolutionDemo />, '/informes': <ReportsDemo />,
+  };
   return (
     <div className="app-layout">
       <aside className="navigation-shell">
@@ -54,13 +61,13 @@ function Application() {
       </aside>
       <main className="main-area">
         <Routes>
-          {appRoutes.map((route) => <Route key={route.path} path={route.path} element={route.path === '/' ? <AthleteWorkspace /> : <EmptyWorkspace route={route} />} />)}
+          {appRoutes.map((route) => <Route key={route.path} path={route.path} element={route.path === '/' ? <AthleteWorkspace /> : routeContent[route.path] ?? <EmptyWorkspace route={route} />} />)}
         </Routes>
       </main>
     </div>
   );
 }
 
-export function App() {
-  return <AuthGate><BrowserRouter><Application /></BrowserRouter></AuthGate>;
+export function App({ auth }: { auth?: AuthAdapter }) {
+  return <AuthGate auth={auth}><BrowserRouter><Application /></BrowserRouter></AuthGate>;
 }

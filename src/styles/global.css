@@ -100,7 +100,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .observation-card div span { font: 600 28px/1 'Barlow Condensed', sans-serif; color: var(--data-dark); }
 .observation-card p, .observation-card small { grid-column: 1 / -1; margin: 0; color: var(--muted); }
 .empty-state, .workspace-empty { color: var(--muted); }
-.workspace-empty { min-height: 340px; display: grid; place-content: center; text-align: center; }
+.workspace-empty { min-width: 0; max-width: 100%; min-height: 340px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; overflow-wrap: anywhere; }
 .workspace-empty h2 { margin: 0; color: var(--ink); font: 600 40px/1 'Barlow Condensed', sans-serif; }
 .field-error { color: var(--danger); font-weight: 700; }
 .model-view { padding: clamp(24px, 4vw, 58px); }
@@ -155,14 +155,15 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .prescription-card h2 { margin-top: 0; font: 600 30px/1 'Barlow Condensed', sans-serif; }
 .prescription-card small { color: var(--muted); }
 .prescription-editor > .primary-action { margin-top: 16px; }
+.demo-banner { padding: 10px 20px; border-bottom: 1px solid #c88724; background: #fff1d9; color: #6b4308; font-weight: 700; text-align: center; }
 
 @media (max-width: 760px) {
   .login-shell { background: var(--nav); }
   .account-bar { justify-content: space-between; }
-  .app-layout { grid-template-columns: 1fr; }
-  .navigation-shell { padding: 14px 16px; }
+  .app-layout { display: block; }
+  .navigation-shell { min-width: 0; padding: 14px 16px; }
   .brand, .nav-note { display: none; }
-  .navigation-shell nav { display: flex; gap: 4px; overflow-x: auto; }
+  .navigation-shell nav { max-width: 100%; display: flex; gap: 4px; overflow-x: auto; }
   .navigation-shell nav a { flex: 0 0 auto; border-left: 0; border-bottom: 3px solid transparent; }
   .navigation-shell nav a.active { border-bottom-color: var(--focus); }
   .workspace-heading { align-items: start; flex-direction: column; }

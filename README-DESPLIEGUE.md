@@ -1,5 +1,17 @@
 # Despliegue privado del perfil metabólico
 
+La operación, rotación de claves, copias y restauración se detallan en
+`docs/operations.md`. Antes de producción deben cerrarse
+`docs/privacy-checklist.md` y la revisión de `docs/model-register.md`.
+
+Comprobación local completa:
+
+```bash
+npm ci
+npm run verify
+npm run test:e2e
+```
+
 La aplicación se compila con Vite, se publica desde `dist/` y accede a Intervals.icu
 únicamente a través de funciones autenticadas. El navegador nunca recibe la clave de
 Intervals.icu ni una clave secreta de Supabase.
@@ -26,11 +38,13 @@ archivos del repositorio ni copiarse al almacenamiento del navegador. El antiguo
 
 ## Preparación de Supabase
 
-1. Crea el proyecto y aplica las migraciones versionadas de `supabase/migrations/`.
-2. Configura la URL pública de la aplicación y las URL de redirección de Auth.
-3. Crea la cuenta del entrenador y su fila en `coach_profiles`.
-4. Vincula cada ciclista con el entrenador en `coach_athletes`.
-5. Usa el RLS Tester para comprobar que una segunda cuenta no puede leer esos datos.
+1. Inicia Docker y ejecuta `supabase start`.
+2. Genera la migración desde `supabase/schemas/` con `supabase db diff -f initial_schema`.
+3. Revisa el SQL generado, ejecuta `supabase db reset` y lanza las pruebas antes de vincular un proyecto remoto.
+4. Configura la URL pública de la aplicación y las URL de redirección de Auth.
+5. Crea la cuenta del entrenador y su fila en `coach_profiles`.
+6. Vincula cada ciclista con el entrenador en `coach_athletes`.
+7. Comprueba con dos cuentas que una no puede leer ni modificar atletas de la otra y ejecuta los advisors de seguridad y rendimiento.
 
 Las claves actuales de Supabase pueden ser publicables (`sb_publishable_…`) o secretas
 (`sb_secret_…`). La clave secreta solo se usa en las funciones de servidor.
@@ -46,7 +60,7 @@ Las claves actuales de Supabase pueden ser publicables (`sb_publishable_…`) o 
 ## Desarrollo local
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 

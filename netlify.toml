@@ -1,8 +1,7 @@
 # Configuracion de despliegue en Netlify.
 #
-# publish = "public" es deliberado: solo se publica esa carpeta. La clave de API
-# vive en config.local.js, que esta FUERA de public/, de modo que es imposible
-# publicarla por error aunque subas el proyecto entero.
+# Solo se publica el paquete compilado en dist. Las claves privadas pertenecen
+# exclusivamente al entorno de las funciones.
 
 [build]
   command = "npm run build"
@@ -12,7 +11,7 @@
 [functions]
   node_bundler = "esbuild"
 
-# La raiz del sitio sirve el dashboard.
+# La raíz y las rutas internas sirven la aplicación compilada.
 [[redirects]]
   from = "/"
   to = "/index.html"

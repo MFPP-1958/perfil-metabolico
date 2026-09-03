@@ -11,6 +11,9 @@
     "build": "tsc -b && vite build",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:e2e": "playwright test",
+    "security:secrets": "node scripts/check-secrets.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run test:run && npm run build && npm run security:secrets",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint . --max-warnings 0"
   },
@@ -26,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.1",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.7",
