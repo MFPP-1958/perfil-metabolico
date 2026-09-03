@@ -396,14 +396,14 @@ unchecked until a container runtime or a disposable Supabase project is provided
 **Interfaces:**
 - Produces: `buildReportSnapshot(audience, approvedData): ReportSnapshot`.
 
-- [ ] Write tests for coach, cyclist and family variants, missing approval, source citations and model-version display.
-- [ ] Run tests and confirm failure.
-- [ ] Implement report snapshots from approved results only.
-- [ ] Build print-specific templates without settings, credentials, navigation or unrelated tabs.
-- [ ] Add plain-language explanations and limitations appropriate to each audience.
+- [x] Write tests for coach, cyclist and family variants, missing approval, source citations and model-version display.
+- [x] Run tests and confirm failure.
+- [x] Implement report snapshots from approved results only.
+- [x] Build print-specific templates without settings, credentials, navigation or unrelated tabs.
+- [x] Add plain-language explanations and limitations appropriate to each audience.
 - [ ] Verify PDF output visually at A4 and confirm no clipped tables or charts.
-- [ ] Run report, accessibility and build tests.
-- [ ] Commit with `feat: generate reproducible athlete reports`.
+- [x] Run report, accessibility and build tests.
+- [x] Commit with `feat: generate reproducible athlete reports`.
 
 ### Task 17: Complete security, accessibility, operations and migration acceptance
 

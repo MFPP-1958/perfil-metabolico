@@ -1,0 +1,21 @@
+.report-builder { padding: clamp(24px, 4vw, 58px); }
+.report-controls { display: flex; justify-content: flex-end; align-items: end; gap: 12px; margin-bottom: 22px; }
+.report-controls label { display: grid; gap: 5px; font-weight: 700; }
+.report-controls select { min-height: 44px; padding: 8px 32px 8px 10px; border: 1px solid var(--line); background: white; }
+.print-report { max-width: 850px; margin: auto; padding: clamp(28px, 5vw, 60px); background: white; box-shadow: var(--shadow); }
+.print-report > header { padding-bottom: 20px; border-bottom: 5px solid var(--data); }
+.print-report h1 { margin: 8px 0; font: 700 clamp(40px, 6vw, 64px)/.9 'Barlow Condensed', sans-serif; }
+.print-report h2 { margin-top: 32px; font: 600 28px/1 'Barlow Condensed', sans-serif; }
+.print-report table { width: 100%; border-collapse: collapse; }
+.print-report th, .print-report td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.print-report footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); }
+
+@page { size: A4; margin: 16mm; }
+@media print {
+  body { background: white; }
+  .account-bar, .navigation-shell, .report-controls { display: none !important; }
+  .app-layout { display: block; }
+  .report-builder { padding: 0; }
+  .print-report { max-width: none; padding: 0; box-shadow: none; color: #000; }
+  .print-report table, .print-report section { break-inside: avoid; }
+}
