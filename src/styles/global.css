@@ -120,6 +120,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .model-view table { width: 100%; border-collapse: collapse; background: white; }
 .model-view th, .model-view td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); }
 .model-view th { color: var(--muted); }
+.workload-context { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 28px 0; padding: 18px; border-block: 1px solid var(--line); background: white; }
+.workload-context strong { width: 100%; }
+.workload-context span, .confidence-note { color: var(--muted); }
 
 @media (max-width: 760px) {
   .login-shell { background: var(--nav); }

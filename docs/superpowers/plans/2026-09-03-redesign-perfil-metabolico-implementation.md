@@ -267,13 +267,13 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - Produces: `calculateDurability(fresh, fatigued, workload): DurabilityResult`.
 - Input workload includes `priorKjPerKg`, `priorWorkAboveCpKj` and intensity distribution.
 
-- [ ] Write tests for percentage decline, missing matched durations, incompatible conditions and insufficient observations.
-- [ ] Run tests and confirm failure.
-- [ ] Implement matched-duration comparisons at 10 seconds, 1, 5 and 20 minutes.
-- [ ] Include workload context and observation counts; do not output a generic stamina score.
-- [ ] Render fresh/fatigued comparison, onset of deterioration and confidence warnings.
-- [ ] Run numeric, component and accessibility tests.
-- [ ] Commit with `feat: quantify cycling durability from accumulated work`.
+- [x] Write tests for percentage decline, missing matched durations, incompatible conditions and insufficient observations.
+- [x] Run tests and confirm failure.
+- [x] Implement matched-duration comparisons at 10 seconds, 1, 5 and 20 minutes.
+- [x] Include workload context and observation counts; do not output a generic stamina score.
+- [x] Render fresh/fatigued comparison, onset of deterioration and confidence warnings.
+- [x] Run numeric, component and accessibility tests.
+- [x] Commit with `feat: quantify cycling durability from accumulated work`.
 
 ### Task 11: Implement the guided lactate sprint protocol
 
