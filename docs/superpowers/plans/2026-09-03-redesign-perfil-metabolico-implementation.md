@@ -35,6 +35,8 @@
 - Create: `vite.config.ts`
 - Create: `vitest.config.ts`
 - Create: `eslint.config.js`
+- Create: `index.html`
+- Create: `src/main.ts`
 - Create: `src/test/setup.ts`
 - Create: `src/smoke.test.ts`
 - Modify: `.gitignore`
@@ -42,11 +44,11 @@
 **Interfaces:**
 - Produces: `npm run test`, `npm run typecheck`, `npm run lint`, `npm run build`.
 
-- [ ] Write `src/smoke.test.ts` asserting that the test environment exposes `document`.
-- [ ] Run `npm test -- --run src/smoke.test.ts` and confirm it fails before dependencies and configuration exist.
-- [ ] Add pinned dependencies and scripts; generate and commit the lockfile with `npm install`.
-- [ ] Run the smoke test, typecheck, lint and production build.
-- [ ] Commit foundation files with `chore: establish typed application foundation`.
+- [x] Write `src/smoke.test.ts` asserting that the test environment exposes `document`.
+- [x] Run `npm test -- --run src/smoke.test.ts` and confirm it fails before dependencies and configuration exist.
+- [x] Add pinned dependencies and scripts; generate and commit the lockfile with `npm install`.
+- [x] Run the smoke test, typecheck, lint and production build.
+- [x] Commit foundation files with `chore: establish typed application foundation`.
 
 ### Task 2: Secure and narrow the legacy proxy
 
@@ -146,8 +148,8 @@
 ### Task 6: Implement authenticated application shell
 
 **Files:**
-- Create: `index.html`
-- Create: `src/main.tsx`
+- Modify: `index.html`
+- Replace: `src/main.ts` with `src/main.tsx`
 - Create: `src/app/App.tsx`
 - Create: `src/app/routes.tsx`
 - Create: `src/auth/supabase.ts`
