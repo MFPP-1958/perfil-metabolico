@@ -309,14 +309,14 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - Produces: `runMaderModel(inputs, config): ExperimentalMaderResult`.
 - Result includes MLSS estimate, FATmax estimate, input lineage, version, cadence warning and sensitivity range.
 
-- [ ] Port the current equations into tests and independently calculate reference cases.
-- [ ] Add tests proving missing measured-compatible inputs block execution and FATmax cannot update LT1.
-- [ ] Run tests and confirm failure before implementation.
-- [ ] Implement the pure model with declared constants, versions and sensitivity runs.
-- [ ] Build an experimental-only view with evidence notice and comparison to separately stored FTP, CP, LT2 or MLSS.
-- [ ] Require coach acknowledgement before including results in reports.
-- [ ] Run numeric, component and accessibility tests.
-- [ ] Commit with `feat: isolate experimental Mader analysis`.
+- [x] Port the current equations into tests and independently calculate reference cases.
+- [x] Add tests proving missing measured-compatible inputs block execution and FATmax cannot update LT1.
+- [x] Run tests and confirm failure before implementation.
+- [x] Implement the pure model with declared constants, versions and sensitivity runs.
+- [x] Build an experimental-only view with evidence notice and comparison to separately stored FTP, CP, LT2 or MLSS.
+- [x] Require coach acknowledgement before including results in reports.
+- [x] Run numeric, component and accessibility tests.
+- [x] Commit with `feat: isolate experimental Mader analysis`.
 
 ### Task 13: Build longitudinal evolution views
 

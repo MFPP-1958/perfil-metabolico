@@ -138,6 +138,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .protocol-view table { width: 100%; border-collapse: collapse; background: white; }
 .protocol-view th, .protocol-view td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); }
 .protocol-view > button { margin-top: 16px; min-height: 46px; padding: 10px 16px; border: 0; background: var(--validated); color: white; font-weight: 700; }
+.eyebrow { margin: 0 0 8px; color: var(--uncertain) !important; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.experimental-view { border-top: 8px solid var(--uncertain); }
+.experimental-view .acknowledgement { display: flex; align-items: center; gap: 10px; margin: 22px 0 14px; font-weight: 700; }
+.experimental-view .acknowledgement input { width: 20px; height: 20px; }
+.experimental-view details { margin-top: 26px; padding-block: 14px; border-top: 1px solid var(--line); color: var(--muted); }
 
 @media (max-width: 760px) {
   .login-shell { background: var(--nav); }
