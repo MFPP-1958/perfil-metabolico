@@ -1,0 +1,2 @@
+-- El entorno local no incluye datos clínicos reales.
+-- Crea usuarios de prueba mediante Supabase Auth y añade únicamente atletas sintéticos.

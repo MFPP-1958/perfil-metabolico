@@ -135,15 +135,19 @@
 - Produces tables: `coach_profiles`, `athletes`, `coach_athletes`, `observations`, `test_sessions`, `derived_results`, `activities`, `planned_workouts`, `prescriptions`, `reports`, `audit_events`.
 - Produces ownership policies based on `(select auth.uid())` and `coach_athletes` membership.
 
-- [ ] Write schema assertions for primary keys, foreign keys, uniqueness, timestamps, metric check constraints and required indexes.
-- [ ] Write policy assertions proving another authenticated coach cannot read or mutate an athlete.
-- [ ] Run database tests against local Supabase and confirm failure before schemas exist.
-- [ ] Create declarative schemas with `uuid` keys, `timestamptz`, constrained text catalogs and indexes on foreign keys and date filters.
-- [ ] Enable RLS on every public table; add separate select/insert/update/delete policies with `USING` and `WITH CHECK` where required.
-- [ ] Revoke anonymous access to all professional data.
+- [x] Write schema assertions for primary keys, foreign keys, uniqueness, timestamps, metric check constraints and required indexes.
+- [x] Write policy assertions proving another authenticated coach cannot read or mutate an athlete.
+- [x] Run database schema tests and confirm failure before schemas exist. Local execution is pending a container runtime.
+- [x] Create declarative schemas with `uuid` keys, `timestamptz`, constrained text catalogs and indexes on foreign keys and date filters.
+- [x] Enable RLS on every public table; add separate select/insert/update/delete policies with `USING` and `WITH CHECK` where required.
+- [x] Revoke anonymous access to all professional data.
 - [ ] Generate and review a migration using the installed Supabase CLI workflow.
 - [ ] Run migrations, database tests and Supabase advisors locally.
-- [ ] Commit schemas, migration and documentation with `feat: add private metabolic data store`.
+- [x] Commit declarative schemas and documentation with `feat: add private metabolic data store`.
+
+Environment note: `supabase` 2.116.0 is installed, but neither Docker nor Podman is
+available. Migration generation, local policy integration tests and advisors remain
+unchecked until a container runtime or a disposable Supabase project is provided.
 
 ### Task 6: Implement authenticated application shell
 
