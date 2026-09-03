@@ -114,12 +114,12 @@
 - Produces: `MetricCode`, `Observation`, `TestSession`, `DerivedResult`, `ActivitySummary`, `PlannedWorkout`, `ReportSnapshot`.
 - Produces: Zod schemas with exact unit and range checks.
 
-- [ ] Write failing tests for invalid units, impossible negative values, missing provenance and forbidden silent metric substitutions.
-- [ ] Run `npm test -- --run src/domain/validation.test.ts` and confirm failure.
-- [ ] Implement discriminated domain schemas and a metric/unit catalog.
-- [ ] Add explicit quality states: `measured`, `imported_estimate`, `calculated`, `incomplete`, `rejected`.
-- [ ] Run domain tests and typecheck.
-- [ ] Commit with `feat: define traceable physiological domain contracts`.
+- [x] Write failing tests for invalid units, impossible negative values, missing provenance and forbidden silent metric substitutions.
+- [x] Run `npm test -- --run src/domain/validation.test.ts` and confirm failure.
+- [x] Implement discriminated domain schemas and a metric/unit catalog.
+- [x] Add explicit quality states: `measured`, `imported_estimate`, `calculated`, `incomplete`, `rejected`.
+- [x] Run domain tests and typecheck.
+- [x] Commit with `feat: define traceable physiological domain contracts`.
 
 ### Task 5: Add Supabase schema, indexes and RLS
 
