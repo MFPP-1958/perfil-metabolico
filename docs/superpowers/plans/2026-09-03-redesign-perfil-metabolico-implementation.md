@@ -167,14 +167,14 @@ unchecked until a container runtime or a disposable Supabase project is provided
 - Produces: `AuthGate`, authenticated routes and `getAccessToken(): Promise<string>`.
 - Consumes: publishable `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` only.
 
-- [ ] Write component tests for signed-out, loading, signed-in and expired-session states.
-- [ ] Run tests and confirm failure before the shell exists.
-- [ ] Implement passwordless email sign-in and sign-out using a publishable key.
-- [ ] Add route protection, session expiry handling and a visible current-user menu.
-- [ ] Build responsive semantic navigation with keyboard operation and visible focus.
-- [ ] Verify no secret-named environment variable is referenced from `src/`.
-- [ ] Run component tests, axe checks, typecheck and build.
-- [ ] Commit with `feat: add authenticated responsive application shell`.
+- [x] Write component tests for signed-out, loading, signed-in and expired-session states.
+- [x] Run tests and confirm failure before the shell exists.
+- [x] Implement passwordless email sign-in and sign-out using a publishable key.
+- [x] Add route protection, session expiry handling and a visible current-user menu.
+- [x] Build responsive semantic navigation with keyboard operation and visible focus.
+- [x] Verify no secret-named environment variable is referenced from `src/`.
+- [x] Run component tests, axe checks, typecheck and build.
+- [x] Commit with `feat: add authenticated responsive application shell`.
 
 ### Task 7: Implement the typed Intervals.icu adapter and synchronization API
 

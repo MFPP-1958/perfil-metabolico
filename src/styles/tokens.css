@@ -1,0 +1,17 @@
+:root {
+  --paper: #f3f7f8;
+  --surface: #ffffff;
+  --ink: #142c35;
+  --muted: #60757d;
+  --line: #c9d6da;
+  --data: #2459d3;
+  --data-dark: #193b8f;
+  --validated: #1c776a;
+  --uncertain: #b96a08;
+  --danger: #b43b3b;
+  --nav: #122f39;
+  --focus: #f0a72f;
+  --radius-small: 6px;
+  --radius-large: 18px;
+  --shadow: 0 18px 60px rgb(18 47 57 / 12%);
+}
