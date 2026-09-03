@@ -16,7 +16,7 @@ test('A4 report has one unclipped page', async ({ page }) => {
   await page.goto('/informes');
   await page.getByRole('button', { name: 'Abrir demostración' }).click();
   await page.emulateMedia({ media: 'print' });
-  const output = path.resolve('output/pdf');
+  const output = path.resolve('test-results/artifacts');
   await mkdir(output, { recursive: true });
   await page.pdf({ path: path.join(output, 'informe-demostracion-a4.pdf'), format: 'A4', printBackground: true, preferCSSPageSize: true });
   await expect(page.getByRole('table', { name: 'Resultados incluidos en el informe' })).toBeVisible();
