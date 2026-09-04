@@ -8,6 +8,8 @@ MFPP Metabolic Lab ya dispone de autenticación con Supabase, tablas protegidas 
 
 La primera versión será utilizada exclusivamente por Manuel como único entrenador. La arquitectura debe permitir probar datos reales localmente sin exponer la clave de Intervals.icu y mantener una ruta clara hacia OAuth si posteriormente se admiten varios entrenadores.
 
+Todo el trabajo de esta fase se realizará exclusivamente en `/Users/manuelfrancisperezperez/Desktop/MFPP Metabolic Lab`. Esta carpeta constituye una aplicación y un repositorio local independientes. `/Users/manuelfrancisperezperez/Desktop/Perfil metabolico` se considera una copia histórica de solo lectura y ningún paso de implementación, prueba o configuración podrá modificarla. La aplicación nueva no tendrá un remoto Git compartido con la anterior; cuando se publique se creará un repositorio remoto propio.
+
 ## Objetivo
 
 Permitir que el entrenador propietario conecte su cuenta de Intervals.icu, revise los ciclistas disponibles, seleccione cuáles incorporar y sincronice sus datos fisiológicos y de entrenamiento con Supabase.
@@ -160,6 +162,8 @@ Cuando se incorporen otros entrenadores, se sustituirán `INTERVALS_OWNER_USER_I
 
 ## Criterios de aceptación
 
+- Ningún archivo de `/Users/manuelfrancisperezperez/Desktop/Perfil metabolico` se modifica durante la implementación.
+- El repositorio de `MFPP Metabolic Lab` funciona de forma independiente y no apunta al remoto Git de la aplicación anterior.
 - Solo el propietario configurado puede consultar o incorporar la plantilla.
 - La clave API no aparece en Git, archivos de configuración, navegador, respuestas ni registros.
 - El entrenador puede seleccionar un ciclista real y verlo en la Mesa de análisis.
