@@ -65,14 +65,33 @@ npm run dev
 ```
 
 Para ejecutar funciones y frontend juntos utiliza Netlify CLI y un archivo de variables
-local no versionado. Las pruebas no contactan con Supabase ni con Intervals.icu.
+local no versionado. Las pruebas automatizadas no contactan con Supabase ni con Intervals.icu.
 
 ```bash
 npx netlify dev
 npm run test:run
 ```
 
+Para trabajar con datos reales en este Mac no se usa un archivo de variables. La clave se
+guarda en el Llavero de macOS mediante un cuadro protegido:
+
+```bash
+supabase start
+npm run configure:real
+npm run dev:real
+```
+
+La aplicación abre en `http://127.0.0.1:4174`. El correo local para iniciar sesión se lee
+en Mailpit (`http://127.0.0.1:54324`) y la base de datos se inspecciona en Supabase Studio
+(`http://127.0.0.1:54323`). No pegues la clave API en el navegador, el terminal, un archivo
+`.env` ni un mensaje: introdúcela solo en el cuadro protegido que abre `configure:real`.
+
 ## Contrato del gateway de Intervals.icu
+
+`/.netlify/functions/intervals-connection` admite `GET` y `POST`, valida la sesión y el
+UUID del único propietario. `GET` devuelve únicamente identificador y nombre de los
+ciclistas accesibles. `POST` incorpora solo una selección explícita y conserva la
+propiedad de cualquier ciclista que ya exista.
 
 `/.netlify/functions/intervals` admite `GET`, exige `Authorization: Bearer <token>` y
 acepta solo operaciones con nombre: `athletes`, `athlete`, `sport_settings`,

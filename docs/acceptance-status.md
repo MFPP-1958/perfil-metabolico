@@ -1,6 +1,6 @@
 # Estado de aceptación
 
-Fecha de revisión: 3 de septiembre de 2026.
+Fecha de revisión: 4 de septiembre de 2026.
 
 | # | Criterio | Evidencia | Estado |
 |---|---|---|---|
@@ -19,7 +19,8 @@ Fecha de revisión: 3 de septiembre de 2026.
 | 13 | Pruebas funcionales, seguridad y accesibilidad | Vitest, Playwright, axe, teclado, cabeceras y CI | Verificado localmente |
 | 14 | Copia restaurable, exportación y borrado | Procedimiento en `docs/operations.md` | Pendiente ejecutar en Supabase real |
 | 15 | Documentación de protección de datos | `docs/privacy-checklist.md` | Pendiente decisiones del responsable y revisión jurídica |
+| 16 | Conexión inicial con Intervals.icu | Función exclusiva del propietario, selección explícita, Llavero de macOS y pruebas de navegador | Verificado con dobles; pendiente aceptación con una clave y un ciclista reales |
 
 ## Bloqueos externos
 
-No hay Docker ni Podman en el equipo, ni se ha facilitado un proyecto Supabase desechable. Por ello siguen pendientes la migración generada por CLI, la ejecución real de RLS/advisors y el simulacro de restauración. Tampoco se han facilitado credenciales de preproducción de Intervals.icu, por lo que la integración se ha verificado con respuestas anonimizadas y dobles de prueba, sin contactar datos reales.
+Docker Desktop y Supabase local están disponibles. La integración de Intervals.icu se ha verificado con respuestas anonimizadas y dobles de prueba. Falta ejecutar `npm run configure:real`, introducir la clave en el cuadro protegido, elegir un ciclista y completar una sincronización real. Hasta entonces no se registran recuentos de datos reales ni se declara cerrada la aceptación de la conexión.

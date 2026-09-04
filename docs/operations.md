@@ -6,6 +6,27 @@ La aplicación requiere Node.js 22. El navegador solo recibe `VITE_SUPABASE_URL`
 
 Antes de desplegar: ejecutar `npm ci`, `npm run verify`, revisar la migración SQL generada por Supabase CLI y probarla en un proyecto desechable. El despliegue debe publicar `dist` y mantener las cabeceras de `netlify.toml`.
 
+## Conexión real local con Intervals.icu
+
+La configuración real se guarda en el Llavero de macOS. La clave de Intervals.icu y el UUID del propietario no se escriben en `.env`, archivos del proyecto ni almacenamiento del navegador.
+
+1. Abre Docker Desktop y espera a que indique que está iniciado.
+2. Desde esta carpeta ejecuta:
+
+```bash
+supabase start
+npm run configure:real
+npm run dev:real
+```
+
+3. Pega la clave API únicamente en el cuadro protegido de macOS que abre `configure:real`.
+4. Introduce el correo que usarás para acceder a la aplicación local.
+5. Abre `http://127.0.0.1:4174` y solicita el enlace de acceso.
+6. Lee el mensaje local en Mailpit: `http://127.0.0.1:54324`.
+7. Supabase Studio está disponible en `http://127.0.0.1:54323`.
+
+En la Mesa de análisis, pulsa **Conectar Intervals.icu**, marca solo los ciclistas que quieras incorporar y confirma la selección. Selecciona después un ciclista y pulsa su botón **Sincronizar**. La aplicación puede informar de una sincronización parcial si Intervals.icu no devuelve alguno de los componentes.
+
 ## Rotación de claves
 
 Rotar la clave de Intervals.icu y la clave secreta de Supabase cada 180 días, cuando cambie la persona responsable o ante cualquier sospecha. Crear primero la nueva clave, actualizar Netlify, ejecutar una prueba autenticada con un atleta permitido y revocar después la anterior. Registrar fecha, responsable y resultado sin copiar el secreto.

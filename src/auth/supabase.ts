@@ -10,6 +10,14 @@ function mapSession(session: Session | null): AuthSession | null {
 }
 
 export function createBrowserAuth(): AuthAdapter {
+  if (import.meta.env.DEV && import.meta.env.VITE_E2E_MODE === 'true') {
+    return {
+      getSession: async () => ({ accessToken: 'local-e2e-token', user: { id: 'e2e-coach', email: 'entrenador@prueba.local' } }),
+      onAuthStateChange: () => () => undefined,
+      signInWithOtp: async () => undefined,
+      signOut: async () => undefined,
+    };
+  }
   const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
   if (!url || !publishableKey) {
