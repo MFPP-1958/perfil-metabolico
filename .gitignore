@@ -8,6 +8,7 @@ config.local.js
 node_modules/
 .worktrees/
 dist/
+.netlify/
 playwright-report/
 test-results/
 tmp/

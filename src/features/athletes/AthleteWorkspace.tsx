@@ -72,7 +72,17 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { void loadRoster(); }, [api]);
+  useEffect(() => {
+    let active = true;
+    void api.list().then((next) => {
+      if (active) setAthletes(next);
+    }).catch((reason) => {
+      if (active) setError(reason instanceof Error ? reason.message : 'No se pudo cargar la lista.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [api]);
 
   function select(id: string) {
     setSelectedId(id);
