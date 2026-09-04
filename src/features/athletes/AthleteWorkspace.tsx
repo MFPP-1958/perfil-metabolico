@@ -13,6 +13,7 @@ export interface AthleteApi {
   list(): Promise<AthleteSummary[]>;
   load(id: string, signal?: AbortSignal): Promise<AthleteDetail>;
   createObservation?(observation: Observation): Promise<Observation>;
+  sync?(intervalsId: string): Promise<{ warnings: string[] }>;
 }
 
 const defaultApi: AthleteApi = {
@@ -37,6 +38,16 @@ const defaultApi: AthleteApi = {
     if (!response.ok) throw new Error('No se pudo guardar la observación.');
     return response.json() as Promise<Observation>;
   },
+  async sync(intervalsId) {
+    const token = await getAccessToken();
+    const query = new URLSearchParams({ athleteId: intervalsId, syncKey: crypto.randomUUID() });
+    const response = await fetch(`/.netlify/functions/sync-athlete?${query}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    });
+    const body = await response.json() as { warnings?: string[]; error?: string };
+    if (![200, 207].includes(response.status)) throw new Error(body.error ?? 'No se pudo sincronizar el ciclista.');
+    return { warnings: body.warnings ?? [] };
+  },
 };
 
 const demoAthlete: AthleteDetail = {
@@ -49,6 +60,8 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
   const [athlete, setAthlete] = useState<AthleteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   const request = useRef(0);
 
   async function loadRoster() {
@@ -64,6 +77,7 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
   function select(id: string) {
     setSelectedId(id);
     setAthlete(null);
+    setSyncMessage('');
     if (!id) return;
     const current = ++request.current;
     const controller = new AbortController();
@@ -79,6 +93,28 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
     setSelectedId('');
     setAthlete(demoAthlete);
     setError('');
+    setSyncMessage('');
+  }
+
+  async function syncAthlete() {
+    if (!athlete || athlete.intervalsId === 'demo' || !api.sync) return;
+    setSyncing(true);
+    setSyncMessage('');
+    setError('');
+    try {
+      const result = await api.sync(athlete.intervalsId);
+      const refreshed = await api.load(athlete.id);
+      setAthlete(refreshed);
+      const labels: Record<string, string> = {
+        athlete: 'perfil', activities: 'actividades', power_curves: 'potencia', planned_workouts: 'entrenamientos',
+      };
+      const warnings = result.warnings.map((warning) => labels[warning]).filter(Boolean);
+      setSyncMessage(warnings.length ? `Sincronización parcial: ${warnings.join(', ')}` : 'Sincronización completada');
+    } catch {
+      setError('No se pudo sincronizar el ciclista. Puedes intentarlo de nuevo.');
+    } finally {
+      setSyncing(false);
+    }
   }
 
   function addObservation(observation: Observation) {
@@ -101,7 +137,13 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
       {error && <p role="alert" className="field-error">{error}</p>}
       {athlete ? (
         <>
-          <AthleteHeader athlete={athlete} demo={athlete.intervalsId === 'demo'} />
+          <AthleteHeader
+            athlete={athlete}
+            demo={athlete.intervalsId === 'demo'}
+            onSync={api.sync ? () => void syncAthlete() : undefined}
+            syncing={syncing}
+            syncMessage={syncMessage}
+          />
           <div className="athlete-data-grid">
             <div><h3>Historial inmutable</h3><ObservationHistory observations={athlete.observations} /></div>
             <DataQualityPanel observations={athlete.observations} />
