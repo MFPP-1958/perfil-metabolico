@@ -6,6 +6,7 @@ import { ObservationHistory } from '../observations/ObservationHistory';
 import { AthleteHeader } from './AthleteHeader';
 import { AthleteSelector, type AthleteSummary } from './AthleteSelector';
 import { DataQualityPanel } from './DataQualityPanel';
+import { IntervalsConnectionPanel } from './IntervalsConnectionPanel';
 
 export interface AthleteDetail extends AthleteSummary { observations: Observation[] }
 export interface AthleteApi {
@@ -50,9 +51,15 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
   const [error, setError] = useState('');
   const request = useRef(0);
 
-  useEffect(() => {
-    void api.list().then(setAthletes).catch((reason) => setError(reason instanceof Error ? reason.message : 'No se pudo cargar la lista.')).finally(() => setLoading(false));
-  }, [api]);
+  async function loadRoster() {
+    setLoading(true);
+    setError('');
+    try { setAthletes(await api.list()); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo cargar la lista.'); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { void loadRoster(); }, [api]);
 
   function select(id: string) {
     setSelectedId(id);
@@ -89,6 +96,7 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
         <div><h1 id="athlete-workspace-title">Mesa de análisis</h1><p>Identidad, procedencia y calidad antes de interpretar cualquier número.</p></div>
         <button type="button" className="secondary-action" onClick={activateDemo}>Abrir demostración</button>
       </header>
+      <IntervalsConnectionPanel onImported={loadRoster} />
       <AthleteSelector athletes={athletes} value={selectedId} onChange={select} loading={loading} />
       {error && <p role="alert" className="field-error">{error}</p>}
       {athlete ? (
