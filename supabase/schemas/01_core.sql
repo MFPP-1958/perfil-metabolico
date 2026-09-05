@@ -132,6 +132,8 @@ create table public.power_curve_snapshots (
 
 create index power_curve_snapshots_athlete_synchronized_idx
 on public.power_curve_snapshots (athlete_id, synchronized_at desc);
+create index power_curve_snapshots_created_by_idx
+on public.power_curve_snapshots (created_by);
 
 create table public.power_analysis_runs (
   id uuid primary key default extensions.gen_random_uuid(),
@@ -151,6 +153,8 @@ create table public.power_analysis_runs (
 
 create index power_analysis_runs_athlete_confirmed_idx
 on public.power_analysis_runs (athlete_id, confirmed_at desc);
+create index power_analysis_runs_created_by_idx
+on public.power_analysis_runs (created_by);
 
 create or replace function public.prevent_power_analysis_mutation()
 returns trigger

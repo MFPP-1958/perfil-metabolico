@@ -62,8 +62,20 @@ describe('database schema', () => {
   it('stores traceable power snapshots and immutable confirmed analyses', () => {
     const core = sql('01_core.sql');
     expect(core).toContain('content_hash text not null');
+    expect(core).toContain("points jsonb not null check (jsonb_typeof(points) = 'array')");
+    expect(core).toContain("source_models jsonb not null default '[]'::jsonb check (jsonb_typeof(source_models) = 'array')");
+    expect(core).toContain("environment text not null check (environment in ('all', 'outdoor', 'indoor'))");
+    expect(core).toContain("model text not null check (model in ('ecp', 'morton_3p'))");
+    expect(core).toContain('check (oldest <= newest)');
+    expect(core).toContain('snapshot_id uuid not null references public.power_curve_snapshots(id) on delete restrict');
+    expect(core).toContain('cp_watts numeric not null check (cp_watts >= 0)');
+    expect(core).toContain('w_prime_joules numeric not null check (w_prime_joules >= 0)');
+    expect(core).toContain('pmax_watts numeric check (pmax_watts is null or pmax_watts >= 0)');
+    expect(core).toContain('rmse_watts numeric not null check (rmse_watts >= 0)');
     expect(core).toContain('unique (athlete_id, sport, environment, oldest, newest, content_hash)');
     expect(core).toContain('unique (snapshot_id, model, algorithm_version, created_by)');
+    expect(core).toContain('create index power_curve_snapshots_created_by_idx\non public.power_curve_snapshots (created_by)');
+    expect(core).toContain('create index power_analysis_runs_created_by_idx\non public.power_analysis_runs (created_by)');
     expect(core).toContain('prevent_power_analysis_mutation');
     expect(core).toContain('before update or delete on public.power_analysis_runs');
   });
