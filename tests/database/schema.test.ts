@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const tables = [
   'coach_profiles', 'athletes', 'coach_athletes', 'observations', 'test_sessions',
   'derived_results', 'activities', 'planned_workouts', 'prescriptions', 'reports',
-  'audit_events',
+  'audit_events', 'power_curve_snapshots', 'power_analysis_runs',
 ];
 
 function sql(name: string) {
@@ -57,6 +57,29 @@ describe('database schema', () => {
     expect(core).toContain('prevent_approved_prescription_mutation');
     expect(core).toContain('prevent_acknowledged_result_mutation');
     expect(core).toContain('new.evidence_snapshot is distinct from old.evidence_snapshot');
+  });
+
+  it('stores traceable power snapshots and immutable confirmed analyses', () => {
+    const core = sql('01_core.sql');
+    expect(core).toContain('content_hash text not null');
+    expect(core).toContain('unique (athlete_id, sport, environment, oldest, newest, content_hash)');
+    expect(core).toContain('unique (snapshot_id, model, algorithm_version, created_by)');
+    expect(core).toContain('prevent_power_analysis_mutation');
+    expect(core).toContain('before update or delete on public.power_analysis_runs');
+  });
+
+  it('authorizes power evidence reads and edits per athlete', () => {
+    const rls = sql('02_rls.sql');
+    expect(rls).toContain('revoke all on table public.power_curve_snapshots from public, anon, authenticated, service_role');
+    expect(rls).toContain('revoke all on table public.power_analysis_runs from public, anon, authenticated, service_role');
+    expect(rls).toContain('grant select, insert on table public.power_curve_snapshots to authenticated, service_role');
+    expect(rls).toContain('grant select, insert on table public.power_analysis_runs to authenticated, service_role');
+    expect(rls).toContain('power_curve_snapshots_select_authorized');
+    expect(rls).toContain('power_curve_snapshots_insert_authorized');
+    expect(rls).toContain('power_analysis_runs_select_authorized');
+    expect(rls).toContain('power_analysis_runs_insert_authorized');
+    expect(rls).not.toContain('power_analysis_runs_update_authorized');
+    expect(rls).not.toContain('power_analysis_runs_delete_authorized');
   });
 
   it('keeps viewer relationships read-only', () => {

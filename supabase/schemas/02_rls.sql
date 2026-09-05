@@ -43,11 +43,17 @@ alter table public.test_sessions enable row level security;
 alter table public.derived_results enable row level security;
 alter table public.activities enable row level security;
 alter table public.planned_workouts enable row level security;
+alter table public.power_curve_snapshots enable row level security;
+alter table public.power_analysis_runs enable row level security;
 alter table public.prescriptions enable row level security;
 alter table public.reports enable row level security;
 alter table public.audit_events enable row level security;
 
 revoke all on all tables in schema public from anon;
+revoke all on table public.power_curve_snapshots from public, anon, authenticated, service_role;
+revoke all on table public.power_analysis_runs from public, anon, authenticated, service_role;
+grant select, insert on table public.power_curve_snapshots to authenticated, service_role;
+grant select, insert on table public.power_analysis_runs to authenticated, service_role;
 
 create policy coach_profiles_select_own on public.coach_profiles
 for select to authenticated using (id = (select auth.uid()));
@@ -126,6 +132,20 @@ for select to authenticated using ((select public.coach_can_access_athlete(athle
 
 create policy planned_workouts_select_authorized on public.planned_workouts
 for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
+
+create policy power_curve_snapshots_select_authorized on public.power_curve_snapshots
+for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
+create policy power_curve_snapshots_insert_authorized on public.power_curve_snapshots
+for insert to authenticated with check (
+  created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id))
+);
+
+create policy power_analysis_runs_select_authorized on public.power_analysis_runs
+for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
+create policy power_analysis_runs_insert_authorized on public.power_analysis_runs
+for insert to authenticated with check (
+  created_by = (select auth.uid()) and (select public.coach_can_edit_athlete(athlete_id))
+);
 
 create policy prescriptions_select_authorized on public.prescriptions
 for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
