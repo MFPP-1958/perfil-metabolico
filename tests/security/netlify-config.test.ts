@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 const config = readFileSync('netlify.toml', 'utf8');
 const viteConfig = readFileSync('vite.config.ts', 'utf8');
 const connectionFunction = readFileSync('netlify/functions/intervals-connection.ts', 'utf8');
+const powerFunction = readFileSync('netlify/functions/power-analysis.ts', 'utf8');
+const powerClient = readFileSync('src/features/power/powerApi.ts', 'utf8');
 
 describe('production security configuration', () => {
   it('publishes only the compiled application with restrictive headers', () => {
@@ -35,5 +37,14 @@ describe('production security configuration', () => {
     expect(connectionFunction).not.toContain('VITE_SUPABASE_SECRET_KEY');
     expect(connectionFunction).not.toContain('response.text()');
     expect(connectionFunction).not.toMatch(/jsonResponse\([^\n]*INTERVALS_API_KEY/);
+  });
+
+  it('keeps power-analysis authority and server credentials outside the browser', () => {
+    expect(powerClient).toContain('getAccessToken');
+    expect(powerClient).not.toContain('SUPABASE_SECRET_KEY');
+    expect(powerClient).not.toContain('INTERVALS_API_KEY');
+    expect(powerFunction).toContain('authenticateRequest');
+    expect(powerFunction).toContain('SUPABASE_SECRET_KEY');
+    expect(powerFunction).not.toContain('console.');
   });
 });
