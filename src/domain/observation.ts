@@ -9,7 +9,7 @@ export const observationSchema = z.object({
   metricCode: z.enum(metricCodes),
   value: z.number().finite(),
   unit: z.string().min(1),
-  observedAt: z.iso.datetime(),
+  observedAt: z.iso.datetime({ offset: true }),
   origin: z.enum(['manual', 'intervals_icu', 'laboratory', 'field_test', 'device', 'calculated']),
   quality: z.enum(['measured', 'imported_estimate', 'calculated', 'incomplete', 'rejected']),
   protocol: z.object({

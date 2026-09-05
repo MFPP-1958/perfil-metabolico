@@ -30,3 +30,19 @@ export function redactRuntimeError(message, secrets = []) {
   if (secrets.some((secret) => secret && message.includes(secret))) return 'No se pudo iniciar el entorno real.';
   return message;
 }
+
+export function netlifyDevArguments() {
+  return ['functions:serve', '--offline', '--port', '4175', '--functions', 'netlify/functions'];
+}
+
+export function viteDevArguments() {
+  return ['--host', '127.0.0.1', '--port', '4174', '--strictPort'];
+}
+
+export function browserBuildEnvironment(base, local) {
+  return {
+    ...base,
+    VITE_SUPABASE_URL: 'http://127.0.0.1:4174/supabase',
+    VITE_SUPABASE_PUBLISHABLE_KEY: local.VITE_SUPABASE_PUBLISHABLE_KEY,
+  };
+}

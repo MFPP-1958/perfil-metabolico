@@ -1,14 +1,14 @@
 # Estado de aceptación
 
-Fecha de revisión: 4 de septiembre de 2026.
+Fecha de revisión: 5 de septiembre de 2026.
 
 | # | Criterio | Evidencia | Estado |
 |---|---|---|---|
-| 1 | Autenticación y atletas autorizados | `AuthGate`, autorización previa en funciones y pruebas 401/403 | Verificado en pruebas; pendiente prueba con cuentas reales |
+| 1 | Autenticación y atletas autorizados | Acceso por enlace local, autorización previa en funciones y pruebas 401/403 | Verificado con el propietario local y un ciclista real |
 | 2 | Secretos fuera de navegador, URL e informes | Gateway servidor, CSP, escáner de secretos y prueba del bundle | Verificado localmente |
 | 3 | Sin mezcla al cambiar de atleta | Cancelación, clave de solicitud y pruebas de respuesta obsoleta | Verificado localmente |
 | 4 | Fuente, fecha, calidad y protocolo | Contrato `Observation` y componentes de historial | Verificado localmente |
-| 5 | Estados de calidad visibles y persistibles | Catálogo, chips y esquema PostgreSQL | Verificado en contrato; pendiente migración real |
+| 5 | Estados de calidad visibles y persistibles | Catálogo, chips, PostgreSQL local y una estimación importada trazable | Verificado localmente con datos reales |
 | 6 | Métricas fisiológicas separadas | Catálogo tipado y pruebas de no sustitución | Verificado localmente |
 | 7 | Modelos versionados y probados | Casos numéricos y `docs/model-register.md` | Verificado localmente |
 | 8 | Mader experimental sin actualizar zonas | Resultado sin LT1/zonas, aviso y confirmación | Verificado localmente |
@@ -19,8 +19,8 @@ Fecha de revisión: 4 de septiembre de 2026.
 | 13 | Pruebas funcionales, seguridad y accesibilidad | Vitest, Playwright, axe, teclado, cabeceras y CI | Verificado localmente |
 | 14 | Copia restaurable, exportación y borrado | Procedimiento en `docs/operations.md` | Pendiente ejecutar en Supabase real |
 | 15 | Documentación de protección de datos | `docs/privacy-checklist.md` | Pendiente decisiones del responsable y revisión jurídica |
-| 16 | Conexión inicial con Intervals.icu | Función exclusiva del propietario, selección explícita, Llavero de macOS y pruebas de navegador | Verificado con dobles; pendiente aceptación con una clave y un ciclista reales |
+| 16 | Conexión inicial con Intervals.icu | Clave en Llavero, plantilla real, selección explícita, importación y sincronización autenticada | Verificado: 16 ciclistas accesibles, uno incorporado, 43 actividades y una observación importadas |
 
-## Bloqueos externos
+## Alcance pendiente
 
-Docker Desktop y Supabase local están disponibles. La integración de Intervals.icu se ha verificado con respuestas anonimizadas y dobles de prueba. Falta ejecutar `npm run configure:real`, introducir la clave en el cuadro protegido, elegir un ciclista y completar una sincronización real. Hasta entonces no se registran recuentos de datos reales ni se declara cerrada la aceptación de la conexión.
+La aceptación de la conexión local con Intervals.icu queda cerrada. Los datos reales permanecen en el Supabase local de esta aplicación independiente. El despliegue público, las copias restaurables y las decisiones jurídicas de protección de datos siguen pendientes y no forman parte de esta aceptación local.

@@ -15,3 +15,4 @@ tmp/
 *.tsbuildinfo
 supabase/.branches/
 supabase/.temp/
+deno.lock

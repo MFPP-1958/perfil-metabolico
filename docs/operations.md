@@ -2,7 +2,7 @@
 
 ## Entornos y configuración
 
-La aplicación requiere Node.js 22. El navegador solo recibe `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`. Netlify Functions recibe `SUPABASE_URL`, `SUPABASE_SECRET_KEY` e `INTERVALS_API_KEY`. Los secretos se configuran en el gestor del entorno, nunca en archivos versionados.
+La aplicación requiere Node.js 22. El navegador solo recibe la dirección local de Supabase y `VITE_SUPABASE_PUBLISHABLE_KEY`. En desarrollo, Vite reenvía `/supabase` al Supabase local y `/.netlify/functions` al servidor local de funciones. Las funciones reciben `SUPABASE_URL`, `SUPABASE_SECRET_KEY` e `INTERVALS_API_KEY`. Los secretos se configuran en el gestor del entorno, nunca en archivos versionados.
 
 Antes de desplegar: ejecutar `npm ci`, `npm run verify`, revisar la migración SQL generada por Supabase CLI y probarla en un proyecto desechable. El despliegue debe publicar `dist` y mantener las cabeceras de `netlify.toml`.
 

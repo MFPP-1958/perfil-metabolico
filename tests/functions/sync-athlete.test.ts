@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { createSyncHandler } from '../../netlify/functions/sync-athlete';
+import { createSyncHandler, withoutUnchangedSnapshots } from '../../netlify/functions/sync-athlete';
 
 function event(athleteId = 'i123', syncKey = 'sync-2') {
   return {
@@ -65,5 +65,14 @@ describe('athlete synchronization', () => {
     const athleteUpsert = source.slice(source.indexOf('/rest/v1/athletes?'), source.indexOf('let rows'));
     expect(athleteUpsert).toContain('resolution=ignore-duplicates');
     expect(athleteUpsert).not.toContain('resolution=merge-duplicates');
+  });
+
+  it('does not append an unchanged imported physiological snapshot', () => {
+    const incoming = [
+      { metric_code: 'ftp', value: 280, unit: 'W', protocol_name: 'sportSettings[Ride].ftp', protocol_version: 'intervals-openapi-v1' },
+      { metric_code: 'vo2max', value: 61, unit: 'ml·kg⁻¹·min⁻¹', protocol_name: 'sportSettings[Ride].vo2max', protocol_version: 'intervals-openapi-v1' },
+    ];
+    const existing = [{ metric_code: 'ftp', value: 280, unit: 'W', protocol_name: 'sportSettings[Ride].ftp', protocol_version: 'intervals-openapi-v1' }];
+    expect(withoutUnchangedSnapshots(incoming, existing, ['metric_code', 'value', 'unit', 'protocol_name', 'protocol_version'])).toEqual([incoming[1]]);
   });
 });

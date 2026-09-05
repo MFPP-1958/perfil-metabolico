@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const config = readFileSync('netlify.toml', 'utf8');
+const viteConfig = readFileSync('vite.config.ts', 'utf8');
 const connectionFunction = readFileSync('netlify/functions/intervals-connection.ts', 'utf8');
 
 describe('production security configuration', () => {
@@ -16,6 +17,15 @@ describe('production security configuration', () => {
   it('does not allow inline scripts or wildcard connections', () => {
     expect(config).not.toContain("'unsafe-inline'");
     expect(config).not.toMatch(/connect-src\s+\*/);
+    expect(config).not.toContain('127.0.0.1:54321');
+  });
+
+  it('proxies local function requests without weakening the production CSP', () => {
+    expect(viteConfig).toContain("'/.netlify/functions':");
+    expect(viteConfig).toContain("target: 'http://127.0.0.1:4175'");
+    expect(viteConfig).toContain("'/supabase':");
+    expect(viteConfig).toContain("target: 'http://127.0.0.1:54321'");
+    expect(config).not.toContain('127.0.0.1:54321');
   });
 
   it('keeps Intervals and Supabase credentials on the server', () => {

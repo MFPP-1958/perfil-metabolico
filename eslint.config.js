@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['dist', 'legacy', 'public'] },
+  { ignores: ['dist', 'legacy', 'public', '.netlify'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   reactHooks.configs.flat.recommended,

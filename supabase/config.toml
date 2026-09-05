@@ -14,11 +14,11 @@ schema_paths = ["./schemas/*.sql"]
 
 [auth]
 enabled = true
-site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://127.0.0.1:5173"]
+site_url = "http://127.0.0.1:4174"
+additional_redirect_urls = ["http://localhost:4174"]
 enable_signup = false
 
 [auth.email]
-enable_signup = false
+enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true

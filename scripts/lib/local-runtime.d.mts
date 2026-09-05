@@ -7,3 +7,6 @@ export interface LocalSupabaseEnvironment {
 
 export function parseSupabaseEnvironment(output: string): LocalSupabaseEnvironment;
 export function redactRuntimeError(message: string, secrets?: string[]): string;
+export function netlifyDevArguments(): string[];
+export function viteDevArguments(): string[];
+export function browserBuildEnvironment(base: Record<string, string | undefined>, local: LocalSupabaseEnvironment): Record<string, string | undefined>;

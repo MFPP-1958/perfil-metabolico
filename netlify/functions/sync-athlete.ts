@@ -25,6 +25,14 @@ interface SyncDependencies {
   persist(coachId: string, athleteId: string, syncKey: string, data: LoadedAthleteData): Promise<void>;
 }
 
+export function withoutUnchangedSnapshots<T extends Record<string, unknown>>(
+  incoming: T[],
+  existing: Array<Record<string, unknown>>,
+  keys: Array<keyof T>,
+) {
+  return incoming.filter((candidate) => !existing.some((saved) => keys.every((key) => saved[String(key)] === candidate[key])));
+}
+
 async function fetchIntervals(path: string) {
   const key = process.env.INTERVALS_API_KEY;
   if (!key) throw new Error('Missing Intervals configuration');
@@ -195,11 +203,33 @@ async function persistDefault(coachId: string, athleteId: string, syncKey: strin
       }] : []));
     } catch { return []; }
   })();
+  async function loadExistingSnapshots(table: 'observations' | 'derived_results', select: string, extra: Record<string, string>) {
+    const query = new URLSearchParams({ select, athlete_id: `eq.${databaseAthleteId}`, ...extra });
+    const existingResponse = await fetch(`${url}/rest/v1/${table}?${query}`, {
+      headers, signal: AbortSignal.timeout(8_000),
+    });
+    if (!existingResponse.ok) throw new Error(`Unable to compare normalized ${table}`);
+    return existingResponse.json() as Promise<Array<Record<string, unknown>>>;
+  }
+  const importedToWrite = imported.length
+    ? withoutUnchangedSnapshots(imported, await loadExistingSnapshots(
+      'observations',
+      'metric_code,value,unit,protocol_name,protocol_version',
+      { origin: 'eq.intervals_icu' },
+    ), ['metric_code', 'value', 'unit', 'protocol_name', 'protocol_version'])
+    : [];
+  const derivedToWrite = derived.length
+    ? withoutUnchangedSnapshots(derived, await loadExistingSnapshots(
+      'derived_results',
+      'metric_code,value,unit,algorithm_name,algorithm_version',
+      {},
+    ), ['metric_code', 'value', 'unit', 'algorithm_name', 'algorithm_version'])
+    : [];
   const writes = [
     ['activities', activities, 'athlete_id,intervals_activity_id'],
     ['planned_workouts', plannedWorkouts, 'athlete_id,intervals_event_id'],
-    ['observations', imported, ''],
-    ['derived_results', derived, ''],
+    ['observations', importedToWrite, ''],
+    ['derived_results', derivedToWrite, ''],
   ] as const;
   for (const [table, payload, conflict] of writes) {
     if (!payload.length) continue;
