@@ -9,8 +9,16 @@ export class IntervalsClient {
   getActivities(athleteId: string, oldest: string, newest: string) {
     return this.transport.get(`/athlete/${athleteId}/activities`, { oldest, newest });
   }
-  getPowerCurves(athleteId: string, period: string) {
-    return this.transport.get(`/athlete/${athleteId}/power-curves`, { curves: period, type: 'Ride' });
+  getPowerCurves(athleteId: string, period: string, newest: string, indoor?: boolean) {
+    const query: Record<string, string> = {
+      curves: period,
+      newest,
+      type: 'Ride',
+    };
+    if (indoor !== undefined) {
+      query.filters = JSON.stringify([{ field_id: 'indoor', operator: 'eq', value: indoor }]);
+    }
+    return this.transport.get(`/athlete/${athleteId}/power-curves`, query);
   }
   getActivityStreams(activityId: string, types: string) {
     return this.transport.get(`/activity/${activityId}/streams`, { types });

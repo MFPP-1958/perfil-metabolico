@@ -16,7 +16,7 @@ export const athleteSchema = z.object({
 }).loose();
 
 export const powerModelSchema = z.object({
-  type: z.enum(['ECP', 'MORTON_3P']),
+  type: z.enum(['ECP', 'FFT_CURVES', 'MORTON_3P', 'MS_2P']),
   criticalPower: nullableNumber,
   wPrime: nullableNumber,
   pMax: nullableNumber,
@@ -29,7 +29,7 @@ export const powerCurveSchema = z.object({
   start_date_local: z.string().optional(),
   end_date_local: z.string().optional(),
   weight: nullableNumber,
-  secs: z.array(z.number().int().positive()),
+  secs: z.array(z.number().int()),
   values: z.array(z.number().finite()).optional(),
   watts: z.array(z.number().finite()).optional(),
   vo2max_5m: nullableNumber,

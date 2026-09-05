@@ -20,13 +20,19 @@ export function mapSportSettings(input: unknown) {
 export function mapPowerCurve(input: unknown) {
   const curve = powerCurveResponseSchema.parse(input).list[0];
   const values = curve.values ?? curve.watts ?? [];
+  const bestWattsByDuration = new Map<number, number>();
+  curve.secs.forEach((seconds, index) => {
+    const watts = values[index];
+    if (seconds <= 0 || watts <= 0) return;
+    bestWattsByDuration.set(seconds, Math.max(watts, bestWattsByDuration.get(seconds) ?? 0));
+  });
   return {
     period: { start: curve.start_date_local ?? null, end: curve.end_date_local ?? null },
-    points: curve.secs.map((seconds, index) => ({
+    points: [...bestWattsByDuration.entries()].sort(([left], [right]) => left - right).map(([seconds, watts], index) => ({
       seconds,
-      watts: values[index],
+      watts,
       metricCode: seconds === 5 ? 'power_5s' as const : 'power_duration_point' as const,
-      sourceField: `list[0].${curve.values ? 'values' : 'watts'}[${index}]`,
+      sourceField: `normalized.points[${index}]`,
     })),
     models: curve.powerModels.map((model) => ({
       type: model.type,
@@ -36,7 +42,7 @@ export function mapPowerCurve(input: unknown) {
       ftpWatts: model.ftp ?? null,
       r2: model.r2 ?? null,
       sourceField: 'list[0].powerModels',
-    })),
+    })).sort((left, right) => left.type < right.type ? -1 : left.type > right.type ? 1 : 0),
     estimatedVo2max: curve.vo2max_5m ?? null,
   };
 }

@@ -1,28 +1,42 @@
-import { authenticateRequest, listAuthorizedAthleteIds } from './lib/authorization.js';
+import { createHash } from 'node:crypto';
+import { authenticateRequest } from './lib/authorization.js';
 import { jsonResponse } from './lib/http.js';
 import { mapActivity, mapPlannedWorkout, mapPowerCurve, mapSportSettings } from '../../src/server/intervals/mappers.js';
+import { IntervalsClient, type IntervalsTransport } from '../../src/server/intervals/client.js';
+import {
+  MAX_SYNC_BODY_BYTES,
+  parseSyncRequest,
+  type ResolvedSyncRequest,
+} from './lib/analysis-period.js';
 
 interface SyncEvent {
   httpMethod: string;
   headers?: Record<string, string>;
-  queryStringParameters?: Record<string, string>;
+  body?: string | null;
 }
 
 interface LoadedAthleteData {
-  athlete: unknown;
+  athlete: unknown | null;
   activities: unknown[];
   powerCurves: unknown | null;
   plannedWorkouts: unknown[];
   warnings: string[];
+  updated: string[];
+}
+
+interface SupabaseService {
+  url: string;
+  headers: Record<string, string>;
 }
 
 interface SyncDependencies {
   authenticate(event: SyncEvent): Promise<{ id: string } | null>;
-  authorize(coachId: string, athleteId: string): Promise<boolean>;
+  now(): Date;
+  resolveAthlete(coachId: string, athleteId: string): Promise<{ id: string; intervalsAthleteId: string } | null>;
   beginSync(athleteId: string, syncKey: string): Promise<void>;
   isLatestSync(athleteId: string, syncKey: string): Promise<boolean>;
-  load(athleteId: string): Promise<LoadedAthleteData>;
-  persist(coachId: string, athleteId: string, syncKey: string, data: LoadedAthleteData): Promise<void>;
+  load(intervalsAthleteId: string, request: ResolvedSyncRequest): Promise<LoadedAthleteData>;
+  persist(coachId: string, athleteId: string, syncKey: string, data: LoadedAthleteData, request: ResolvedSyncRequest): Promise<void>;
 }
 
 export function withoutUnchangedSnapshots<T extends Record<string, unknown>>(
@@ -33,15 +47,67 @@ export function withoutUnchangedSnapshots<T extends Record<string, unknown>>(
   return incoming.filter((candidate) => !existing.some((saved) => keys.every((key) => saved[String(key)] === candidate[key])));
 }
 
-async function fetchIntervals(path: string) {
+export function createPowerCurveSnapshotPayload(powerCurves: unknown, request: ResolvedSyncRequest) {
+  const normalized = mapPowerCurve(powerCurves);
+  const points = normalized.points.map(({ seconds, watts }) => ({ seconds, watts }));
+  if (!points.length) throw new Error('Power curve does not contain positive normalized points');
+  const sourceModels = normalized.models.map((model) => ({
+    type: model.type,
+    cpWatts: model.cpWatts,
+    wPrimeKj: model.wPrimeKj,
+    pmaxWatts: model.pmaxWatts,
+    ftpWatts: model.ftpWatts,
+    r2: model.r2,
+  }));
+  const canonical = JSON.stringify({ points, sourceModels });
+  return {
+    sport: 'Ride',
+    environment: request.environment,
+    oldest: request.oldest,
+    newest: request.newest,
+    points,
+    source_models: sourceModels,
+    source_version: 'intervals-openapi-v1',
+    content_hash: createHash('sha256').update(canonical).digest('hex'),
+  };
+}
+
+export async function persistPowerCurveSnapshot(
+  fetchImpl: typeof fetch,
+  service: SupabaseService,
+  coachId: string,
+  athleteId: string,
+  request: ResolvedSyncRequest,
+  powerCurves: unknown,
+) {
+  const payload = createPowerCurveSnapshotPayload(powerCurves, request);
+  const response = await fetchImpl(
+    `${service.url}/rest/v1/power_curve_snapshots?on_conflict=athlete_id,sport,environment,oldest,newest,content_hash`,
+    {
+      method: 'POST',
+      headers: { ...service.headers, Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify({ athlete_id: athleteId, created_by: coachId, ...payload }),
+      signal: AbortSignal.timeout(8_000),
+    },
+  );
+  if (!response.ok) throw new Error('Unable to persist normalized power curve snapshot');
+}
+
+async function fetchIntervals(path: string, query?: Readonly<Record<string, string>>) {
   const key = process.env.INTERVALS_API_KEY;
   if (!key) throw new Error('Missing Intervals configuration');
-  const response = await fetch(`https://intervals.icu/api/v1${path}`, {
+  const search = query ? `?${new URLSearchParams(query)}` : '';
+  const response = await fetch(`https://intervals.icu/api/v1${path}${search}`, {
     headers: { Authorization: `Basic ${Buffer.from(`API_KEY:${key}`).toString('base64')}`, Accept: 'application/json' },
     signal: AbortSignal.timeout(12_000),
   });
   if (!response.ok) throw new Error(`Intervals operation failed: ${response.status}`);
   return response.json() as Promise<unknown>;
+}
+
+function defaultIntervalsClient() {
+  const transport: IntervalsTransport = { get: fetchIntervals };
+  return new IntervalsClient(transport);
 }
 
 function supabaseServiceConfiguration() {
@@ -53,7 +119,7 @@ function supabaseServiceConfiguration() {
 
 async function beginSyncDefault(athleteId: string, syncKey: string) {
   const { url, headers } = supabaseServiceConfiguration();
-  const response = await fetch(`${url}/rest/v1/athletes?intervals_athlete_id=eq.${athleteId}`, {
+  const response = await fetch(`${url}/rest/v1/athletes?id=eq.${athleteId}`, {
     method: 'PATCH', headers, body: JSON.stringify({ latest_sync_key: syncKey, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error('Unable to start synchronized athlete request');
@@ -61,7 +127,7 @@ async function beginSyncDefault(athleteId: string, syncKey: string) {
 
 async function isLatestSyncDefault(athleteId: string, syncKey: string) {
   const { url, headers } = supabaseServiceConfiguration();
-  const response = await fetch(`${url}/rest/v1/athletes?select=latest_sync_key&intervals_athlete_id=eq.${athleteId}&limit=1`, {
+  const response = await fetch(`${url}/rest/v1/athletes?select=latest_sync_key&id=eq.${athleteId}&limit=1`, {
     headers, signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error('Unable to check synchronized athlete request');
@@ -69,76 +135,99 @@ async function isLatestSyncDefault(athleteId: string, syncKey: string) {
   return rows[0]?.latest_sync_key === syncKey;
 }
 
-async function loadDefault(athleteId: string): Promise<LoadedAthleteData> {
-  const now = new Date();
-  const newest = now.toISOString().slice(0, 10);
-  const oldest = new Date(now.getTime() - 180 * 86_400_000).toISOString().slice(0, 10);
+export async function loadIntervalsAthleteData(
+  client: IntervalsClient,
+  intervalsAthleteId: string,
+  request: ResolvedSyncRequest,
+): Promise<LoadedAthleteData> {
+  const indoor = request.environment === 'all' ? undefined : request.environment === 'indoor';
   const requests = await Promise.allSettled([
-    fetchIntervals(`/athlete/${athleteId}`),
-    fetchIntervals(`/athlete/${athleteId}/activities?oldest=${oldest}&newest=${newest}&limit=200`),
-    fetchIntervals(`/athlete/${athleteId}/power-curves?curves=180d&type=Ride`),
-    fetchIntervals(`/athlete/${athleteId}/events?oldest=${oldest}&newest=${newest}&category=WORKOUT`),
+    client.getAthlete(intervalsAthleteId),
+    client.getActivities(intervalsAthleteId, request.oldest, request.newest),
+    client.getPowerCurves(intervalsAthleteId, `${request.days}d`, request.newest, indoor),
+    client.getPlannedWorkouts(intervalsAthleteId, request.oldest, request.newest),
   ]);
-  if (requests[0].status === 'rejected') throw new Error('Athlete profile unavailable');
   const value = (index: number) => requests[index].status === 'fulfilled' ? requests[index].value : null;
-  const warnings = ['athlete', 'activities', 'power_curves', 'planned_workouts']
-    .filter((_, index) => requests[index].status === 'rejected');
+  const components = ['athlete', 'activities', 'power_curves', 'planned_workouts'];
+  const athlete = value(0);
+  const rawActivities = value(1);
+  const rawPowerCurves = value(2);
+  const rawPlannedWorkouts = value(3);
+  let powerCurves: unknown | null = rawPowerCurves;
+  try {
+    if (powerCurves !== null) createPowerCurveSnapshotPayload(powerCurves, request);
+  } catch {
+    powerCurves = null;
+  }
+  const usable = [
+    athlete !== null,
+    Array.isArray(rawActivities),
+    powerCurves !== null,
+    Array.isArray(rawPlannedWorkouts),
+  ];
+  const warnings = components.filter((_, index) => !usable[index]);
   return {
-    athlete: value(0),
-    activities: Array.isArray(value(1)) ? value(1) as unknown[] : [],
-    powerCurves: value(2),
-    plannedWorkouts: Array.isArray(value(3)) ? value(3) as unknown[] : [],
+    athlete,
+    activities: Array.isArray(rawActivities) ? rawActivities : [],
+    powerCurves,
+    plannedWorkouts: Array.isArray(rawPlannedWorkouts) ? rawPlannedWorkouts : [],
     warnings,
+    updated: components.filter((_, index) => usable[index]),
   };
 }
 
-async function persistDefault(coachId: string, athleteId: string, syncKey: string, data: LoadedAthleteData) {
-  const url = process.env.SUPABASE_URL?.replace(/\/$/, '');
-  const key = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !key) throw new Error('Missing Supabase configuration');
-  const profile = data.athlete as { name?: unknown; icu_weight?: unknown };
-  const response = await fetch(`${url}/rest/v1/athletes?on_conflict=intervals_athlete_id&select=id`, {
-    method: 'POST',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=ignore-duplicates,return=representation',
-    },
-    body: JSON.stringify({
-      created_by: coachId,
-      intervals_athlete_id: athleteId,
-      display_name: typeof profile.name === 'string' ? profile.name : athleteId,
-      latest_sync_key: syncKey,
-      updated_at: new Date().toISOString(),
-    }),
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!response.ok) throw new Error('Unable to persist synchronized athlete');
-  let rows = await response.json() as { id: string }[];
-  if (!rows[0]?.id) {
-    const lookup = await fetch(`${url}/rest/v1/athletes?select=id&intervals_athlete_id=eq.${athleteId}&limit=1`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8_000),
-    });
-    if (!lookup.ok) throw new Error('Unable to resolve synchronized athlete');
-    rows = await lookup.json() as { id: string }[];
-  }
-  if (!rows[0]?.id) throw new Error('Synchronized athlete did not return an id');
-  const databaseAthleteId = rows[0].id;
-  const headers = {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    'Content-Type': 'application/json',
-    Prefer: 'resolution=merge-duplicates,return=minimal',
-  };
-  const linkResponse = await fetch(`${url}/rest/v1/coach_athletes?on_conflict=coach_id,athlete_id`, {
-    method: 'POST',
-    headers: { ...headers, Prefer: 'resolution=ignore-duplicates,return=minimal' },
-    body: JSON.stringify({ coach_id: coachId, athlete_id: databaseAthleteId, role: 'coach' }),
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!linkResponse.ok) throw new Error('Unable to persist athlete authorization');
+async function loadDefault(intervalsAthleteId: string, request: ResolvedSyncRequest) {
+  return loadIntervalsAthleteData(defaultIntervalsClient(), intervalsAthleteId, request);
+}
 
+async function resolveAthleteDefault(coachId: string, athleteId: string) {
+  const { url, headers } = supabaseServiceConfiguration();
+  const query = new URLSearchParams({
+    select: 'athlete_id,athletes!inner(id,intervals_athlete_id)',
+    coach_id: `eq.${coachId}`,
+    athlete_id: `eq.${athleteId}`,
+    role: 'eq.coach',
+    limit: '1',
+  });
+  const response = await fetch(`${url}/rest/v1/coach_athletes?${query}`, {
+    headers,
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!response.ok) throw new Error('Unable to resolve athlete authorization');
+  const rows = await response.json() as Array<{
+    athlete_id?: unknown;
+    athletes?: { id?: unknown; intervals_athlete_id?: unknown };
+  }>;
+  const row = rows[0];
+  return row?.athlete_id === athleteId
+    && row.athletes?.id === athleteId
+    && typeof row.athletes.intervals_athlete_id === 'string'
+    ? { id: athleteId, intervalsAthleteId: row.athletes.intervals_athlete_id }
+    : null;
+}
+
+export async function persistNormalizedAthleteData(
+  fetchImpl: typeof fetch,
+  service: SupabaseService,
+  now: Date,
+  coachId: string,
+  athleteId: string,
+  syncKey: string,
+  data: LoadedAthleteData,
+  request: ResolvedSyncRequest,
+) {
+  const databaseAthleteId = athleteId;
+  const headers = { ...service.headers, Prefer: 'resolution=merge-duplicates,return=minimal' };
+  const profile = data.athlete as { name?: unknown } | null;
+  if (typeof profile?.name === 'string' && profile.name.length > 0 && profile.name.length <= 120) {
+    const profileResponse = await fetchImpl(`${service.url}/rest/v1/athletes?id=eq.${databaseAthleteId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ display_name: profile.name, latest_sync_key: syncKey, updated_at: now.toISOString() }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!profileResponse.ok) throw new Error('Unable to persist synchronized athlete profile');
+  }
   const activities = data.activities.flatMap((raw) => {
     try {
       const activity = mapActivity(raw);
@@ -170,18 +259,23 @@ async function persistDefault(coachId: string, athleteId: string, syncKey: strin
       }];
     } catch { return []; }
   });
-  const imported = mapSportSettings(data.athlete).metrics.map((metric) => ({
-    athlete_id: databaseAthleteId,
-    created_by: coachId,
-    metric_code: metric.metricCode,
-    value: metric.value,
-    unit: metric.unit,
-    observed_at: new Date().toISOString(),
-    origin: 'intervals_icu',
-    quality: metric.quality,
-    protocol_name: metric.sourceField,
-    protocol_version: 'intervals-openapi-v1',
-  }));
+  const imported = (() => {
+    if (!data.athlete) return [];
+    try {
+      return mapSportSettings(data.athlete).metrics.map((metric) => ({
+        athlete_id: databaseAthleteId,
+        created_by: coachId,
+        metric_code: metric.metricCode,
+        value: metric.value,
+        unit: metric.unit,
+        observed_at: now.toISOString(),
+        origin: 'intervals_icu',
+        quality: metric.quality,
+        protocol_name: metric.sourceField,
+        protocol_version: 'intervals-openapi-v1',
+      }));
+    } catch { return []; }
+  })();
   const derived = (() => {
     if (!data.powerCurves) return [];
     try {
@@ -205,7 +299,7 @@ async function persistDefault(coachId: string, athleteId: string, syncKey: strin
   })();
   async function loadExistingSnapshots(table: 'observations' | 'derived_results', select: string, extra: Record<string, string>) {
     const query = new URLSearchParams({ select, athlete_id: `eq.${databaseAthleteId}`, ...extra });
-    const existingResponse = await fetch(`${url}/rest/v1/${table}?${query}`, {
+    const existingResponse = await fetchImpl(`${service.url}/rest/v1/${table}?${query}`, {
       headers, signal: AbortSignal.timeout(8_000),
     });
     if (!existingResponse.ok) throw new Error(`Unable to compare normalized ${table}`);
@@ -234,16 +328,31 @@ async function persistDefault(coachId: string, athleteId: string, syncKey: strin
   for (const [table, payload, conflict] of writes) {
     if (!payload.length) continue;
     const query = conflict ? `?on_conflict=${conflict}` : '';
-    const write = await fetch(`${url}/rest/v1/${table}${query}`, {
+    const write = await fetchImpl(`${service.url}/rest/v1/${table}${query}`, {
       method: 'POST', headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(8_000),
     });
     if (!write.ok) throw new Error(`Unable to persist normalized ${table}`);
   }
+  if (data.powerCurves) {
+    await persistPowerCurveSnapshot(fetchImpl, service, coachId, databaseAthleteId, request, data.powerCurves);
+  }
+}
+
+async function persistDefault(
+  coachId: string,
+  athleteId: string,
+  syncKey: string,
+  data: LoadedAthleteData,
+  request: ResolvedSyncRequest,
+) {
+  const service = supabaseServiceConfiguration();
+  await persistNormalizedAthleteData(fetch, service, new Date(), coachId, athleteId, syncKey, data, request);
 }
 
 const defaults: SyncDependencies = {
   authenticate: authenticateRequest,
-  authorize: async (coachId, athleteId) => (await listAuthorizedAthleteIds(coachId, fetch, 'coach')).has(athleteId),
+  now: () => new Date(),
+  resolveAthlete: resolveAthleteDefault,
   beginSync: beginSyncDefault,
   isLatestSync: isLatestSyncDefault,
   load: loadDefault,
@@ -254,24 +363,37 @@ export function createSyncHandler(dependencies: Partial<SyncDependencies> = {}) 
   const deps = { ...defaults, ...dependencies };
   return async (event: SyncEvent) => {
     if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Método no permitido.' });
-    const query = event.queryStringParameters ?? {};
-    if (!/^i\d+$/.test(query.athleteId ?? '') || !/^[a-zA-Z0-9_-]{6,80}$/.test(query.syncKey ?? '')) {
+    const rawBody = event.body ?? '';
+    if (Buffer.byteLength(rawBody, 'utf8') > MAX_SYNC_BODY_BYTES) {
+      return jsonResponse(413, { error: 'La solicitud de sincronización es demasiado grande.' });
+    }
+    let request: ResolvedSyncRequest;
+    try {
+      request = parseSyncRequest(JSON.parse(rawBody), deps.now());
+    } catch {
       return jsonResponse(400, { error: 'Solicitud de sincronización no válida.' });
     }
-    const user = await deps.authenticate(event);
-    if (!user) return jsonResponse(401, { error: 'Sesión necesaria o caducada.' });
-    if (!(await deps.authorize(user.id, query.athleteId))) return jsonResponse(403, { error: 'Ciclista no autorizado.' });
-    await deps.beginSync(query.athleteId, query.syncKey);
-    const data = await deps.load(query.athleteId);
-    if (!(await deps.isLatestSync(query.athleteId, query.syncKey))) {
-      return jsonResponse(409, { error: 'Sincronización sustituida por una solicitud más reciente.' });
+    try {
+      const user = await deps.authenticate(event);
+      if (!user) return jsonResponse(401, { error: 'Sesión necesaria o caducada.' });
+      const athlete = await deps.resolveAthlete(user.id, request.athleteId);
+      if (!athlete) return jsonResponse(403, { error: 'Ciclista no autorizado.' });
+      await deps.beginSync(athlete.id, request.syncKey);
+      const data = await deps.load(athlete.intervalsAthleteId, request);
+      if (!(await deps.isLatestSync(athlete.id, request.syncKey))) {
+        return jsonResponse(409, { error: 'Sincronización sustituida por una solicitud más reciente.' });
+      }
+      await deps.persist(user.id, athlete.id, request.syncKey, data, request);
+      const synchronizedAt = deps.now().toISOString();
+      return jsonResponse(data.warnings.length ? 207 : 200, {
+        synchronizedAt,
+        status: data.warnings.length ? 'partial' : 'complete',
+        updated: data.updated ?? [],
+        warnings: data.warnings,
+      });
+    } catch {
+      return jsonResponse(500, { error: 'No se pudo sincronizar el ciclista.' });
     }
-    await deps.persist(user.id, query.athleteId, query.syncKey, data);
-    return jsonResponse(data.warnings.length ? 207 : 200, {
-      athleteId: query.athleteId,
-      synchronized: true,
-      warnings: data.warnings,
-    });
   };
 }
 
