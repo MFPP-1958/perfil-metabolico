@@ -42,7 +42,11 @@ export function mapPowerCurve(input: unknown) {
       ftpWatts: model.ftp ?? null,
       r2: model.r2 ?? null,
       sourceField: 'list[0].powerModels',
-    })).sort((left, right) => left.type < right.type ? -1 : left.type > right.type ? 1 : 0),
+    })).sort((left, right) => {
+      const leftKey = JSON.stringify([left.type, left.cpWatts, left.wPrimeKj, left.pmaxWatts, left.ftpWatts, left.r2]);
+      const rightKey = JSON.stringify([right.type, right.cpWatts, right.wPrimeKj, right.pmaxWatts, right.ftpWatts, right.r2]);
+      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+    }),
     estimatedVo2max: curve.vo2max_5m ?? null,
   };
 }

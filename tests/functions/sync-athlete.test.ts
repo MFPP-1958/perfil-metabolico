@@ -233,6 +233,24 @@ describe('athlete synchronization', () => {
     expect(JSON.stringify(payload)).not.toContain('never-store-this');
   });
 
+  it('keeps the same logical hash when source models arrive reordered', () => {
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
+    };
+    const models = [
+      { type: 'ECP', criticalPower: 265, wPrime: 17000, pMax: 980, ftp: 255 },
+      { type: 'ECP', criticalPower: 260, wPrime: 18000, pMax: 1000, ftp: 250 },
+      { type: 'MORTON_3P', criticalPower: 262, wPrime: 17500, pMax: 990, ftp: 252 },
+    ];
+    const curveWith = (powerModels: typeof models) => ({
+      list: [{ id: '90d', secs: [5], values: [900], powerModels }],
+    });
+
+    expect(createPowerCurveSnapshotPayload(curveWith(models), request).content_hash)
+      .toBe(createPowerCurveSnapshotPayload(curveWith([...models].reverse()), request).content_hash);
+  });
+
   it('uses an idempotent snapshot insert while retaining changed content history', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

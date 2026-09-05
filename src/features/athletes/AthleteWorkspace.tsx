@@ -7,13 +7,14 @@ import { AthleteHeader } from './AthleteHeader';
 import { AthleteSelector, type AthleteSummary } from './AthleteSelector';
 import { DataQualityPanel } from './DataQualityPanel';
 import { IntervalsConnectionPanel } from './IntervalsConnectionPanel';
+import { synchronizeAthlete } from './synchronizeAthlete';
 
 export interface AthleteDetail extends AthleteSummary { observations: Observation[] }
 export interface AthleteApi {
   list(): Promise<AthleteSummary[]>;
   load(id: string, signal?: AbortSignal): Promise<AthleteDetail>;
   createObservation?(observation: Observation): Promise<Observation>;
-  sync?(intervalsId: string): Promise<{ warnings: string[] }>;
+  sync?(athleteId: string): Promise<{ warnings: string[] }>;
 }
 
 const defaultApi: AthleteApi = {
@@ -38,16 +39,7 @@ const defaultApi: AthleteApi = {
     if (!response.ok) throw new Error('No se pudo guardar la observación.');
     return response.json() as Promise<Observation>;
   },
-  async sync(intervalsId) {
-    const token = await getAccessToken();
-    const query = new URLSearchParams({ athleteId: intervalsId, syncKey: crypto.randomUUID() });
-    const response = await fetch(`/.netlify/functions/sync-athlete?${query}`, {
-      method: 'POST', headers: { Authorization: `Bearer ${token}` },
-    });
-    const body = await response.json() as { warnings?: string[]; error?: string };
-    if (![200, 207].includes(response.status)) throw new Error(body.error ?? 'No se pudo sincronizar el ciclista.');
-    return { warnings: body.warnings ?? [] };
-  },
+  sync: synchronizeAthlete,
 };
 
 const demoAthlete: AthleteDetail = {
@@ -112,7 +104,7 @@ export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
     setSyncMessage('');
     setError('');
     try {
-      const result = await api.sync(athlete.intervalsId);
+      const result = await api.sync(athlete.id);
       const refreshed = await api.load(athlete.id);
       setAthlete(refreshed);
       const labels: Record<string, string> = {

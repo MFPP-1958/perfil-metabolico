@@ -50,6 +50,19 @@ describe('Intervals.icu explicit mappers', () => {
     expect(mapped.models[0]).toMatchObject({ cpWatts: 265, wPrimeKj: 17, pmaxWatts: 980, ftpWatts: 255 });
   });
 
+  it('produces the same canonical model order when equivalent input is reordered', () => {
+    const first = [
+      { type: 'ECP', criticalPower: 265, wPrime: 17000, pMax: 980, ftp: 255 },
+      { type: 'ECP', criticalPower: 260, wPrime: 18000, pMax: 1000, ftp: 250 },
+      { type: 'MORTON_3P', criticalPower: 262, wPrime: 17500, pMax: 990, ftp: 252 },
+    ];
+    const build = (powerModels: typeof first) => mapPowerCurve({
+      list: [{ id: '90d', secs: [5], values: [900], powerModels }],
+    }).models;
+
+    expect(build(first)).toEqual(build([...first].reverse()));
+  });
+
   it('maps an activity without retaining the raw object', () => {
     expect(mapActivity(activity)).toEqual(expect.objectContaining({
       sourceId: 'i9001', athleteSourceId: 'i123', durationSeconds: 5400, averagePowerWatts: 218,
