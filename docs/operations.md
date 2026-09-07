@@ -25,7 +25,25 @@ npm run dev:real
 6. Lee el mensaje local en Mailpit: `http://127.0.0.1:54324`.
 7. Supabase Studio está disponible en `http://127.0.0.1:54323`.
 
-En la Mesa de análisis, pulsa **Conectar Intervals.icu**, marca solo los ciclistas que quieras incorporar y confirma la selección. Selecciona después un ciclista y pulsa su botón **Sincronizar**. La aplicación puede informar de una sincronización parcial si Intervals.icu no devuelve alguno de los componentes.
+En la Mesa de análisis, pulsa **Conectar Intervals.icu**, marca solo los ciclistas que quieras incorporar y confirma la selección. El selector **Ciclista activo**, el **Periodo** y el **Entorno** de la barra superior forman un contexto común: cualquier cambio se aplica a todas las rutas y se conserva al recargar el navegador. El periodo inicial es de 90 días; también admite 30, 180, 365 días o fechas personalizadas.
+
+Pulsa **Sincronizar con Intervals.icu** en la barra común para actualizar el perfil, las actividades, la curva de potencia y los entrenamientos planificados del contexto elegido. La fecha de la última sincronización aparece junto al botón. La aplicación puede informar de una sincronización parcial si Intervals.icu no devuelve alguno de esos componentes.
+
+## Potencia real, caché e inmutabilidad
+
+La ruta **Potencia** carga la última instantánea que coincide exactamente con el ciclista, el periodo y el entorno seleccionados. La tabla situada bajo la gráfica contiene la misma evidencia en formato accesible. ECP y Morton 3P solo se habilitan cuando la cobertura permite calcular un ajuste válido.
+
+Si una actualización falla y existe una instantánea compatible, la pantalla conserva esa instantánea y muestra un aviso. Nunca reutiliza una instantánea de otro ciclista, periodo o entorno. Si no existe ninguna compatible, usa **Sincronizar ahora**; si el servidor ya respondió pero la pantalla no cambió, usa **Reintentar carga**. Ante una sincronización parcial, revisa los componentes indicados y repite la operación cuando Intervals.icu vuelva a estar disponible.
+
+**Confirmar análisis** guarda la combinación de instantánea, modelo, versión del algoritmo y entrenador como registro inmutable. Repetir la confirmación devuelve el mismo registro y no crea duplicados. Una nueva curva o una versión distinta del algoritmo genera otro registro trazable. La confirmación no cambia zonas, entrenamientos ni prescripciones.
+
+Para recuperar el entorno local sin perder datos:
+
+1. Comprueba que Docker Desktop está iniciado.
+2. Ejecuta `supabase start`. No uses `supabase db reset` sobre la base que contiene ciclistas reales.
+3. Ejecuta `npm run dev:real` desde la carpeta de esta aplicación.
+4. Si la sesión ha caducado, solicita un enlace y ábrelo desde Mailpit en `http://127.0.0.1:54324`.
+5. Repite la sincronización del contexto. Si 90 días no ofrecen cobertura suficiente, prueba 365 días sin cambiar zonas ni prescripciones.
 
 ## Rotación de claves
 

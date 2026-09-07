@@ -11,7 +11,8 @@ test('production bundle never exposes server secret variable names', async () =>
 });
 
 test('demo data is never loaded without an explicit action', async ({ page }) => {
+  await page.route('**/.netlify/functions/athletes**', async (route) => route.fulfill({ json: [] }));
   await page.goto('/potencia');
-  await expect(page.getByText('Demostración sintética')).toHaveCount(0);
+  await expect(page.getByText('Demostración sintética. No corresponde al ciclista activo.', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('table', { name: 'Potencia observada y modelada' })).toHaveCount(0);
 });
