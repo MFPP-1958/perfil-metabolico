@@ -6,8 +6,10 @@ import { AuthGate } from '../auth/AuthGate';
 import type { AuthAdapter } from '../auth/AuthGate';
 import { athleteApi as defaultAthleteApi, type AthleteApi } from '../features/athletes/athleteApi';
 import { AthleteWorkspace } from '../features/athletes/AthleteWorkspace';
+import { PowerWorkspace } from '../features/power/PowerWorkspace';
+import type { PowerApi } from '../features/power/powerApi';
 import { appRoutes, type AppRoute } from './routes';
-import { DurabilityDemo, EvolutionDemo, PowerDemo, PrescriptionDemo, ReportsDemo, SessionsDemo, TestsDemo } from './DemoViews';
+import { DurabilityDemo, EvolutionDemo, PrescriptionDemo, ReportsDemo, SessionsDemo, TestsDemo } from './DemoViews';
 
 function EmptyWorkspace({ route }: { route: AppRoute }) {
   return (
@@ -43,9 +45,9 @@ function EmptyWorkspace({ route }: { route: AppRoute }) {
   );
 }
 
-function Application() {
+function Application({ powerAnalysisApi }: { powerAnalysisApi?: PowerApi }) {
   const routeContent: Record<string, ReactNode> = {
-    '/potencia': <PowerDemo />, '/durabilidad': <DurabilityDemo />, '/tests': <TestsDemo />, '/sesiones': <SessionsDemo />,
+    '/potencia': <PowerWorkspace api={powerAnalysisApi} />, '/durabilidad': <DurabilityDemo />, '/tests': <TestsDemo />, '/sesiones': <SessionsDemo />,
     '/prescripcion': <PrescriptionDemo />, '/evolucion': <EvolutionDemo />, '/informes': <ReportsDemo />,
   };
   return (
@@ -72,12 +74,20 @@ function Application() {
   );
 }
 
-export function App({ auth, athleteApi = defaultAthleteApi }: { auth?: AuthAdapter; athleteApi?: AthleteApi }) {
+export function App({
+  auth,
+  athleteApi = defaultAthleteApi,
+  powerApi,
+}: {
+  auth?: AuthAdapter;
+  athleteApi?: AthleteApi;
+  powerApi?: PowerApi;
+}) {
   return (
     <AuthGate auth={auth}>
       <BrowserRouter>
         <AnalysisProvider api={athleteApi}>
-          <Application />
+          <Application powerAnalysisApi={powerApi} />
         </AnalysisProvider>
       </BrowserRouter>
     </AuthGate>
