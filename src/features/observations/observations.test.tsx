@@ -2,6 +2,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
+import { AnalysisContextBar } from '../../analysis/AnalysisContextBar';
+import { AnalysisProvider } from '../../analysis/AnalysisProvider';
 import { AthleteWorkspace, type AthleteApi } from '../athletes/AthleteWorkspace';
 
 const athletes = [
@@ -15,10 +17,20 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function renderWorkspace(api: AthleteApi) {
+  window.localStorage.clear();
+  return render(
+    <AnalysisProvider api={api} now={() => new Date('2026-09-05T12:00:00Z')}>
+      <AnalysisContextBar />
+      <AthleteWorkspace />
+    </AnalysisProvider>,
+  );
+}
+
 describe('athlete workspace and observations', () => {
   it('starts empty without assigning demo data to a cyclist', async () => {
     const api: AthleteApi = { list: vi.fn().mockResolvedValue([]), load: vi.fn() };
-    render(<AthleteWorkspace api={api} />);
+    renderWorkspace(api);
     expect(await screen.findByText('No hay ciclistas vinculados')).toBeVisible();
     expect(screen.queryByText('Ciclista de demostración')).not.toBeInTheDocument();
   });
@@ -30,8 +42,8 @@ describe('athlete workspace and observations', () => {
       list: vi.fn().mockResolvedValue(athletes),
       load: vi.fn((id) => id === athletes[0].id ? first.promise : second.promise),
     };
-    render(<AthleteWorkspace api={api} />);
-    const selector = await screen.findByLabelText('Ciclista');
+    renderWorkspace(api);
+    const selector = await screen.findByLabelText('Ciclista activo');
     await userEvent.selectOptions(selector, athletes[0].id);
     await userEvent.selectOptions(selector, athletes[1].id);
     second.resolve({ ...athletes[1], observations: [] });
@@ -54,16 +66,16 @@ describe('athlete workspace and observations', () => {
         }],
       }),
     };
-    render(<AthleteWorkspace api={api} />);
-    await userEvent.selectOptions(await screen.findByLabelText('Ciclista'), athletes[0].id);
+    renderWorkspace(api);
+    await userEvent.selectOptions(await screen.findByLabelText('Ciclista activo'), athletes[0].id);
     expect(await screen.findByText('Estimación importada')).toBeVisible();
     expect(screen.getByText(/Sport settings · v1/)).toBeVisible();
   });
 
   it('rejects invalid manual values before adding history', async () => {
     const api: AthleteApi = { list: vi.fn().mockResolvedValue([athletes[0]]), load: vi.fn().mockResolvedValue({ ...athletes[0], observations: [] }) };
-    render(<AthleteWorkspace api={api} />);
-    await userEvent.selectOptions(await screen.findByLabelText('Ciclista'), athletes[0].id);
+    renderWorkspace(api);
+    await userEvent.selectOptions(await screen.findByLabelText('Ciclista activo'), athletes[0].id);
     await userEvent.type(await screen.findByLabelText('Valor'), '-2');
     await userEvent.click(screen.getByRole('button', { name: 'Añadir observación' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('fuera del rango');
@@ -71,7 +83,7 @@ describe('athlete workspace and observations', () => {
 
   it('has no automatically detectable structural accessibility violations', async () => {
     const api: AthleteApi = { list: vi.fn().mockResolvedValue([]), load: vi.fn() };
-    const { container } = render(<AthleteWorkspace api={api} />);
+    const { container } = renderWorkspace(api);
     await screen.findByText('No hay ciclistas vinculados');
     const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(result.violations).toEqual([]);

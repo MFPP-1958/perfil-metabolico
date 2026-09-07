@@ -1,7 +1,10 @@
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { AnalysisContextBar } from '../analysis/AnalysisContextBar';
+import { AnalysisProvider } from '../analysis/AnalysisProvider';
 import { AuthGate } from '../auth/AuthGate';
 import type { AuthAdapter } from '../auth/AuthGate';
+import { athleteApi as defaultAthleteApi, type AthleteApi } from '../features/athletes/athleteApi';
 import { AthleteWorkspace } from '../features/athletes/AthleteWorkspace';
 import { appRoutes, type AppRoute } from './routes';
 import { DurabilityDemo, EvolutionDemo, PowerDemo, PrescriptionDemo, ReportsDemo, SessionsDemo, TestsDemo } from './DemoViews';
@@ -60,6 +63,7 @@ function Application() {
         <p className="nav-note">Los resultados experimentales requieren confirmación profesional.</p>
       </aside>
       <main className="main-area">
+        <AnalysisContextBar />
         <Routes>
           {appRoutes.map((route) => <Route key={route.path} path={route.path} element={route.path === '/' ? <AthleteWorkspace /> : routeContent[route.path] ?? <EmptyWorkspace route={route} />} />)}
         </Routes>
@@ -68,6 +72,14 @@ function Application() {
   );
 }
 
-export function App({ auth }: { auth?: AuthAdapter }) {
-  return <AuthGate auth={auth}><BrowserRouter><Application /></BrowserRouter></AuthGate>;
+export function App({ auth, athleteApi = defaultAthleteApi }: { auth?: AuthAdapter; athleteApi?: AthleteApi }) {
+  return (
+    <AuthGate auth={auth}>
+      <BrowserRouter>
+        <AnalysisProvider api={athleteApi}>
+          <Application />
+        </AnalysisProvider>
+      </BrowserRouter>
+    </AuthGate>
+  );
 }

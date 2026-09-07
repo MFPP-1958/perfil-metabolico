@@ -1,22 +1,36 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { AnalysisContextBar } from '../../analysis/AnalysisContextBar';
+import { AnalysisProvider } from '../../analysis/AnalysisProvider';
 import { AthleteWorkspace } from './AthleteWorkspace';
 import { synchronizeAthlete } from './synchronizeAthlete';
 
+const realAthleteId = '8ca7cc82-02b0-47ca-84ca-253607a04b72';
+
+function renderIntegratedWorkspace(api: Parameters<typeof AnalysisProvider>[0]['api']) {
+  window.localStorage.clear();
+  return render(
+    <AnalysisProvider api={api} now={() => new Date('2026-09-05T12:00:00Z')}>
+      <AnalysisContextBar />
+      <AthleteWorkspace />
+    </AnalysisProvider>,
+  );
+}
+
 describe('athlete workspace synchronization', () => {
-  it('synchronizes the selected real cyclist and reloads normalized data', async () => {
+  it('uses the single global cyclist selection and removes the synthetic demo action', async () => {
     const api = {
-      list: vi.fn().mockResolvedValue([{ id: 'uuid-1', intervalsId: 'i123', name: 'Ana' }]),
-      load: vi.fn().mockResolvedValue({ id: 'uuid-1', intervalsId: 'i123', name: 'Ana', observations: [] }),
-      sync: vi.fn().mockResolvedValue({ warnings: [] }),
+      list: vi.fn().mockResolvedValue([{ id: realAthleteId, intervalsId: 'i123', name: 'Jaume Santamaria' }]),
+      load: vi.fn().mockResolvedValue({ id: realAthleteId, intervalsId: 'i123', name: 'Jaume Santamaria', observations: [] }),
     };
-    render(<AthleteWorkspace api={api} />);
-    await userEvent.selectOptions(await screen.findByLabelText('Ciclista'), 'uuid-1');
-    await userEvent.click(await screen.findByRole('button', { name: 'Sincronizar Ana' }));
-    expect(api.sync).toHaveBeenCalledWith('uuid-1');
-    expect(api.load).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText('Sincronización completada')).toBeVisible();
+    renderIntegratedWorkspace(api);
+
+    await userEvent.selectOptions(await screen.findByLabelText('Ciclista activo'), realAthleteId);
+    expect(await screen.findByRole('heading', { name: 'Jaume Santamaria' })).toBeVisible();
+    expect(screen.getAllByLabelText('Ciclista activo')).toHaveLength(1);
+    expect(screen.queryByLabelText('Ciclista')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abrir demostración' })).not.toBeInTheDocument();
   });
 
   it('posts the internal UUID and safe 90-day default without identifiers in the URL', async () => {
@@ -46,27 +60,4 @@ describe('athlete workspace synchronization', () => {
     });
   });
 
-  it('never offers synchronization for synthetic demo data', async () => {
-    const api = {
-      list: vi.fn().mockResolvedValue([]),
-      load: vi.fn(),
-      sync: vi.fn(),
-    };
-    render(<AthleteWorkspace api={api} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Abrir demostración' }));
-    expect(screen.queryByRole('button', { name: /Sincronizar/ })).not.toBeInTheDocument();
-    expect(api.sync).not.toHaveBeenCalled();
-  });
-
-  it('reports partial components with familiar Spanish labels', async () => {
-    const api = {
-      list: vi.fn().mockResolvedValue([{ id: 'uuid-1', intervalsId: 'i123', name: 'Ana' }]),
-      load: vi.fn().mockResolvedValue({ id: 'uuid-1', intervalsId: 'i123', name: 'Ana', observations: [] }),
-      sync: vi.fn().mockResolvedValue({ warnings: ['power_curves', 'planned_workouts'] }),
-    };
-    render(<AthleteWorkspace api={api} />);
-    await userEvent.selectOptions(await screen.findByLabelText('Ciclista'), 'uuid-1');
-    await userEvent.click(await screen.findByRole('button', { name: 'Sincronizar Ana' }));
-    expect(await screen.findByText('Sincronización parcial: potencia, entrenamientos')).toBeVisible();
-  });
 });

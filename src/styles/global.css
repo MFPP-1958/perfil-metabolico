@@ -44,6 +44,15 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .navigation-shell nav a.active { border-left-color: var(--focus); background: rgb(255 255 255 / 8%); color: white; }
 .nav-note { margin-top: auto; padding-top: 24px; border-top: 1px solid rgb(255 255 255 / 18%); color: #aec5ca; font-size: .85rem; }
 .main-area { min-width: 0; }
+.analysis-context { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 20px; padding: 16px clamp(24px, 4vw, 58px); border-bottom: 1px solid var(--line); background: #e8f0f1; }
+.analysis-context__fields { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
+.analysis-context label { display: grid; gap: 5px; color: var(--muted); font-size: .88rem; font-weight: 700; }
+.analysis-context select, .analysis-context input { min-width: 132px; min-height: 42px; border: 1px solid var(--line); border-radius: var(--radius-small); padding: 7px 10px; background: white; color: var(--ink); font: inherit; }
+.analysis-context label:first-child select { min-width: min(290px, 48vw); }
+.analysis-context__dates { display: flex; gap: 10px; }
+.analysis-context__action { display: grid; justify-items: end; align-content: end; gap: 5px; }
+.analysis-context__timestamp { margin: 0; color: var(--muted); font-size: .84rem; }
+.analysis-context__message { grid-column: 1 / -1; margin: 0 !important; }
 .workspace { padding: clamp(24px, 4vw, 58px); }
 .workspace-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 28px; }
 .workspace-heading h1 { margin: 0; font: 700 clamp(42px, 6vw, 72px)/.9 'Barlow Condensed', sans-serif; }
@@ -180,6 +189,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .navigation-shell nav { max-width: 100%; display: flex; gap: 4px; overflow-x: auto; }
   .navigation-shell nav a { flex: 0 0 auto; border-left: 0; border-bottom: 3px solid transparent; }
   .navigation-shell nav a.active { border-bottom-color: var(--focus); }
+  .analysis-context { grid-template-columns: 1fr; padding: 14px 16px; }
+  .analysis-context__fields, .analysis-context__dates { align-items: stretch; flex-direction: column; }
+  .analysis-context label:first-child select, .analysis-context select, .analysis-context input { width: 100%; min-width: 0; }
+  .analysis-context__action { justify-items: stretch; }
   .workspace-heading { align-items: start; flex-direction: column; }
   .analysis-stage { grid-template-columns: 1fr; grid-template-rows: 150px auto auto; }
   .analysis-stage aside { border-left: 0; border-top: 1px solid var(--line); }

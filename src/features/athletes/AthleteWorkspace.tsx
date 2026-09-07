@@ -1,158 +1,54 @@
-import { useEffect, useRef, useState } from 'react';
+import { useAnalysis } from '../../analysis/AnalysisContext';
 import type { Observation } from '../../domain/observation';
-import { getAccessToken } from '../../auth/supabase';
 import { ObservationForm } from '../observations/ObservationForm';
 import { ObservationHistory } from '../observations/ObservationHistory';
 import { AthleteHeader } from './AthleteHeader';
-import { AthleteSelector, type AthleteSummary } from './AthleteSelector';
 import { DataQualityPanel } from './DataQualityPanel';
 import { IntervalsConnectionPanel } from './IntervalsConnectionPanel';
-import { synchronizeAthlete } from './synchronizeAthlete';
 
-export interface AthleteDetail extends AthleteSummary { observations: Observation[] }
-export interface AthleteApi {
-  list(): Promise<AthleteSummary[]>;
-  load(id: string, signal?: AbortSignal): Promise<AthleteDetail>;
-  createObservation?(observation: Observation): Promise<Observation>;
-  sync?(athleteId: string): Promise<{ warnings: string[] }>;
-}
+export type { AthleteApi, AthleteDetail } from './athleteApi';
 
-const defaultApi: AthleteApi = {
-  async list() {
-    const token = await getAccessToken();
-    const response = await fetch('/.netlify/functions/athletes', { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) throw new Error('No se pudo cargar la lista de ciclistas.');
-    return response.json() as Promise<AthleteSummary[]>;
-  },
-  async load(id, signal) {
-    const token = await getAccessToken();
-    const query = new URLSearchParams({ athleteId: id });
-    const response = await fetch(`/.netlify/functions/athletes?${query}`, { headers: { Authorization: `Bearer ${token}` }, signal });
-    if (!response.ok) throw new Error('No se pudo cargar el ciclista.');
-    return response.json() as Promise<AthleteDetail>;
-  },
-  async createObservation(observation) {
-    const token = await getAccessToken();
-    const response = await fetch('/.netlify/functions/observations', {
-      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(observation),
-    });
-    if (!response.ok) throw new Error('No se pudo guardar la observación.');
-    return response.json() as Promise<Observation>;
-  },
-  sync: synchronizeAthlete,
-};
+export function AthleteWorkspace() {
+  const {
+    athlete,
+    athleteId,
+    loadingAthlete,
+    reloadRoster,
+    addObservation,
+  } = useAnalysis();
 
-const demoAthlete: AthleteDetail = {
-  id: 'a6540e20-25cf-4c49-bc37-c56d7f5534ac', intervalsId: 'demo', name: 'Ciclista de demostración', observations: [],
-};
-
-export function AthleteWorkspace({ api = defaultApi }: { api?: AthleteApi }) {
-  const [athletes, setAthletes] = useState<AthleteSummary[]>([]);
-  const [selectedId, setSelectedId] = useState('');
-  const [athlete, setAthlete] = useState<AthleteDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
-  const request = useRef(0);
-
-  async function loadRoster() {
-    setLoading(true);
-    setError('');
-    try { setAthletes(await api.list()); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo cargar la lista.'); }
-    finally { setLoading(false); }
-  }
-
-  useEffect(() => {
-    let active = true;
-    void api.list().then((next) => {
-      if (active) setAthletes(next);
-    }).catch((reason) => {
-      if (active) setError(reason instanceof Error ? reason.message : 'No se pudo cargar la lista.');
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
-    return () => { active = false; };
-  }, [api]);
-
-  function select(id: string) {
-    setSelectedId(id);
-    setAthlete(null);
-    setSyncMessage('');
-    if (!id) return;
-    const current = ++request.current;
-    const controller = new AbortController();
-    void api.load(id, controller.signal).then((next) => {
-      if (current === request.current) setAthlete(next);
-    }).catch((reason) => {
-      if (current === request.current && reason?.name !== 'AbortError') setError('No se pudo cargar el ciclista.');
-    });
-  }
-
-  function activateDemo() {
-    request.current += 1;
-    setSelectedId('');
-    setAthlete(demoAthlete);
-    setError('');
-    setSyncMessage('');
-  }
-
-  async function syncAthlete() {
-    if (!athlete || athlete.intervalsId === 'demo' || !api.sync) return;
-    setSyncing(true);
-    setSyncMessage('');
-    setError('');
-    try {
-      const result = await api.sync(athlete.id);
-      const refreshed = await api.load(athlete.id);
-      setAthlete(refreshed);
-      const labels: Record<string, string> = {
-        athlete: 'perfil', activities: 'actividades', power_curves: 'potencia', planned_workouts: 'entrenamientos',
-      };
-      const warnings = result.warnings.map((warning) => labels[warning]).filter(Boolean);
-      setSyncMessage(warnings.length ? `Sincronización parcial: ${warnings.join(', ')}` : 'Sincronización completada');
-    } catch {
-      setError('No se pudo sincronizar el ciclista. Puedes intentarlo de nuevo.');
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  function addObservation(observation: Observation) {
-    setAthlete((current) => current ? { ...current, observations: [observation, ...current.observations] } : current);
-    if (!api.createObservation || athlete?.intervalsId === 'demo') return;
-    void api.createObservation(observation).catch(() => {
-      setAthlete((current) => current ? { ...current, observations: current.observations.filter((item) => item.id !== observation.id) } : current);
-      setError('La observación no se guardó y se ha retirado del historial.');
-    });
+  function add(observation: Observation) {
+    void addObservation(observation);
   }
 
   return (
     <section className="athlete-workspace" aria-labelledby="athlete-workspace-title">
       <header className="workspace-heading">
-        <div><h1 id="athlete-workspace-title">Mesa de análisis</h1><p>Identidad, procedencia y calidad antes de interpretar cualquier número.</p></div>
-        <button type="button" className="secondary-action" onClick={activateDemo}>Abrir demostración</button>
+        <div>
+          <h1 id="athlete-workspace-title">Mesa de análisis</h1>
+          <p>Identidad, procedencia y calidad antes de interpretar cualquier número.</p>
+        </div>
       </header>
-      <IntervalsConnectionPanel onImported={loadRoster} />
-      <AthleteSelector athletes={athletes} value={selectedId} onChange={select} loading={loading} />
-      {error && <p role="alert" className="field-error">{error}</p>}
+      <IntervalsConnectionPanel onImported={reloadRoster} />
       {athlete ? (
         <>
-          <AthleteHeader
-            athlete={athlete}
-            demo={athlete.intervalsId === 'demo'}
-            onSync={api.sync ? () => void syncAthlete() : undefined}
-            syncing={syncing}
-            syncMessage={syncMessage}
-          />
+          <AthleteHeader athlete={athlete} />
           <div className="athlete-data-grid">
             <div><h3>Historial inmutable</h3><ObservationHistory observations={athlete.observations} /></div>
             <DataQualityPanel observations={athlete.observations} />
-            <ObservationForm athleteId={athlete.id} onAdd={addObservation} />
+            <ObservationForm athleteId={athlete.id} onAdd={add} />
           </div>
         </>
-      ) : <div className="workspace-empty"><h2>Selecciona un ciclista</h2><p>El análisis permanece vacío para evitar atribuir datos a la persona equivocada.</p></div>}
+      ) : (
+        <div className="workspace-empty" role={loadingAthlete ? 'status' : undefined}>
+          <h2>{loadingAthlete ? 'Cargando ciclista…' : 'Selecciona un ciclista'}</h2>
+          <p>
+            {athleteId
+              ? 'Estamos preparando sus observaciones y controles de calidad.'
+              : 'El análisis permanece vacío para evitar atribuir datos a la persona equivocada.'}
+          </p>
+        </div>
+      )}
     </section>
   );
 }
