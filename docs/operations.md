@@ -45,6 +45,53 @@ Para recuperar el entorno local sin perder datos:
 4. Si la sesión ha caducado, solicita un enlace y ábrelo desde Mailpit en `http://127.0.0.1:54324`.
 5. Repite la sincronización del contexto. Si 90 días no ofrecen cobertura suficiente, prueba 365 días sin cambiar zonas ni prescripciones.
 
+### Comprobación anonimizada de idempotencia
+
+Este procedimiento compara los recuentos antes y después de repetir una sincronización y una confirmación. Utiliza únicamente el UUID interno de la base local; no uses el identificador externo de Intervals.icu. Desactiva primero el trazado del shell para que el parámetro no se copie a la terminal:
+
+```bash
+set +x
+export MFPP_ACCEPTANCE_ATHLETE_ID='<UUID interno>'
+export MFPP_ACCEPTANCE_OLDEST='AAAA-MM-DD'
+export MFPP_ACCEPTANCE_NEWEST='AAAA-MM-DD'
+export MFPP_ACCEPTANCE_ENVIRONMENT='all'
+```
+
+Valida los parámetros y define la consulta:
+
+```bash
+mfpp_power_counts() {
+  [[ "$MFPP_ACCEPTANCE_ATHLETE_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || return 2
+  [[ "$MFPP_ACCEPTANCE_OLDEST" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || return 2
+  [[ "$MFPP_ACCEPTANCE_NEWEST" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || return 2
+  [[ "$MFPP_ACCEPTANCE_ENVIRONMENT" =~ ^(all|outdoor|indoor)$ ]] || return 2
+  docker exec supabase_db_perfil-metabolico psql -U postgres -d postgres -Atqc "
+    with scoped_snapshots as (
+      select id from public.power_curve_snapshots
+      where athlete_id = '$MFPP_ACCEPTANCE_ATHLETE_ID'::uuid
+        and oldest = '$MFPP_ACCEPTANCE_OLDEST'::date
+        and newest = '$MFPP_ACCEPTANCE_NEWEST'::date
+        and environment = '$MFPP_ACCEPTANCE_ENVIRONMENT'
+    ), counts as (
+      select
+        (select count(*) from scoped_snapshots) as snapshots,
+        (select count(*) from public.power_analysis_runs
+          where snapshot_id in (select id from scoped_snapshots)) as analyses
+    )
+    select json_build_object(
+      'oldest', '$MFPP_ACCEPTANCE_OLDEST',
+      'newest', '$MFPP_ACCEPTANCE_NEWEST',
+      'environment', '$MFPP_ACCEPTANCE_ENVIRONMENT',
+      'status', case when snapshots > 0 and analyses > 0 then 'ready' else 'incomplete' end,
+      'snapshots', snapshots,
+      'analyses', analyses
+    ) from counts;
+  "
+}
+```
+
+Ejecuta `mfpp_power_counts`, repite en la aplicación la sincronización y la confirmación del mismo modelo, y ejecuta otra vez `mfpp_power_counts`. La salida solo contiene fechas, entorno, estado y recuentos. Para una operación idempotente, los recuentos deben mantenerse, por ejemplo de 1/1 a 1/1. Al terminar ejecuta `unset MFPP_ACCEPTANCE_ATHLETE_ID MFPP_ACCEPTANCE_OLDEST MFPP_ACCEPTANCE_NEWEST MFPP_ACCEPTANCE_ENVIRONMENT`.
+
 ## Rotación de claves
 
 Rotar la clave de Intervals.icu y la clave secreta de Supabase cada 180 días, cuando cambie la persona responsable o ante cualquier sospecha. Crear primero la nueva clave, actualizar Netlify, ejecutar una prueba autenticada con un atleta permitido y revocar después la anterior. Registrar fecha, responsable y resultado sin copiar el secreto.

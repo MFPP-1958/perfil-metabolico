@@ -21,7 +21,7 @@ Fecha de revisión: 7 de septiembre de 2026.
 | 15 | Documentación de protección de datos | `docs/privacy-checklist.md` | Pendiente decisiones del responsable y revisión jurídica |
 | 16 | Conexión inicial con Intervals.icu | Clave en Llavero, plantilla real, selección explícita, importación y sincronización autenticada | Verificado: 16 ciclistas accesibles, uno incorporado, 43 actividades y una observación importadas |
 | 17 | Contexto común y Potencia real | Dos ciclistas ficticios con respuestas inversas; axe; teclado; móvil, tableta y reflujo equivalente al 200 %; aceptación local autenticada | Verificado localmente |
-| 18 | Persistencia idempotente de Potencia | Dos sincronizaciones y dos confirmaciones sobre la misma ventana: recuentos estables de 1 instantánea y 1 análisis | Verificado el 7 de septiembre de 2026 con ventana de 90 días |
+| 18 | Persistencia idempotente de Potencia | Dos sincronizaciones y dos confirmaciones sobre la misma ventana: recuentos estables de 1 instantánea y 1 análisis; procedimiento anonimizado y parametrizado en `docs/operations.md` | Verificado el 7 de septiembre de 2026 con ventana de 90 días |
 
 ## Alcance pendiente
 

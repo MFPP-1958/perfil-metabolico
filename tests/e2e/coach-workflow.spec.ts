@@ -88,8 +88,14 @@ test('coach explicitly imports a selected Intervals cyclist', async ({ page }) =
 test('latest cyclist remains authoritative when delayed power requests resolve in reverse order', async ({ page }) => {
   let releaseFirstSnapshot!: () => void;
   const firstSnapshotCanResolve = new Promise<void>((resolve) => { releaseFirstSnapshot = resolve; });
-  let firstSnapshotRequested!: () => void;
-  const firstSnapshotWasRequested = new Promise<void>((resolve) => { firstSnapshotRequested = resolve; });
+  let firstSnapshotRequestCount = 0;
+  let firstSnapshotSettledCount = 0;
+  let releaseStarted = false;
+  let twoFirstSnapshotsRequested!: () => void;
+  const twoFirstSnapshotRequests = new Promise<void>((resolve) => { twoFirstSnapshotsRequested = resolve; });
+  let allFirstSnapshotsSettled!: () => void;
+  const allFirstSnapshotHandlersSettled = new Promise<void>((resolve) => { allFirstSnapshotsSettled = resolve; });
+  let confirmedRequest: { snapshotId: string; model: 'ECP' | 'MORTON_3P' } | null = null;
 
   await page.route('**/.netlify/functions/athletes**', async (route) => {
     const url = new URL(route.request().url());
@@ -111,6 +117,7 @@ test('latest cyclist remains authoritative when delayed power requests resolve i
     const request = route.request();
     if (request.method() === 'POST') {
       const body = request.postDataJSON() as { snapshotId: string; model: 'ECP' | 'MORTON_3P' };
+      confirmedRequest = body;
       await route.fulfill({ json: {
         id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         snapshotId: body.snapshotId,
@@ -131,24 +138,31 @@ test('latest cyclist remains authoritative when delayed power requests resolve i
     const oldest = url.searchParams.get('oldest') ?? '';
     const newest = url.searchParams.get('newest') ?? '';
     if (athleteId === firstAthleteId) {
-      firstSnapshotRequested();
+      firstSnapshotRequestCount += 1;
+      if (firstSnapshotRequestCount === 2) twoFirstSnapshotsRequested();
       await firstSnapshotCanResolve;
       try {
         await route.fulfill({ json: powerSnapshot(firstAthleteId, oldest, newest, 999) });
       } catch {
         // The browser is expected to abort this stale request after changing cyclist.
+      } finally {
+        firstSnapshotSettledCount += 1;
+        if (releaseStarted && firstSnapshotSettledCount === firstSnapshotRequestCount) {
+          allFirstSnapshotsSettled();
+        }
       }
       return;
     }
     await route.fulfill({ json: powerSnapshot(secondAthleteId, oldest, newest, 777) });
+    releaseStarted = true;
     releaseFirstSnapshot();
   });
 
   await page.goto('/');
   await page.getByLabel('Ciclista activo').selectOption(firstAthleteId);
   await page.getByRole('link', { name: 'Potencia' }).click();
-  await firstSnapshotWasRequested;
   await page.getByLabel('Periodo').selectOption('180');
+  await twoFirstSnapshotRequests;
   await page.getByLabel('Ciclista activo').selectOption(secondAthleteId);
 
   await expect(page.getByText('Mejor 5 s')).toBeVisible();
@@ -159,5 +173,10 @@ test('latest cyclist remains authoritative when delayed power requests resolve i
   await page.getByRole('radio', { name: /^ECP/i }).check();
   await page.getByRole('button', { name: 'Confirmar análisis' }).click();
   await expect(page.getByText(/análisis confirmado de forma inmutable/i)).toBeVisible();
+  await allFirstSnapshotHandlersSettled;
+  expect(confirmedRequest).toMatchObject({
+    snapshotId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    model: 'ECP',
+  });
   await expect(page.getByText('999 W')).toHaveCount(0);
 });
