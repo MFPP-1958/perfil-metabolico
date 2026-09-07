@@ -28,11 +28,24 @@ const INTERNAL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 const emptyConfirmation: ConfirmationState = { status: 'idle', result: null, message: '' };
 const emptyLoad: LoadState = { key: '', error: '', snapshot: null };
 
-function recommendedModel(points: PowerSnapshot['points']): PowerDurationModel {
+function modelAvailability(points: PowerSnapshot['points']) {
+  const durations = new Set(points.map((point) => point.seconds));
+  const ecpDurations = new Set(points.filter((point) => point.seconds >= 120).map((point) => point.seconds));
+  return {
+    ecp: ecpDurations.size >= 2,
+    morton: durations.size >= 3,
+  };
+}
+
+function recommendedModel(points: PowerSnapshot['points']): PowerDurationModel | null {
   const quality = assessCurveCompleteness(points);
   const missingShort = quality.warnings.some((warning) => warning.includes('15 s'));
   const missingLong = quality.warnings.some((warning) => warning.includes('20 min'));
-  return points.length >= 3 && !missingShort && !missingLong ? 'MORTON_3P' : 'ECP';
+  const available = modelAvailability(points);
+  if (available.morton && !missingShort && !missingLong) return 'MORTON_3P';
+  if (available.ecp) return 'ECP';
+  if (available.morton) return 'MORTON_3P';
+  return null;
 }
 
 function makeInput(snapshot: PowerSnapshot): PowerDurationInput {
@@ -53,6 +66,22 @@ function fitSnapshot(snapshot: PowerSnapshot, model: PowerDurationModel) {
       error: reason instanceof Error ? reason.message : 'No se pudo ajustar la curva.',
     };
   }
+}
+
+function snapshotMatches(
+  snapshot: PowerSnapshot | null,
+  athleteId: string,
+  oldest: string,
+  newest: string,
+  environment: PowerSnapshot['environment'],
+) {
+  return Boolean(
+    snapshot
+    && snapshot.athleteId === athleteId
+    && snapshot.oldest === oldest
+    && snapshot.newest === newest
+    && snapshot.environment === environment,
+  );
 }
 
 function SyntheticPowerDemo({ onClose }: { onClose(): void }) {
@@ -84,10 +113,9 @@ function SyntheticPowerDemo({ onClose }: { onClose(): void }) {
 export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
   const { athleteId, period, environment, today, sync, synchronize } = useAnalysis();
   const [loadState, setLoadState] = useState<LoadState>(emptyLoad);
-  const [selectedModel, setSelectedModel] = useState<PowerDurationModel>('ECP');
+  const [selectedModel, setSelectedModel] = useState<PowerDurationModel | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmationState>(emptyConfirmation);
   const [retryVersion, setRetryVersion] = useState(0);
-  const [fitVersion, setFitVersion] = useState(0);
   const [demoOpen, setDemoOpen] = useState(false);
   const requestGeneration = useRef(0);
   const confirmationGeneration = useRef(0);
@@ -103,13 +131,22 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
     }
   }, [period, today]);
   const hasValidAthlete = INTERNAL_ID.test(athleteId);
-  const requestKey = hasValidAthlete && resolved.period
-    ? [athleteId, resolved.period.oldest, resolved.period.newest, environment, sync.synchronizedAt ?? '', retryVersion].join('|')
+  const scopeKey = hasValidAthlete && resolved.period
+    ? [athleteId, resolved.period.oldest, resolved.period.newest, environment].join('|')
     : '';
-  const currentLoad = loadState.key === requestKey ? loadState : emptyLoad;
+  const requestKey = scopeKey
+    ? [scopeKey, sync.synchronizedAt ?? '', retryVersion].join('|')
+    : '';
+  const compatibleSnapshot = resolved.period && snapshotMatches(
+    loadState.snapshot,
+    athleteId,
+    resolved.period.oldest,
+    resolved.period.newest,
+    environment,
+  ) ? loadState.snapshot : null;
   const loading = Boolean(requestKey) && loadState.key !== requestKey;
-  const snapshot = currentLoad.snapshot;
-  const error = currentLoad.error;
+  const snapshot = compatibleSnapshot;
+  const error = loadState.key === requestKey ? loadState.error : '';
 
   useEffect(() => {
     if (demoOpen || !hasValidAthlete || !resolved.period) return;
@@ -125,15 +162,20 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
       if (generation !== requestGeneration.current || controller.signal.aborted) return;
       setSelectedModel(recommendedModel(next.points));
       setLoadState({ key: requestKey, error: '', snapshot: next });
-      setFitVersion(0);
       setConfirmation(emptyConfirmation);
     }).catch((reason: unknown) => {
       if (generation !== requestGeneration.current || controller.signal.aborted) return;
-      setLoadState({
+      setLoadState((current) => ({
         key: requestKey,
         error: reason instanceof Error ? reason.message : 'No se pudo cargar la curva de potencia.',
-        snapshot: null,
-      });
+        snapshot: snapshotMatches(
+          current.snapshot,
+          athleteId,
+          resolved.period!.oldest,
+          resolved.period!.newest,
+          environment,
+        ) ? current.snapshot : null,
+      }));
       setConfirmation(emptyConfirmation);
     });
 
@@ -144,10 +186,11 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
     };
   }, [api, athleteId, demoOpen, environment, hasValidAthlete, requestKey, resolved.period]);
 
-  const model = useMemo(() => {
-    void fitVersion;
-    return snapshot ? fitSnapshot(snapshot, selectedModel) : { fit: null, error: '' };
-  }, [fitVersion, selectedModel, snapshot]);
+  const model = useMemo(() => (
+    snapshot && selectedModel
+      ? fitSnapshot(snapshot, selectedModel)
+      : { fit: null, error: snapshot ? 'La curva no permite ajustar ECP ni Morton 3P.' : '' }
+  ), [selectedModel, snapshot]);
   const modelFit = model.fit;
   const modelError = model.error;
 
@@ -159,7 +202,7 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
   }, []);
 
   const confirm = useCallback(async () => {
-    if (!snapshot || !modelFit || confirmation.status === 'saving') return;
+    if (!snapshot || !selectedModel || !modelFit || confirmation.status === 'saving') return;
     const generation = ++confirmationGeneration.current;
     setConfirmation({ status: 'saving', result: null, message: '' });
     try {
@@ -206,7 +249,7 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
     );
   }
 
-  if (loading || (!snapshot && !error)) {
+  if ((loading || (!snapshot && !error)) && !snapshot) {
     return (
       <section className="workspace power-loading" aria-labelledby="power-loading-title">
         <h1 id="power-loading-title">Potencia y duración</h1>
@@ -215,14 +258,21 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
     );
   }
 
-  if (error || !snapshot) {
+  if (!snapshot) {
     const missingSnapshot = /no hay una curva sincronizada/i.test(error);
     return (
       <section className="workspace workspace-empty">
         <h1>{missingSnapshot ? 'No hay curva para este periodo' : 'No se pudo cargar la curva'}</h1>
         <p>{error}</p>
         <div className="power-empty-actions">
-          <button type="button" className="primary-action" onClick={() => void synchronize()}>Sincronizar ahora</button>
+          <button
+            type="button"
+            className="primary-action"
+            disabled={sync.status === 'running'}
+            onClick={() => void synchronize()}
+          >
+            {sync.status === 'running' ? 'Sincronizando…' : 'Sincronizar ahora'}
+          </button>
           <button type="button" className="secondary-action" onClick={retryLoad}>Reintentar carga</button>
           <button type="button" className="text-action" onClick={() => setDemoOpen(true)}>Abrir demostración sintética</button>
         </div>
@@ -230,10 +280,7 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
     );
   }
 
-  const mortonUnavailable = new Set(snapshot.points.map((point) => point.seconds)).size < 3;
-  const ecpUnavailable = new Set(
-    snapshot.points.filter((point) => point.seconds >= 120).map((point) => point.seconds),
-  ).size < 2;
+  const availability = modelAvailability(snapshot.points);
 
   return (
     <section className="power-workspace">
@@ -245,6 +292,16 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
       {sync.status === 'partial' && (
         <div className="power-context-warning" role="status">{sync.message}</div>
       )}
+      {loading && (
+        <div className="power-context-warning" role="status">
+          Actualizando la curva. Se mantiene visible la última instantánea guardada.
+        </div>
+      )}
+      {error && (
+        <div className="power-context-warning" role="alert">
+          No se pudo actualizar la curva. Se muestra la última instantánea guardada. {error}
+        </div>
+      )}
 
       <fieldset className="power-model-selector">
         <legend>Modelo de potencia-duración</legend>
@@ -255,7 +312,7 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
               name="power-model"
               value="ECP"
               checked={selectedModel === 'ECP'}
-              disabled={ecpUnavailable}
+              disabled={!availability.ecp}
               onChange={() => chooseModel('ECP')}
             />
             <span><strong>ECP</strong><small>Prioriza los esfuerzos de 2 minutos o más.</small></span>
@@ -266,7 +323,7 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
               name="power-model"
               value="MORTON_3P"
               checked={selectedModel === 'MORTON_3P'}
-              disabled={mortonUnavailable}
+              disabled={!availability.morton}
               onChange={() => chooseModel('MORTON_3P')}
             />
             <span><strong>Morton 3P</strong><small>Recomendado con cobertura corta y larga completa.</small></span>
@@ -281,7 +338,6 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
         fitError={modelError}
         ftp={snapshot.ftp}
         synchronizedAt={snapshot.synchronizedAt}
-        onRetryFit={() => setFitVersion((current) => current + 1)}
       />
 
       <footer className="power-confirmation">
@@ -292,7 +348,7 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
         <button
           type="button"
           className="primary-action"
-          disabled={!modelFit || confirmation.status === 'saving'}
+          disabled={!selectedModel || !modelFit || confirmation.status === 'saving'}
           onClick={() => void confirm()}
         >
           {confirmation.status === 'saving' ? 'Confirmando…' : 'Confirmar análisis'}
@@ -301,10 +357,13 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
           <p className="confirmation-success" role="status">
             Análisis confirmado de forma inmutable el{' '}
             <time dateTime={confirmation.result.confirmedAt}>
-              {new Date(confirmation.result.confirmedAt).toLocaleDateString('es-ES', {
+              {new Date(confirmation.result.confirmedAt).toLocaleString('es-ES', {
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
               })}
             </time>.
           </p>

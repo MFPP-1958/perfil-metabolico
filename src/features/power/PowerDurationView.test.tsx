@@ -45,7 +45,7 @@ describe('PowerDurationView', () => {
     expect(screen.getByText('Todas las actividades')).toBeVisible();
   });
 
-  it('omits missing exact durations and recovers from a failed fit', () => {
+  it('omits missing exact durations and explains how to obtain an adjustable curve', () => {
     render(<PowerDurationView input={{
       points: [{ seconds: 10, watts: 850 }], sport: 'Ride', period: '30 días', indoor: true,
     }} model="ECP" />);
@@ -53,5 +53,7 @@ describe('PowerDurationView', () => {
     expect(screen.queryByText('Mejor 5 s')).not.toBeInTheDocument();
     expect(screen.queryByText('Mejor 1 min')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'No se puede ajustar este modelo' })).toBeVisible();
+    expect(screen.getByText(/sincroniza.*más duraciones/i)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Reintentar cálculo' })).not.toBeInTheDocument();
   });
 });

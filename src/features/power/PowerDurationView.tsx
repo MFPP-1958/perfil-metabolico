@@ -5,12 +5,11 @@ import { PowerCurveChart } from './PowerCurveChart';
 
 interface PowerDurationViewProps {
   input: PowerDurationInput;
-  model: PowerDurationModel;
+  model: PowerDurationModel | null;
   fit?: PowerDurationFit | null;
   fitError?: string;
   ftp?: PowerSnapshot['ftp'];
   synchronizedAt?: string;
-  onRetryFit?: () => void;
 }
 
 const observedDurations = [
@@ -25,7 +24,8 @@ function environmentLabel(indoor: boolean | null) {
   return indoor ? 'Rodillo' : 'Exterior';
 }
 
-function calculateFit(input: PowerDurationInput, model: PowerDurationModel) {
+function calculateFit(input: PowerDurationInput, model: PowerDurationModel | null) {
+  if (!model) return { fit: null, error: 'La curva no permite ajustar ECP ni Morton 3P.' };
   try {
     return { fit: fitPowerDuration(input, model), error: '' };
   } catch (reason) {
@@ -40,7 +40,6 @@ export function PowerDurationView({
   fitError = '',
   ftp = null,
   synchronizedAt,
-  onRetryFit,
 }: PowerDurationViewProps) {
   const calculated = suppliedFit === undefined ? calculateFit(input, model) : { fit: suppliedFit, error: fitError };
   const fit = calculated.fit;
@@ -76,7 +75,7 @@ export function PowerDurationView({
         <section className="power-fit-error" aria-labelledby="fit-error-title">
           <h2 id="fit-error-title">No se puede ajustar este modelo</h2>
           <p>{error || 'No se pudo ajustar la curva.'}</p>
-          {onRetryFit && <button type="button" className="secondary-action" onClick={onRetryFit}>Reintentar cálculo</button>}
+          <p>Sincroniza la curva con más duraciones o elige otro modelo disponible.</p>
         </section>
       ) : (
         <div className="power-model-layout">

@@ -127,6 +127,30 @@ describe('PowerWorkspace', () => {
     expect(synchronize).toHaveBeenCalledOnce();
   });
 
+  it('keeps the last compatible snapshot visible when a refresh fails', async () => {
+    const api: PowerApi = {
+      load: vi.fn()
+        .mockResolvedValueOnce(snapshot())
+        .mockRejectedValueOnce(new Error('Intervals.icu no respondió')),
+      confirm: vi.fn(),
+    };
+    const rendered = renderWorkspace(api, context({
+      sync: { status: 'complete', synchronizedAt: '2026-09-05T10:00:00.000Z', message: 'Sincronización completada' },
+    }));
+    expect((await screen.findAllByText('950 W'))[0]).toBeVisible();
+
+    rendered.rerender(
+      <AnalysisContext.Provider value={context({
+        sync: { status: 'complete', synchronizedAt: '2026-09-05T11:00:00.000Z', message: 'Sincronización completada' },
+      })}>
+        <PowerWorkspace api={api} />
+      </AnalysisContext.Provider>,
+    );
+
+    expect(await screen.findByText(/no se pudo actualizar.*última instantánea guardada/i)).toBeVisible();
+    expect(screen.getAllByText('950 W')[0]).toBeVisible();
+  });
+
   it.each([
     [{ status: 'failed', synchronizedAt: '2026-08-30T09:00:00.000Z', message: 'Intervals.icu no respondió' } as const, /instantánea guardada/i],
     [{ status: 'partial', synchronizedAt: '2026-09-05T10:00:00.000Z', message: 'Sincronización parcial: actividades' } as const, /sincronización parcial/i],
@@ -147,12 +171,25 @@ describe('PowerWorkspace', () => {
     expect(screen.getAllByText(/pd-morton-3p@1\.0\.0/)[0]).toBeVisible();
   });
 
-  it('falls back to ECP and renders fit failures without throwing the route', async () => {
+  it('uses Morton when it is adjustable but ECP lacks two long durations', async () => {
+    const mortonOnly = snapshot({
+      points: [{ seconds: 5, watts: 900 }, { seconds: 60, watts: 500 }, { seconds: 300, watts: 330 }],
+    });
+    renderWorkspace(apiReturning(mortonOnly));
+
+    expect(await screen.findByRole('radio', { name: /Morton 3P/i })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /^ECP/i })).toBeDisabled();
+  });
+
+  it('selects no disabled model and explains when neither fit is possible', async () => {
     const sparse = snapshot({ points: [{ seconds: 60, watts: 500 }] });
     renderWorkspace(apiReturning(sparse));
 
     expect(await screen.findByRole('heading', { name: 'No se puede ajustar este modelo' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Reintentar cálculo' })).toBeVisible();
+    expect(screen.getByRole('radio', { name: /^ECP/i })).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: /Morton 3P/i })).not.toBeChecked();
+    expect(screen.getByText(/sincroniza.*más duraciones/i)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Reintentar cálculo' })).not.toBeInTheDocument();
   });
 
   it('confirms the visible server-checked result and renders its immutable timestamp', async () => {
@@ -182,8 +219,23 @@ describe('PowerWorkspace', () => {
       quality: { complete: true, warnings: [] },
       confirmedAt: '2026-09-05T12:00:00.000Z',
     }));
-    expect(await screen.findByText(/confirmado de forma inmutable/i)).toHaveTextContent('05/09/2026');
+    const confirmed = await screen.findByText(/confirmado de forma inmutable/i);
+    expect(confirmed).toHaveTextContent('05/09/2026');
+    expect(confirmed.querySelector('time')).toHaveTextContent(/\d{1,2}:\d{2}/);
     expect(screen.getByText(/no modifica zonas ni prescripciones/i)).toBeVisible();
+  });
+
+  it('disables synchronization while the global synchronization is running', async () => {
+    const synchronize = vi.fn().mockResolvedValue(undefined);
+    renderWorkspace(
+      apiReturning(new Error('No hay una curva sincronizada para el periodo y entorno seleccionados.')),
+      context({ sync: { status: 'running', synchronizedAt: null }, synchronize }),
+    );
+
+    const button = await screen.findByRole('button', { name: 'Sincronizando…' });
+    expect(button).toBeDisabled();
+    await userEvent.click(button);
+    expect(synchronize).not.toHaveBeenCalled();
   });
 
   it('aborts and ignores an old response after the cyclist changes', async () => {

@@ -33,12 +33,15 @@ describe('application analysis context', () => {
       list: vi.fn().mockResolvedValue([{ id: athleteId, intervalsId: 'i202', name: 'Jaume Santamaria' }]),
       load: vi.fn().mockResolvedValue({ id: athleteId, intervalsId: 'i202', name: 'Jaume Santamaria', observations: [] }),
     };
+    const newest = new Date().toISOString().slice(0, 10);
+    const oldestDate = new Date(`${newest}T00:00:00.000Z`);
+    oldestDate.setUTCDate(oldestDate.getUTCDate() - 89);
     const powerApi: PowerApi = {
       load: vi.fn().mockResolvedValue({
         id: 'ab77d6b7-cbcf-49a4-920c-519f9e29e895',
         athleteId,
-        oldest: '2026-06-08',
-        newest: '2026-09-05',
+        oldest: oldestDate.toISOString().slice(0, 10),
+        newest,
         environment: 'all',
         points: [{ seconds: 120, watts: 410 }, { seconds: 300, watts: 330 }],
         sourceModels: [],
