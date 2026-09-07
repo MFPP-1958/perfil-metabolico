@@ -192,6 +192,23 @@ describe('PowerWorkspace', () => {
     expect(screen.queryByRole('button', { name: 'Reintentar cálculo' })).not.toBeInTheDocument();
   });
 
+  it('does not select Morton when three valid durations cannot produce a physiological fit', async () => {
+    const flatCurve = snapshot({
+      points: [
+        { seconds: 5, watts: 200 },
+        { seconds: 60, watts: 200 },
+        { seconds: 300, watts: 200 },
+      ],
+    });
+    renderWorkspace(apiReturning(flatCurve));
+
+    expect(await screen.findByRole('heading', { name: 'No se puede ajustar este modelo' })).toBeVisible();
+    expect(screen.getByRole('radio', { name: /^ECP/i })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /Morton 3P/i })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /^ECP/i })).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: /Morton 3P/i })).not.toBeChecked();
+  });
+
   it('confirms the visible server-checked result and renders its immutable timestamp', async () => {
     let complete!: (value: Awaited<ReturnType<PowerApi['confirm']>>) => void;
     const pending = new Promise<Awaited<ReturnType<PowerApi['confirm']>>>((done) => { complete = done; });

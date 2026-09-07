@@ -28,12 +28,30 @@ const INTERNAL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 const emptyConfirmation: ConfirmationState = { status: 'idle', result: null, message: '' };
 const emptyLoad: LoadState = { key: '', error: '', snapshot: null };
 
+function canFit(points: PowerSnapshot['points'], model: PowerDurationModel) {
+  try {
+    const fit = fitPowerDuration({
+      points,
+      sport: 'Ride',
+      period: 'comprobación de disponibilidad',
+      indoor: null,
+    }, model);
+    return Number.isFinite(fit.cpWatts)
+      && fit.cpWatts > 0
+      && Number.isFinite(fit.wPrimeJoules)
+      && fit.wPrimeJoules > 0
+      && (fit.pmaxWatts == null || (Number.isFinite(fit.pmaxWatts) && fit.pmaxWatts > fit.cpWatts));
+  } catch {
+    return false;
+  }
+}
+
 function modelAvailability(points: PowerSnapshot['points']) {
   const durations = new Set(points.map((point) => point.seconds));
   const ecpDurations = new Set(points.filter((point) => point.seconds >= 120).map((point) => point.seconds));
   return {
-    ecp: ecpDurations.size >= 2,
-    morton: durations.size >= 3,
+    ecp: ecpDurations.size >= 2 && canFit(points, 'ECP'),
+    morton: durations.size >= 3 && canFit(points, 'MORTON_3P'),
   };
 }
 
@@ -193,6 +211,10 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
   ), [selectedModel, snapshot]);
   const modelFit = model.fit;
   const modelError = model.error;
+  const availability = useMemo(
+    () => snapshot ? modelAvailability(snapshot.points) : { ecp: false, morton: false },
+    [snapshot],
+  );
 
   const retryLoad = useCallback(() => setRetryVersion((current) => current + 1), []);
   const chooseModel = useCallback((model: PowerDurationModel) => {
@@ -279,8 +301,6 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
       </section>
     );
   }
-
-  const availability = modelAvailability(snapshot.points);
 
   return (
     <section className="power-workspace">
