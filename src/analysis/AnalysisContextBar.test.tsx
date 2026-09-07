@@ -27,8 +27,8 @@ function createApi(sync: AthleteApi['sync'] = vi.fn().mockResolvedValue({
   } satisfies AthleteApi;
 }
 
-function renderBar(api: AthleteApi = createApi()) {
-  window.localStorage.clear();
+function renderBar(api: AthleteApi = createApi(), clearStorage = true) {
+  if (clearStorage) window.localStorage.clear();
   return render(
     <AnalysisProvider
       api={api}
@@ -93,6 +93,30 @@ describe('AnalysisContextBar', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('posterior');
   });
 
+  it('shows restored custom dates and synchronizes the same visible interval', async () => {
+    const rosterRequest = deferred<Array<{ id: string; intervalsId: string; name: string }>>();
+    const api = createApi();
+    api.list.mockReturnValue(rosterRequest.promise);
+    window.localStorage.setItem('mfpp.analysis.preferences.v1', JSON.stringify({
+      athleteId,
+      period: { preset: 'custom', oldest: '2026-08-10', newest: '2026-09-01' },
+      environment: 'outdoor',
+    }));
+
+    renderBar(api, false);
+    expect(screen.queryByLabelText('Fecha inicial')).not.toBeInTheDocument();
+    rosterRequest.resolve([{ id: athlete.id, intervalsId: athlete.intervalsId, name: athlete.name }]);
+
+    expect(await screen.findByLabelText('Fecha inicial')).toHaveValue('2026-08-10');
+    expect(screen.getByLabelText('Fecha final')).toHaveValue('2026-09-01');
+    await userEvent.click(screen.getByRole('button', { name: 'Sincronizar con Intervals.icu' }));
+    await waitFor(() => expect(api.sync).toHaveBeenCalledWith(expect.objectContaining({
+      oldest: '2026-08-10',
+      newest: '2026-09-01',
+      environment: 'outdoor',
+    })));
+  });
+
   it('disables synchronization until a cyclist is selected', async () => {
     renderBar();
     expect(await screen.findByRole('option', { name: 'Jaume Santamaria' })).toBeVisible();
@@ -127,5 +151,18 @@ describe('AnalysisContextBar', () => {
     const notification = await screen.findByText(message);
     expect(notification).toBeVisible();
     if (outcome instanceof Error) expect(notification).toHaveAttribute('role', 'alert');
+  });
+
+  it.each([
+    ['periodo', 'Periodo', '180'],
+    ['entorno', 'Entorno', 'indoor'],
+  ])('clears a failed synchronization error after changing %s', async (_name, label, value) => {
+    renderBar(createApi(vi.fn().mockRejectedValue(new Error('Error de sincronización anterior.'))));
+    await selectAthlete();
+    await userEvent.click(screen.getByRole('button', { name: 'Sincronizar con Intervals.icu' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Error de sincronización anterior.');
+
+    await userEvent.selectOptions(screen.getByLabelText(label), value);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

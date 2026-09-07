@@ -174,6 +174,7 @@ export function AnalysisProvider({
     analysisGeneration.current += 1;
     setPeriodState(next);
     setSync(EMPTY_SYNC);
+    setError('');
   }, [today]);
 
   const setEnvironment = useCallback((next: AnalysisEnvironment) => {
@@ -181,6 +182,7 @@ export function AnalysisProvider({
     analysisGeneration.current += 1;
     setEnvironmentState(next);
     setSync(EMPTY_SYNC);
+    setError('');
   }, []);
 
   const synchronize = useCallback(async () => {

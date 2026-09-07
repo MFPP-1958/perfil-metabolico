@@ -1,6 +1,6 @@
 import { resolvePeriod } from '../../analysis/period';
 import { getAccessToken } from '../../auth/supabase';
-import type { AthleteSyncRequest, AthleteSyncResult } from './athleteApi';
+import type { AthleteSyncRequest, AthleteSyncResult } from './athleteContracts';
 
 interface SynchronizeAthleteDependencies {
   getToken(): Promise<string | null>;

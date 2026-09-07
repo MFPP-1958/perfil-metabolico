@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { resolvePeriod } from './period';
 import { useAnalysis } from './AnalysisContext';
 import type { AnalysisEnvironment, AnalysisPeriod } from './types';
@@ -42,21 +42,20 @@ export function AnalysisContextBar() {
     setEnvironment,
     synchronize,
   } = useAnalysis();
-  const initial = useMemo(() => initialCustomPeriod(period, today), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [customOldest, setCustomOldest] = useState(initial.oldest);
-  const [customNewest, setCustomNewest] = useState(initial.newest);
+  const [customDraft, setCustomDraft] = useState<{ oldest: string; newest: string } | null>(null);
+  const customPeriod = customDraft ?? initialCustomPeriod(period, today);
   const customError = period.preset === 'custom'
-    ? validateCustomPeriod(customOldest, customNewest, today)
+    ? validateCustomPeriod(customPeriod.oldest, customPeriod.newest, today)
     : '';
 
   function changePeriod(value: string) {
     if (value === 'custom') {
       const next = initialCustomPeriod(period, today);
-      setCustomOldest(next.oldest);
-      setCustomNewest(next.newest);
+      setCustomDraft(null);
       setPeriod({ preset: 'custom', ...next });
       return;
     }
+    setCustomDraft(null);
     setPeriod({ preset: Number(value) as 30 | 90 | 180 | 365 });
   }
 
@@ -67,13 +66,15 @@ export function AnalysisContextBar() {
   }
 
   function updateOldest(value: string) {
-    setCustomOldest(value);
-    changeCustomDates(value, customNewest);
+    const next = { oldest: value, newest: customPeriod.newest };
+    setCustomDraft(next);
+    changeCustomDates(next.oldest, next.newest);
   }
 
   function updateNewest(value: string) {
-    setCustomNewest(value);
-    changeCustomDates(customOldest, value);
+    const next = { oldest: customPeriod.oldest, newest: value };
+    setCustomDraft(next);
+    changeCustomDates(next.oldest, next.newest);
   }
 
   const statusMessage = sync.status === 'complete' || sync.status === 'partial'
@@ -111,11 +112,11 @@ export function AnalysisContextBar() {
           <div className="analysis-context__dates">
             <label>
               <span>Fecha inicial</span>
-              <input type="date" aria-label="Fecha inicial" value={customOldest} max={today} onChange={(event) => updateOldest(event.target.value)} />
+              <input type="date" aria-label="Fecha inicial" value={customPeriod.oldest} max={today} onChange={(event) => updateOldest(event.target.value)} />
             </label>
             <label>
               <span>Fecha final</span>
-              <input type="date" aria-label="Fecha final" value={customNewest} max={today} onChange={(event) => updateNewest(event.target.value)} />
+              <input type="date" aria-label="Fecha final" value={customPeriod.newest} max={today} onChange={(event) => updateNewest(event.target.value)} />
             </label>
           </div>
         )}

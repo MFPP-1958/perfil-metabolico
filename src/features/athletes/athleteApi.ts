@@ -1,24 +1,13 @@
 import { getAccessToken } from '../../auth/supabase';
 import type { Observation } from '../../domain/observation';
+import type { AthleteSyncRequest, AthleteSyncResult } from './athleteContracts';
 import type { AthleteSummary } from './AthleteSelector';
 import { synchronizeAthlete } from './synchronizeAthlete';
 
+export type { AthleteSyncRequest, AthleteSyncResult } from './athleteContracts';
+
 export interface AthleteDetail extends AthleteSummary {
   observations: Observation[];
-}
-
-export interface AthleteSyncRequest {
-  athleteId: string;
-  oldest: string;
-  newest: string;
-  environment: 'all' | 'outdoor' | 'indoor';
-  syncKey: string;
-}
-
-export interface AthleteSyncResult {
-  status: 'complete' | 'partial';
-  synchronizedAt: string;
-  warnings: string[];
 }
 
 export interface AthleteApi {
