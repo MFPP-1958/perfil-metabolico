@@ -39,6 +39,7 @@ export async function synchronizeAthlete(
     status?: 'complete' | 'partial';
     synchronizedAt?: string;
     warnings?: string[];
+    counts?: Record<string, { received: number; accepted: number; rejected: number }>;
     error?: string;
   };
   if (![200, 207].includes(response.status)) throw new Error(body.error ?? 'No se pudo sincronizar el ciclista.');
@@ -47,5 +48,6 @@ export async function synchronizeAthlete(
     status: body.status ?? (warnings.length ? 'partial' : 'complete'),
     synchronizedAt: body.synchronizedAt ?? now().toISOString(),
     warnings,
+    counts: body.counts,
   };
 }

@@ -30,7 +30,9 @@ test('populated Power analysis is accessible and every control is keyboard reach
   await page.route('**/.netlify/functions/athletes**', async (route) => {
     const url = new URL(route.request().url());
     const fixture = { id: populatedAthleteId, intervalsId: 'fixture-power', name: 'Ciclista de prueba', observations: [] };
-    await route.fulfill({ json: url.searchParams.has('athleteId') ? fixture : [fixture] });
+    await route.fulfill({ json: url.searchParams.get('syncState') === 'true'
+      ? null
+      : url.searchParams.has('athleteId') ? fixture : [fixture] });
   });
   await page.route('**/.netlify/functions/power-analysis**', async (route) => {
     const url = new URL(route.request().url());

@@ -17,7 +17,9 @@ for (const viewport of [{ name: 'mobile', width: 390, height: 844 }, { name: 'ta
     await page.route('**/.netlify/functions/athletes**', async (route) => {
       const url = new URL(route.request().url());
       const fixture = { id: responsiveAthleteId, intervalsId: 'fixture-responsive', name: 'Ciclista de prueba', observations: [] };
-      await route.fulfill({ json: url.searchParams.has('athleteId') ? fixture : [fixture] });
+      await route.fulfill({ json: url.searchParams.get('syncState') === 'true'
+        ? null
+        : url.searchParams.has('athleteId') ? fixture : [fixture] });
     });
     await page.route('**/.netlify/functions/power-analysis**', async (route) => {
       const url = new URL(route.request().url());

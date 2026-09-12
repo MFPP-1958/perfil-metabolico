@@ -5,11 +5,15 @@ import { describe, expect, it } from 'vitest';
 const tables = [
   'coach_profiles', 'athletes', 'coach_athletes', 'observations', 'test_sessions',
   'derived_results', 'activities', 'planned_workouts', 'prescriptions', 'reports',
-  'audit_events', 'power_curve_snapshots', 'power_analysis_runs',
+  'audit_events', 'athlete_sync_states', 'power_curve_snapshots', 'power_analysis_runs',
 ];
 
 function sql(name: string) {
   return readFileSync(resolve(`supabase/schemas/${name}`), 'utf8').toLowerCase();
+}
+
+function migration(name: string) {
+  return readFileSync(resolve(`supabase/migrations/${name}`), 'utf8').toLowerCase();
 }
 
 describe('database schema', () => {
@@ -67,12 +71,13 @@ describe('database schema', () => {
     expect(core).toContain("environment text not null check (environment in ('all', 'outdoor', 'indoor'))");
     expect(core).toContain("model text not null check (model in ('ecp', 'morton_3p'))");
     expect(core).toContain('check (oldest <= newest)');
-    expect(core).toContain('snapshot_id uuid not null references public.power_curve_snapshots(id) on delete restrict');
+    expect(core).toContain('foreign key (snapshot_id, athlete_id) references public.power_curve_snapshots(id, athlete_id) on delete restrict');
     expect(core).toContain('cp_watts numeric not null check (cp_watts >= 0)');
     expect(core).toContain('w_prime_joules numeric not null check (w_prime_joules >= 0)');
     expect(core).toContain('pmax_watts numeric check (pmax_watts is null or pmax_watts >= 0)');
     expect(core).toContain('rmse_watts numeric not null check (rmse_watts >= 0)');
     expect(core).toContain('unique (athlete_id, sport, environment, oldest, newest, content_hash)');
+    expect(core).toContain('unique (id, athlete_id)');
     expect(core).toContain('unique (snapshot_id, model, algorithm_version, created_by)');
     expect(core).toContain('create index power_curve_snapshots_created_by_idx\non public.power_curve_snapshots (created_by)');
     expect(core).toContain('create index power_analysis_runs_created_by_idx\non public.power_analysis_runs (created_by)');
@@ -80,18 +85,32 @@ describe('database schema', () => {
     expect(core).toContain('before update or delete on public.power_analysis_runs');
   });
 
-  it('authorizes power evidence reads and edits per athlete', () => {
+  it('keeps power evidence client-readable and server-write-only', () => {
     const rls = sql('02_rls.sql');
     expect(rls).toContain('revoke all on table public.power_curve_snapshots from public, anon, authenticated, service_role');
     expect(rls).toContain('revoke all on table public.power_analysis_runs from public, anon, authenticated, service_role');
-    expect(rls).toContain('grant select, insert on table public.power_curve_snapshots to authenticated, service_role');
-    expect(rls).toContain('grant select, insert on table public.power_analysis_runs to authenticated, service_role');
+    expect(rls).toContain('grant select on table public.power_curve_snapshots to authenticated');
+    expect(rls).toContain('grant select on table public.power_analysis_runs to authenticated');
+    expect(rls).toContain('grant select, insert on table public.power_curve_snapshots to service_role');
+    expect(rls).toContain('grant select, insert on table public.power_analysis_runs to service_role');
     expect(rls).toContain('power_curve_snapshots_select_authorized');
-    expect(rls).toContain('power_curve_snapshots_insert_authorized');
     expect(rls).toContain('power_analysis_runs_select_authorized');
-    expect(rls).toContain('power_analysis_runs_insert_authorized');
+    expect(rls).not.toContain('power_curve_snapshots_insert_authorized');
+    expect(rls).not.toContain('power_analysis_runs_insert_authorized');
     expect(rls).not.toContain('power_analysis_runs_update_authorized');
     expect(rls).not.toContain('power_analysis_runs_delete_authorized');
+  });
+
+  it('repairs legacy crossed analysis ownership before validating the composite foreign key', () => {
+    const finalMigration = migration('20260908084304_final_power_security.sql');
+    const suspendImmutability = finalMigration.indexOf('drop trigger "power_analysis_runs_immutable_after_confirmation"');
+    const repair = finalMigration.indexOf('update public.power_analysis_runs as analysis');
+    const restoreImmutability = finalMigration.indexOf('create trigger power_analysis_runs_immutable_after_confirmation');
+    const compositeForeignKey = finalMigration.indexOf('add constraint "power_analysis_runs_snapshot_id_athlete_id_fkey"');
+    expect(suspendImmutability).toBeGreaterThan(-1);
+    expect(repair).toBeGreaterThan(suspendImmutability);
+    expect(restoreImmutability).toBeGreaterThan(repair);
+    expect(compositeForeignKey).toBeGreaterThan(repair);
   });
 
   it('keeps viewer relationships read-only', () => {

@@ -1,6 +1,11 @@
 import { getAccessToken } from '../../auth/supabase';
 import type { Observation } from '../../domain/observation';
-import type { AthleteSyncRequest, AthleteSyncResult } from './athleteContracts';
+import type {
+  AthletePersistedSyncState,
+  AthleteSyncContext,
+  AthleteSyncRequest,
+  AthleteSyncResult,
+} from './athleteContracts';
 import type { AthleteSummary } from './AthleteSelector';
 import { synchronizeAthlete } from './synchronizeAthlete';
 
@@ -15,6 +20,7 @@ export interface AthleteApi {
   load(id: string, signal?: AbortSignal): Promise<AthleteDetail>;
   createObservation?(observation: Observation): Promise<Observation>;
   sync?(request: AthleteSyncRequest): Promise<AthleteSyncResult>;
+  loadSyncState?(request: AthleteSyncContext, signal?: AbortSignal): Promise<AthletePersistedSyncState | null>;
 }
 
 export const athleteApi: AthleteApi = {
@@ -47,4 +53,20 @@ export const athleteApi: AthleteApi = {
     return response.json() as Promise<Observation>;
   },
   sync: synchronizeAthlete,
+  async loadSyncState(request, signal) {
+    const token = await getAccessToken();
+    const query = new URLSearchParams({
+      athleteId: request.athleteId,
+      syncState: 'true',
+      oldest: request.oldest,
+      newest: request.newest,
+      environment: request.environment,
+    });
+    const response = await fetch(`/.netlify/functions/athletes?${query}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+    if (!response.ok) throw new Error('No se pudo cargar el estado de sincronización.');
+    return response.json() as Promise<AthletePersistedSyncState | null>;
+  },
 };

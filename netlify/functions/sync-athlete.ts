@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { authenticateRequest } from './lib/authorization.js';
-import { jsonResponse } from './lib/http.js';
+import { bearerToken, jsonResponse } from './lib/http.js';
 import { mapActivity, mapPlannedWorkout, mapPowerCurve, mapSportSettings } from '../../src/server/intervals/mappers.js';
 import { IntervalsClient, type IntervalsTransport } from '../../src/server/intervals/client.js';
 import {
@@ -15,6 +15,8 @@ interface SyncEvent {
   body?: string | null;
 }
 
+type SyncComponent = 'athlete' | 'activities' | 'power_curves' | 'planned_workouts';
+
 interface LoadedAthleteData {
   athlete: unknown | null;
   activities: unknown[];
@@ -22,6 +24,26 @@ interface LoadedAthleteData {
   plannedWorkouts: unknown[];
   warnings: string[];
   updated: string[];
+  received?: Partial<Record<SyncComponent, number>>;
+}
+
+interface SyncCount {
+  received: number;
+  accepted: number;
+  rejected: number;
+}
+
+interface NormalizedAthleteData {
+  synchronizedAt: string;
+  profileName: string | null;
+  activities: Array<Record<string, unknown>>;
+  plannedWorkouts: Array<Record<string, unknown>>;
+  observations: Array<Record<string, unknown>>;
+  derivedResults: Array<Record<string, unknown>>;
+  snapshot: ReturnType<typeof createPowerCurveSnapshotPayload> | null;
+  warnings: string[];
+  updated: string[];
+  counts: Record<SyncComponent, SyncCount>;
 }
 
 interface SupabaseService {
@@ -34,17 +56,8 @@ interface SyncDependencies {
   now(): Date;
   resolveAthlete(coachId: string, athleteId: string): Promise<{ id: string; intervalsAthleteId: string } | null>;
   beginSync(athleteId: string, syncKey: string): Promise<void>;
-  isLatestSync(athleteId: string, syncKey: string): Promise<boolean>;
   load(intervalsAthleteId: string, request: ResolvedSyncRequest): Promise<LoadedAthleteData>;
-  persist(coachId: string, athleteId: string, syncKey: string, data: LoadedAthleteData, request: ResolvedSyncRequest): Promise<void>;
-}
-
-export function withoutUnchangedSnapshots<T extends Record<string, unknown>>(
-  incoming: T[],
-  existing: Array<Record<string, unknown>>,
-  keys: Array<keyof T>,
-) {
-  return incoming.filter((candidate) => !existing.some((saved) => keys.every((key) => saved[String(key)] === candidate[key])));
+  commit(coachId: string, athleteId: string, syncKey: string, data: NormalizedAthleteData, request: ResolvedSyncRequest): Promise<boolean>;
 }
 
 export function createPowerCurveSnapshotPayload(powerCurves: unknown, request: ResolvedSyncRequest) {
@@ -70,27 +83,6 @@ export function createPowerCurveSnapshotPayload(powerCurves: unknown, request: R
     source_version: 'intervals-openapi-v1',
     content_hash: createHash('sha256').update(canonical).digest('hex'),
   };
-}
-
-export async function persistPowerCurveSnapshot(
-  fetchImpl: typeof fetch,
-  service: SupabaseService,
-  coachId: string,
-  athleteId: string,
-  request: ResolvedSyncRequest,
-  powerCurves: unknown,
-) {
-  const payload = createPowerCurveSnapshotPayload(powerCurves, request);
-  const response = await fetchImpl(
-    `${service.url}/rest/v1/power_curve_snapshots?on_conflict=athlete_id,sport,environment,oldest,newest,content_hash`,
-    {
-      method: 'POST',
-      headers: { ...service.headers, Prefer: 'resolution=ignore-duplicates,return=minimal' },
-      body: JSON.stringify({ athlete_id: athleteId, created_by: coachId, ...payload }),
-      signal: AbortSignal.timeout(8_000),
-    },
-  );
-  if (!response.ok) throw new Error('Unable to persist normalized power curve snapshot');
 }
 
 async function fetchIntervals(path: string, query?: Readonly<Record<string, string>>) {
@@ -123,16 +115,6 @@ async function beginSyncDefault(athleteId: string, syncKey: string) {
     method: 'PATCH', headers, body: JSON.stringify({ latest_sync_key: syncKey, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error('Unable to start synchronized athlete request');
-}
-
-async function isLatestSyncDefault(athleteId: string, syncKey: string) {
-  const { url, headers } = supabaseServiceConfiguration();
-  const response = await fetch(`${url}/rest/v1/athletes?select=latest_sync_key&id=eq.${athleteId}&limit=1`, {
-    headers, signal: AbortSignal.timeout(8_000),
-  });
-  if (!response.ok) throw new Error('Unable to check synchronized athlete request');
-  const rows = await response.json() as { latest_sync_key?: string }[];
-  return rows[0]?.latest_sync_key === syncKey;
 }
 
 export async function loadIntervalsAthleteData(
@@ -173,6 +155,16 @@ export async function loadIntervalsAthleteData(
     plannedWorkouts: Array.isArray(rawPlannedWorkouts) ? rawPlannedWorkouts : [],
     warnings,
     updated: components.filter((_, index) => usable[index]),
+    received: {
+      athlete: requests[0].status === 'fulfilled' ? 1 : 0,
+      activities: requests[1].status === 'fulfilled'
+        ? Array.isArray(rawActivities) ? rawActivities.length : 1
+        : 0,
+      power_curves: requests[2].status === 'fulfilled' ? 1 : 0,
+      planned_workouts: requests[3].status === 'fulfilled'
+        ? Array.isArray(rawPlannedWorkouts) ? rawPlannedWorkouts.length : 1
+        : 0,
+    },
   };
 }
 
@@ -206,33 +198,58 @@ async function resolveAthleteDefault(coachId: string, athleteId: string) {
     : null;
 }
 
-export async function persistNormalizedAthleteData(
-  fetchImpl: typeof fetch,
-  service: SupabaseService,
-  now: Date,
-  coachId: string,
-  athleteId: string,
-  syncKey: string,
+function safeTimestamp(value: string) {
+  return Number.isFinite(Date.parse(value));
+}
+
+function count(received: number, accepted: number): SyncCount {
+  return { received, accepted, rejected: received - accepted };
+}
+
+function recordRejectedCount(warnings: Set<string>, component: SyncComponent, rejected: number) {
+  if (rejected < 1) return;
+  warnings.delete(component);
+  warnings.add(`${component}:${rejected}_rejected`);
+}
+
+export function normalizeAthleteData(
   data: LoadedAthleteData,
   request: ResolvedSyncRequest,
-) {
-  const databaseAthleteId = athleteId;
-  const headers = { ...service.headers, Prefer: 'resolution=merge-duplicates,return=minimal' };
-  const profile = data.athlete as { name?: unknown } | null;
-  if (typeof profile?.name === 'string' && profile.name.length > 0 && profile.name.length <= 120) {
-    const profileResponse = await fetchImpl(`${service.url}/rest/v1/athletes?id=eq.${databaseAthleteId}`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({ display_name: profile.name, latest_sync_key: syncKey, updated_at: now.toISOString() }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!profileResponse.ok) throw new Error('Unable to persist synchronized athlete profile');
+  now: Date,
+): NormalizedAthleteData {
+  const warnings = new Set<string>(data.warnings.filter((warning): warning is SyncComponent =>
+    ['athlete', 'activities', 'power_curves', 'planned_workouts'].includes(warning)));
+  const updated = new Set(data.updated.filter((component): component is SyncComponent =>
+    ['athlete', 'activities', 'power_curves', 'planned_workouts'].includes(component)));
+  let profileName: string | null = null;
+  let observations: Array<Record<string, unknown>> = [];
+  let athleteAccepted = 0;
+  if (data.athlete !== null) {
+    try {
+      const profile = data.athlete as { name?: unknown };
+      if (typeof profile.name !== 'string' || profile.name.length < 1 || profile.name.length > 120) throw new Error('Invalid profile');
+      const settings = mapSportSettings(data.athlete);
+      profileName = profile.name;
+      observations = settings.metrics.map((metric) => ({
+        metric_code: metric.metricCode,
+        value: metric.value,
+        unit: metric.unit,
+        observed_at: now.toISOString(),
+        protocol_name: metric.sourceField,
+        protocol_version: 'intervals-openapi-v1',
+      }));
+      athleteAccepted = 1;
+    } catch {
+      warnings.add('athlete:1_rejected');
+      updated.delete('athlete');
+    }
   }
+
   const activities = data.activities.flatMap((raw) => {
     try {
       const activity = mapActivity(raw);
+      if (!safeTimestamp(activity.startedAt)) throw new Error('Invalid activity date');
       return [{
-        athlete_id: databaseAthleteId,
         intervals_activity_id: activity.sourceId,
         sport: activity.sport,
         started_at: activity.startedAt,
@@ -248,105 +265,120 @@ export async function persistNormalizedAthleteData(
       }];
     } catch { return []; }
   });
+  if (activities.length < data.activities.length) {
+    if (!activities.length && data.activities.length) updated.delete('activities');
+  }
+
   const plannedWorkouts = data.plannedWorkouts.flatMap((raw) => {
     try {
       const workout = mapPlannedWorkout(raw);
+      if (!safeTimestamp(workout.scheduledAt)) throw new Error('Invalid workout date');
       return [{
-        athlete_id: databaseAthleteId,
         intervals_event_id: workout.sourceId,
         scheduled_at: workout.scheduledAt,
         structured_blocks: workout.blocks,
       }];
     } catch { return []; }
   });
-  const imported = (() => {
-    if (!data.athlete) return [];
+  if (plannedWorkouts.length < data.plannedWorkouts.length) {
+    if (!plannedWorkouts.length && data.plannedWorkouts.length) updated.delete('planned_workouts');
+  }
+
+  let snapshot: ReturnType<typeof createPowerCurveSnapshotPayload> | null = null;
+  let derivedResults: Array<Record<string, unknown>> = [];
+  if (data.powerCurves !== null) {
     try {
-      return mapSportSettings(data.athlete).metrics.map((metric) => ({
-        athlete_id: databaseAthleteId,
-        created_by: coachId,
-        metric_code: metric.metricCode,
-        value: metric.value,
-        unit: metric.unit,
-        observed_at: now.toISOString(),
-        origin: 'intervals_icu',
-        quality: metric.quality,
-        protocol_name: metric.sourceField,
-        protocol_version: 'intervals-openapi-v1',
-      }));
-    } catch { return []; }
-  })();
-  const derived = (() => {
-    if (!data.powerCurves) return [];
-    try {
-      return mapPowerCurve(data.powerCurves).models.flatMap((model) => [
+      snapshot = createPowerCurveSnapshotPayload(data.powerCurves, request);
+      derivedResults = mapPowerCurve(data.powerCurves).models.flatMap((model) => [
         ['cp', model.cpWatts, 'W'],
         ['w_prime', model.wPrimeKj, 'kJ'],
         ['pmax', model.pmaxWatts, 'W'],
         ['ftp', model.ftpWatts, 'W'],
       ].flatMap(([metricCode, value, unit]) => typeof value === 'number' ? [{
-        athlete_id: databaseAthleteId,
-        created_by: coachId,
         metric_code: metricCode,
         value,
         unit,
-        quality: 'calculated',
         algorithm_name: `Intervals.icu ${model.type}`,
         algorithm_version: 'intervals-openapi-v1',
-        warnings: [],
       }] : []));
-    } catch { return []; }
-  })();
-  async function loadExistingSnapshots(table: 'observations' | 'derived_results', select: string, extra: Record<string, string>) {
-    const query = new URLSearchParams({ select, athlete_id: `eq.${databaseAthleteId}`, ...extra });
-    const existingResponse = await fetchImpl(`${service.url}/rest/v1/${table}?${query}`, {
-      headers, signal: AbortSignal.timeout(8_000),
-    });
-    if (!existingResponse.ok) throw new Error(`Unable to compare normalized ${table}`);
-    return existingResponse.json() as Promise<Array<Record<string, unknown>>>;
+    } catch {
+      warnings.add('power_curves:1_rejected');
+      updated.delete('power_curves');
+    }
   }
-  const importedToWrite = imported.length
-    ? withoutUnchangedSnapshots(imported, await loadExistingSnapshots(
-      'observations',
-      'metric_code,value,unit,protocol_name,protocol_version',
-      { origin: 'eq.intervals_icu' },
-    ), ['metric_code', 'value', 'unit', 'protocol_name', 'protocol_version'])
-    : [];
-  const derivedToWrite = derived.length
-    ? withoutUnchangedSnapshots(derived, await loadExistingSnapshots(
-      'derived_results',
-      'metric_code,value,unit,algorithm_name,algorithm_version',
-      {},
-    ), ['metric_code', 'value', 'unit', 'algorithm_name', 'algorithm_version'])
-    : [];
-  const writes = [
-    ['activities', activities, 'athlete_id,intervals_activity_id'],
-    ['planned_workouts', plannedWorkouts, 'athlete_id,intervals_event_id'],
-    ['observations', importedToWrite, ''],
-    ['derived_results', derivedToWrite, ''],
-  ] as const;
-  for (const [table, payload, conflict] of writes) {
-    if (!payload.length) continue;
-    const query = conflict ? `?on_conflict=${conflict}` : '';
-    const write = await fetchImpl(`${service.url}/rest/v1/${table}${query}`, {
-      method: 'POST', headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(8_000),
-    });
-    if (!write.ok) throw new Error(`Unable to persist normalized ${table}`);
-  }
-  if (data.powerCurves) {
-    await persistPowerCurveSnapshot(fetchImpl, service, coachId, databaseAthleteId, request, data.powerCurves);
-  }
+
+  const counts = {
+    athlete: count(data.received?.athlete ?? (data.athlete === null ? 0 : 1), athleteAccepted),
+    activities: count(data.received?.activities ?? data.activities.length, activities.length),
+    power_curves: count(data.received?.power_curves ?? (data.powerCurves === null ? 0 : 1), snapshot ? 1 : 0),
+    planned_workouts: count(data.received?.planned_workouts ?? data.plannedWorkouts.length, plannedWorkouts.length),
+  };
+  (Object.entries(counts) as Array<[SyncComponent, SyncCount]>).forEach(([component, componentCount]) => {
+    recordRejectedCount(warnings, component, componentCount.rejected);
+  });
+
+  return {
+    synchronizedAt: now.toISOString(),
+    profileName,
+    activities,
+    plannedWorkouts,
+    observations,
+    derivedResults,
+    snapshot,
+    warnings: [...warnings],
+    updated: [...updated],
+    counts,
+  };
 }
 
-async function persistDefault(
+export async function persistNormalizedAthleteData(
+  fetchImpl: typeof fetch,
+  service: SupabaseService,
   coachId: string,
   athleteId: string,
   syncKey: string,
-  data: LoadedAthleteData,
+  data: NormalizedAthleteData,
   request: ResolvedSyncRequest,
 ) {
-  const service = supabaseServiceConfiguration();
-  await persistNormalizedAthleteData(fetch, service, new Date(), coachId, athleteId, syncKey, data, request);
+  const response = await fetchImpl(`${service.url}/rest/v1/rpc/persist_athlete_sync`, {
+    method: 'POST',
+    headers: service.headers,
+    body: JSON.stringify({
+      target_athlete_id: athleteId,
+      expected_sync_key: syncKey,
+      target_coach_id: coachId,
+      sync_payload: {
+        sport: 'Ride',
+        environment: request.environment,
+        oldest: request.oldest,
+        newest: request.newest,
+        synchronized_at: data.synchronizedAt,
+        status: data.warnings.length ? 'partial' : 'complete',
+        warnings: data.warnings,
+        updated: data.updated,
+        counts: data.counts,
+        profile_name: data.profileName,
+        activities: data.activities,
+        planned_workouts: data.plannedWorkouts,
+        observations: data.observations,
+        derived_results: data.derivedResults,
+        snapshot: data.snapshot,
+      },
+    }),
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!response.ok) throw new Error('Unable to atomically persist synchronized athlete data');
+  return (await response.json()) === true;
+}
+
+async function commitDefault(
+  coachId: string,
+  athleteId: string,
+  syncKey: string,
+  data: NormalizedAthleteData,
+  request: ResolvedSyncRequest,
+) {
+  return persistNormalizedAthleteData(fetch, supabaseServiceConfiguration(), coachId, athleteId, syncKey, data, request);
 }
 
 const defaults: SyncDependencies = {
@@ -354,42 +386,42 @@ const defaults: SyncDependencies = {
   now: () => new Date(),
   resolveAthlete: resolveAthleteDefault,
   beginSync: beginSyncDefault,
-  isLatestSync: isLatestSyncDefault,
   load: loadDefault,
-  persist: persistDefault,
+  commit: commitDefault,
 };
 
 export function createSyncHandler(dependencies: Partial<SyncDependencies> = {}) {
   const deps = { ...defaults, ...dependencies };
   return async (event: SyncEvent) => {
     if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'Método no permitido.' });
-    const rawBody = event.body ?? '';
-    if (Buffer.byteLength(rawBody, 'utf8') > MAX_SYNC_BODY_BYTES) {
-      return jsonResponse(413, { error: 'La solicitud de sincronización es demasiado grande.' });
-    }
-    let request: ResolvedSyncRequest;
-    try {
-      request = parseSyncRequest(JSON.parse(rawBody), deps.now());
-    } catch {
-      return jsonResponse(400, { error: 'Solicitud de sincronización no válida.' });
-    }
+    if (!bearerToken(event.headers)) return jsonResponse(401, { error: 'Sesión necesaria o caducada.' });
     try {
       const user = await deps.authenticate(event);
       if (!user) return jsonResponse(401, { error: 'Sesión necesaria o caducada.' });
+      const rawBody = event.body ?? '';
+      if (Buffer.byteLength(rawBody, 'utf8') > MAX_SYNC_BODY_BYTES) {
+        return jsonResponse(413, { error: 'La solicitud de sincronización es demasiado grande.' });
+      }
+      let request: ResolvedSyncRequest;
+      try {
+        request = parseSyncRequest(JSON.parse(rawBody), deps.now());
+      } catch {
+        return jsonResponse(400, { error: 'Solicitud de sincronización no válida.' });
+      }
       const athlete = await deps.resolveAthlete(user.id, request.athleteId);
       if (!athlete) return jsonResponse(403, { error: 'Ciclista no autorizado.' });
       await deps.beginSync(athlete.id, request.syncKey);
-      const data = await deps.load(athlete.intervalsAthleteId, request);
-      if (!(await deps.isLatestSync(athlete.id, request.syncKey))) {
+      const loaded = await deps.load(athlete.intervalsAthleteId, request);
+      const data = normalizeAthleteData(loaded, request, deps.now());
+      if (!(await deps.commit(user.id, athlete.id, request.syncKey, data, request))) {
         return jsonResponse(409, { error: 'Sincronización sustituida por una solicitud más reciente.' });
       }
-      await deps.persist(user.id, athlete.id, request.syncKey, data, request);
-      const synchronizedAt = deps.now().toISOString();
       return jsonResponse(data.warnings.length ? 207 : 200, {
-        synchronizedAt,
+        synchronizedAt: data.synchronizedAt,
         status: data.warnings.length ? 'partial' : 'complete',
-        updated: data.updated ?? [],
+        updated: data.updated,
         warnings: data.warnings,
+        counts: data.counts,
       });
     } catch {
       return jsonResponse(500, { error: 'No se pudo sincronizar el ciclista.' });

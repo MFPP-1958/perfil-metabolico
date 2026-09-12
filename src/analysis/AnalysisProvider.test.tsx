@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -32,7 +32,9 @@ function AnalysisHarness() {
       <Link to="/potencia">Potencia</Link>
       <button type="button" onClick={() => analysis.setPeriod({ preset: 180 })}>Usar 180 días</button>
       <button type="button" onClick={() => void analysis.synchronize()}>Sincronizar prueba</button>
+      <button type="button" onClick={() => void analysis.reloadRoster()}>Recargar roster</button>
       <output aria-label="Detalle activo">{analysis.athlete?.name ?? 'Sin detalle'}</output>
+      <output aria-label="Estado sincronización">{`${analysis.sync.status}|${analysis.sync.synchronizedAt ?? ''}|${'message' in analysis.sync ? analysis.sync.message : ''}`}</output>
       <Routes>
         <Route path="/" element={<p>Inicio</p>} />
         <Route path="/potencia" element={<p>Vista de potencia</p>} />
@@ -155,5 +157,99 @@ describe('AnalysisProvider', () => {
     detail.resolve({ ...roster[1], observations: [] });
 
     await waitFor(() => expect(screen.getByLabelText('Detalle activo')).toHaveTextContent('Jaume Santamaria'));
+  });
+
+  it('hydrates the latest context sync state from the server after unmounting and remounting', async () => {
+    window.localStorage.setItem(ANALYSIS_PREFERENCES_STORAGE_KEY, JSON.stringify({
+      athleteId: jaumeId,
+      period: { preset: 90 },
+      environment: 'indoor',
+    }));
+    const loadSyncState = vi.fn().mockResolvedValue({
+      status: 'partial',
+      synchronizedAt: '2026-09-05T11:45:00.000Z',
+      warnings: ['activities:1_rejected'],
+    });
+    const api = {
+      list: vi.fn().mockResolvedValue(roster),
+      load: vi.fn().mockResolvedValue({ ...roster[1], observations: [] }),
+      loadSyncState,
+    } as AthleteApi & { loadSyncState: typeof loadSyncState };
+
+    const first = renderProvider(api);
+    await waitFor(() => expect(screen.getByLabelText('Estado sincronización')).toHaveTextContent('partial|2026-09-05T11:45:00.000Z|'));
+    first.unmount();
+    renderProvider(api);
+
+    await waitFor(() => expect(screen.getByLabelText('Estado sincronización')).toHaveTextContent('partial|2026-09-05T11:45:00.000Z|'));
+    expect(loadSyncState).toHaveBeenCalledTimes(2);
+    expect(loadSyncState).toHaveBeenLastCalledWith({
+      athleteId: jaumeId,
+      oldest: '2026-06-08',
+      newest: '2026-09-05',
+      environment: 'indoor',
+    }, expect.any(AbortSignal));
+  });
+
+  it('keeps a completed sync authoritative when an older hydration resolves afterwards', async () => {
+    window.localStorage.setItem(ANALYSIS_PREFERENCES_STORAGE_KEY, JSON.stringify({
+      athleteId: jaumeId,
+      period: { preset: 90 },
+      environment: 'all',
+    }));
+    const hydration = deferred<{
+      status: 'partial';
+      synchronizedAt: string;
+      warnings: string[];
+    }>();
+    const loadSyncState = vi.fn().mockReturnValue(hydration.promise);
+    const api = {
+      list: vi.fn().mockResolvedValue(roster),
+      load: vi.fn().mockResolvedValue({ ...roster[1], observations: [] }),
+      loadSyncState,
+      sync: vi.fn().mockResolvedValue({
+        status: 'complete',
+        synchronizedAt: '2026-09-05T12:05:00.000Z',
+        warnings: [],
+      }),
+    } as AthleteApi;
+
+    renderProvider(api);
+    await waitFor(() => expect(loadSyncState).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole('button', { name: 'Sincronizar prueba' }));
+    await waitFor(() => expect(screen.getByLabelText('Estado sincronización'))
+      .toHaveTextContent('complete|2026-09-05T12:05:00.000Z|'));
+
+    await act(async () => {
+      hydration.resolve({
+        status: 'partial',
+        synchronizedAt: '2026-09-05T11:45:00.000Z',
+        warnings: ['activities:1_rejected'],
+      });
+    });
+
+    expect(screen.getByLabelText('Estado sincronización'))
+      .toHaveTextContent('complete|2026-09-05T12:05:00.000Z|');
+  });
+
+  it('removes persisted preferences as soon as a roster refresh revokes access', async () => {
+    window.localStorage.setItem(ANALYSIS_PREFERENCES_STORAGE_KEY, JSON.stringify({
+      athleteId: jaumeId,
+      period: { preset: 90 },
+      environment: 'all',
+    }));
+    const api: AthleteApi = {
+      list: vi.fn()
+        .mockResolvedValueOnce(roster)
+        .mockResolvedValueOnce(roster.filter((item) => item.id !== jaumeId)),
+      load: vi.fn().mockResolvedValue({ ...roster[1], observations: [] }),
+    };
+
+    renderProvider(api);
+    expect(await screen.findByLabelText('Ciclista activo')).toHaveValue(jaumeId);
+    await userEvent.click(screen.getByRole('button', { name: 'Recargar roster' }));
+    await waitFor(() => expect(screen.getByLabelText('Ciclista activo')).toHaveValue(''));
+
+    expect(window.localStorage.getItem(ANALYSIS_PREFERENCES_STORAGE_KEY)).toBeNull();
   });
 });

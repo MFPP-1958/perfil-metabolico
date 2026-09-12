@@ -37,7 +37,12 @@ function warningMessage(warnings: readonly string[]) {
     power_curves: 'potencia',
     planned_workouts: 'entrenamientos',
   };
-  const translated = warnings.map((warning) => labels[warning] ?? warning);
+  const translated = warnings.map((warning) => {
+    const [component, rejection] = warning.split(':');
+    const label = labels[component] ?? component;
+    const rejected = rejection?.match(/^(\d+)_rejected$/)?.[1];
+    return rejected ? `${label}: ${rejected} descartado${rejected === '1' ? '' : 's'}` : label;
+  });
   return translated.length
     ? `Sincronización parcial: ${translated.join(', ')}`
     : 'Sincronización completada';
@@ -92,6 +97,7 @@ export function AnalysisProvider({
         setAthleteId('');
         setAthlete(null);
         setSync(EMPTY_SYNC);
+        try { storage.removeItem(ANALYSIS_PREFERENCES_STORAGE_KEY); } catch { /* Storage can be read-only. */ }
       }
     } catch (reason) {
       if (generation === rosterGeneration.current) {
@@ -150,6 +156,38 @@ export function AnalysisProvider({
   }, [api, athleteId]);
 
   useEffect(() => {
+    if (!athleteId || !api.loadSyncState) return;
+    const generation = analysisGeneration.current;
+    const controller = new AbortController();
+    const resolved = resolvePeriod(period, today);
+    void api.loadSyncState({
+      athleteId,
+      oldest: resolved.oldest,
+      newest: resolved.newest,
+      environment,
+    }, controller.signal).then((saved) => {
+      if (generation !== analysisGeneration.current) return;
+      if (!saved) {
+        setSync(EMPTY_SYNC);
+        return;
+      }
+      setSync({
+        status: saved.status,
+        synchronizedAt: saved.synchronizedAt,
+        message: saved.status === 'failed'
+          ? 'La última sincronización no se completó.'
+          : warningMessage(saved.warnings),
+      });
+    }).catch((reason: unknown) => {
+      if (generation === analysisGeneration.current
+        && !(reason instanceof DOMException && reason.name === 'AbortError')) {
+        setError('No se pudo cargar el estado de sincronización.');
+      }
+    });
+    return () => controller.abort();
+  }, [api, athleteId, environment, period, today]);
+
+  useEffect(() => {
     if (!rosterReady.current || !athleteId || !athletes.some((item) => item.id === athleteId)) return;
     try {
       saveAnalysisPreferences(storage, { athleteId, period, environment });
@@ -187,7 +225,7 @@ export function AnalysisProvider({
 
   const synchronize = useCallback(async () => {
     if (!athleteId || !api.sync) return;
-    const generation = analysisGeneration.current;
+    const generation = ++analysisGeneration.current;
     const resolved = resolvePeriod(period, today);
     setSync({ status: 'running', synchronizedAt: sync.synchronizedAt });
     setError('');

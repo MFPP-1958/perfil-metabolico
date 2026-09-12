@@ -4,9 +4,8 @@ import {
   createPowerCurveSnapshotPayload,
   createSyncHandler,
   loadIntervalsAthleteData,
+  normalizeAthleteData,
   persistNormalizedAthleteData,
-  persistPowerCurveSnapshot,
-  withoutUnchangedSnapshots,
 } from '../../netlify/functions/sync-athlete';
 
 const internalAthleteId = '8ca7cc82-02b0-47ca-84ca-253607a04b72';
@@ -33,17 +32,30 @@ function dependencies(overrides = {}) {
     now: vi.fn().mockReturnValue(new Date('2026-09-05T12:00:00Z')),
     resolveAthlete: vi.fn().mockResolvedValue({ id: internalAthleteId, intervalsAthleteId: 'i123' }),
     beginSync: vi.fn().mockResolvedValue(undefined),
-    isLatestSync: vi.fn().mockResolvedValue(true),
     load: vi.fn().mockResolvedValue({
-      athlete: { id: 'i123' }, activities: [], powerCurves: { list: [] }, plannedWorkouts: [], warnings: [],
+      athlete: { id: 'i123', name: 'Test athlete', sportSettings: [] }, activities: [],
+      powerCurves: { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] },
+      plannedWorkouts: [], warnings: [],
       updated: ['athlete', 'activities', 'power_curves', 'planned_workouts'],
     }),
-    persist: vi.fn().mockResolvedValue(undefined),
+    commit: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
 
 describe('athlete synchronization', () => {
+  it('authenticates before inspecting a malformed body', async () => {
+    const deps = dependencies({ authenticate: vi.fn().mockResolvedValue(null) });
+    const response = await createSyncHandler(deps)({
+      httpMethod: 'POST',
+      headers: { authorization: 'Bearer invalid-token' },
+      body: '{contains-untrusted-profile-data',
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(deps.authenticate).toHaveBeenCalledOnce();
+  });
+
   it('rejects a cyclist outside the coach roster', async () => {
     const handler = createSyncHandler(dependencies({ resolveAthlete: vi.fn().mockResolvedValue(null) }));
     expect((await handler(event())).statusCode).toBe(403);
@@ -73,8 +85,8 @@ describe('athlete synchronization', () => {
       oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'indoor',
     }));
     expect(deps.beginSync).toHaveBeenCalledWith(internalAthleteId, 'sync-2');
-    expect(deps.persist).toHaveBeenCalledWith(
-      'coach-1', internalAthleteId, 'sync-2', expect.any(Object), expect.objectContaining({ environment: 'indoor' }),
+    expect(deps.commit).toHaveBeenCalledWith(
+      'coach-1', internalAthleteId, 'sync-2', expect.objectContaining({ profileName: 'Test athlete' }), expect.objectContaining({ environment: 'indoor' }),
     );
   });
 
@@ -94,14 +106,14 @@ describe('athlete synchronization', () => {
   it('reports partial upstream failures without discarding usable data', async () => {
     const deps = dependencies({
       load: vi.fn().mockResolvedValue({
-        athlete: { id: 'i123' }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: ['power_curves'],
+        athlete: { id: 'i123', name: 'Test athlete', sportSettings: [] }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: ['power_curves'],
         updated: ['athlete', 'activities', 'planned_workouts'],
       }),
     });
     const response = await createSyncHandler(deps)(event());
     expect(response.statusCode).toBe(207);
     expect(JSON.parse(response.body)).toMatchObject({ status: 'partial', warnings: ['power_curves'] });
-    expect(deps.persist).toHaveBeenCalledOnce();
+    expect(deps.commit).toHaveBeenCalledOnce();
   });
 
   it('returns only a normalized synchronization summary', async () => {
@@ -112,26 +124,99 @@ describe('athlete synchronization', () => {
       status: 'complete',
       updated: ['athlete', 'activities', 'power_curves', 'planned_workouts'],
       warnings: [],
+      counts: {
+        athlete: { received: 1, accepted: 1, rejected: 0 },
+        activities: { received: 0, accepted: 0, rejected: 0 },
+        power_curves: { received: 1, accepted: 1, rejected: 0 },
+        planned_workouts: { received: 0, accepted: 0, rejected: 0 },
+      },
     });
     expect(response.body).not.toContain('i123');
   });
 
   it('does not persist a response superseded by a newer athlete request', async () => {
-    const deps = dependencies({ isLatestSync: vi.fn().mockResolvedValue(false) });
+    const deps = dependencies({ commit: vi.fn().mockResolvedValue(false) });
     const response = await createSyncHandler(deps)(event());
     expect(response.statusCode).toBe(409);
-    expect(deps.persist).not.toHaveBeenCalled();
+    expect(deps.commit).toHaveBeenCalledOnce();
+  });
+
+  it('rejects stale A after B starts and commits only B at the atomic boundary', async () => {
+    let latestKey = '';
+    const aLoaded = (() => {
+      let resolve!: (value: Awaited<ReturnType<ReturnType<typeof dependencies>['load']>>) => void;
+      const promise = new Promise<Awaited<ReturnType<ReturnType<typeof dependencies>['load']>>>((done) => { resolve = done; });
+      return { promise, resolve };
+    })();
+    const committed: string[] = [];
+    const deps = dependencies({
+      beginSync: vi.fn(async (_athleteId: string, key: string) => { latestKey = key; }),
+      load: vi.fn((_externalId: string, request: { syncKey: string }) => request.syncKey === 'sync-a'
+        ? aLoaded.promise
+        : Promise.resolve({ athlete: { id: 'i123', name: 'B', sportSettings: [] }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: [], updated: [] })),
+      commit: vi.fn(async (_coachId: string, _athleteId: string, key: string) => {
+        if (key !== latestKey) return false;
+        committed.push(key);
+        return true;
+      }),
+    });
+    const handler = createSyncHandler(deps);
+
+    const requestA = handler(event({ syncKey: 'sync-a' }));
+    await vi.waitFor(() => expect(deps.beginSync).toHaveBeenCalledWith(internalAthleteId, 'sync-a'));
+    const requestB = handler(event({ syncKey: 'sync-b' }));
+    await vi.waitFor(() => expect(deps.beginSync).toHaveBeenCalledWith(internalAthleteId, 'sync-b'));
+    expect((await requestB).statusCode).toBe(200);
+    aLoaded.resolve({ athlete: { id: 'i123', name: 'A', sportSettings: [] }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: [], updated: [] });
+
+    expect((await requestA).statusCode).toBe(409);
+    expect(committed).toEqual(['sync-b']);
+  });
+
+  it('reports sanitized rejection counts for mixed arrays and an invalid profile', async () => {
+    const deps = dependencies({
+      load: vi.fn().mockResolvedValue({
+        athlete: { id: 'i123', name: '', sportSettings: [{ types: ['Ride'], ftp: 'private-invalid-value' }] },
+        activities: [
+          { id: 'i1', icu_athlete_id: 'i123', name: 'Valid private name', type: 'Ride', start_date: '2026-09-01T08:00:00Z', moving_time: 3600 },
+          { id: 'i2', icu_athlete_id: 'i123', name: 'Rejected private name', type: 'Ride', start_date: 'bad-date', moving_time: -1 },
+        ],
+        powerCurves: null,
+        plannedWorkouts: [
+          { id: 1, athlete_id: 'i123', start_date_local: '2026-09-06T08:00:00', name: 'Valid workout', category: 'WORKOUT' },
+          { id: 2, athlete_id: 'private-id', start_date_local: 'bad-date', name: 'Rejected workout', category: 'WORKOUT' },
+        ],
+        warnings: ['power_curves'],
+        updated: ['athlete', 'activities', 'planned_workouts'],
+      }),
+      commit: vi.fn().mockResolvedValue(true),
+    });
+
+    const response = await createSyncHandler(deps)(event());
+    const body = JSON.parse(response.body);
+
+    expect(response.statusCode).toBe(207);
+    expect(body.status).toBe('partial');
+    expect(body.counts).toMatchObject({
+      athlete: { received: 1, accepted: 0, rejected: 1 },
+      activities: { received: 2, accepted: 1, rejected: 1 },
+      planned_workouts: { received: 2, accepted: 1, rejected: 1 },
+    });
+    expect(body.warnings).toEqual(expect.arrayContaining([
+      'athlete:1_rejected', 'activities:1_rejected', 'planned_workouts:1_rejected', 'power_curves',
+    ]));
+    expect(response.body).not.toContain('private');
   });
 
   it('records the cancellation key before loading upstream data', async () => {
     const order: string[] = [];
     const deps = dependencies({
       beginSync: vi.fn().mockImplementation(async () => { order.push('begin'); }),
-      load: vi.fn().mockImplementation(async () => { order.push('load'); return { athlete: { id: 'i123' }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: [] }; }),
-      isLatestSync: vi.fn().mockImplementation(async () => { order.push('check'); return true; }),
+      load: vi.fn().mockImplementation(async () => { order.push('load'); return { athlete: { id: 'i123', name: 'Test athlete', sportSettings: [] }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: [], updated: [] }; }),
+      commit: vi.fn().mockImplementation(async () => { order.push('commit'); return true; }),
     });
     await createSyncHandler(deps)(event());
-    expect(order).toEqual(['begin', 'load', 'check']);
+    expect(order).toEqual(['begin', 'load', 'commit']);
   });
 
   it.each([
@@ -196,15 +281,36 @@ describe('athlete synchronization', () => {
     expect(result.powerCurves).toBeNull();
     expect(result.warnings).toContain('power_curves');
     expect(result.updated).not.toContain('power_curves');
+    const normalized = normalizeAthleteData(result, {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all', syncKey: 'sync-2',
+    }, new Date('2026-09-05T12:00:00Z'));
+    expect(normalized.counts.power_curves).toEqual({ received: 1, accepted: 0, rejected: 1 });
+    expect(normalized.warnings).toContain('power_curves:1_rejected');
   });
 
-  it('does not append an unchanged imported physiological snapshot', () => {
-    const incoming = [
-      { metric_code: 'ftp', value: 280, unit: 'W', protocol_name: 'sportSettings[Ride].ftp', protocol_version: 'intervals-openapi-v1' },
-      { metric_code: 'vo2max', value: 61, unit: 'ml·kg⁻¹·min⁻¹', protocol_name: 'sportSettings[Ride].vo2max', protocol_version: 'intervals-openapi-v1' },
-    ];
-    const existing = [{ metric_code: 'ftp', value: 280, unit: 'W', protocol_name: 'sportSettings[Ride].ftp', protocol_version: 'intervals-openapi-v1' }];
-    expect(withoutUnchangedSnapshots(incoming, existing, ['metric_code', 'value', 'unit', 'protocol_name', 'protocol_version'])).toEqual([incoming[1]]);
+  it('counts malformed fulfilled collections as one rejected component without exposing their content', async () => {
+    const client = new IntervalsClient({
+      async get(path) {
+        if (path.endsWith('/activities')) return { privateActivity: 'do-not-expose' };
+        if (path.endsWith('/events')) return { privateWorkout: 'do-not-expose' };
+        if (path.endsWith('/power-curves')) return { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] };
+        return { id: 'i123', name: 'Ciclista', sportSettings: [] };
+      },
+    });
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
+    };
+    const result = await loadIntervalsAthleteData(client, 'i123', request);
+    const normalized = normalizeAthleteData(result, request, new Date('2026-09-05T12:00:00Z'));
+
+    expect(normalized.counts.activities).toEqual({ received: 1, accepted: 0, rejected: 1 });
+    expect(normalized.counts.planned_workouts).toEqual({ received: 1, accepted: 0, rejected: 1 });
+    expect(normalized.warnings).toEqual(expect.arrayContaining([
+      'activities:1_rejected', 'planned_workouts:1_rejected',
+    ]));
+    expect(JSON.stringify(normalized)).not.toContain('do-not-expose');
   });
 
   it('hashes only canonical normalized curve content', () => {
@@ -251,71 +357,49 @@ describe('athlete synchronization', () => {
       .toBe(createPowerCurveSnapshotPayload(curveWith([...models].reverse()), request).content_hash);
   });
 
-  it('uses an idempotent snapshot insert while retaining changed content history', async () => {
+  it('sends all pre-normalized components through one atomic server RPC without rewriting the latest key', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(input), init });
-      return new Response(null, { status: 201 });
+      return Response.json(true);
     }) as unknown as typeof fetch;
     const request = {
       athleteId: internalAthleteId,
       oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
     };
-    const rawCurve = { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] };
+    const normalized = normalizeAthleteData({
+      athlete: { id: 'i123', name: 'Authorized athlete', sportSettings: [{ types: ['Ride'], ftp: 255, w_prime: 17000 }] },
+      activities: [{ id: 'i9001', icu_athlete_id: 'i123', name: 'Ride', type: 'Ride', start_date: '2026-09-01T08:00:00Z', moving_time: 3600 }],
+      powerCurves: { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] },
+      plannedWorkouts: [{ id: 45, athlete_id: 'i123', start_date_local: '2026-09-06T08:00:00', name: 'Workout', category: 'WORKOUT' }],
+      warnings: [],
+      updated: ['athlete', 'activities', 'power_curves', 'planned_workouts'],
+    }, request, new Date('2026-09-05T12:00:00Z'));
 
-    await persistPowerCurveSnapshot(fetchImpl, {
-      url: 'https://supabase.test', headers: { apikey: 'secret', Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
-    }, 'coach-1', internalAthleteId, request, rawCurve);
-    await persistPowerCurveSnapshot(fetchImpl, {
-      url: 'https://supabase.test', headers: { apikey: 'secret', Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
-    }, 'coach-1', internalAthleteId, request, { list: [{ ...rawCurve.list[0], values: [901] }] });
-
-    expect(requests).toHaveLength(2);
-    expect(requests[0].url).toBe('https://supabase.test/rest/v1/power_curve_snapshots?on_conflict=athlete_id,sport,environment,oldest,newest,content_hash');
-    expect(new Headers(requests[0].init?.headers).get('Prefer')).toBe('resolution=ignore-duplicates,return=minimal');
-    const first = JSON.parse(String(requests[0].init?.body));
-    const second = JSON.parse(String(requests[1].init?.body));
-    expect(first).toMatchObject({ athlete_id: internalAthleteId, created_by: 'coach-1', points: [{ seconds: 5, watts: 900 }] });
-    expect(first.content_hash).not.toBe(second.content_hash);
-  });
-
-  it('persists normalized components against the authorized internal athlete without recreating ownership', async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
-    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = String(input);
-      requests.push({ url, init });
-      if (init?.method === 'GET' || (!init?.method && (url.includes('/observations?') || url.includes('/derived_results?')))) {
-        return Response.json([]);
-      }
-      return new Response(null, { status: 204 });
-    }) as unknown as typeof fetch;
-    const request = {
-      athleteId: internalAthleteId,
-      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
-    };
-    await persistNormalizedAthleteData(
+    const persisted = await persistNormalizedAthleteData(
       fetchImpl,
-      { url: 'https://supabase.test', headers: { apikey: 'secret', Authorization: 'Bearer secret', 'Content-Type': 'application/json' } },
-      new Date('2026-09-05T12:00:00Z'),
+      { url: 'https://supabase.test', headers: { apikey: 'server-only', Authorization: 'Bearer server-only', 'Content-Type': 'application/json' } },
       'coach-1',
       internalAthleteId,
       'sync-2',
-      {
-        athlete: { id: 'i123', name: 'Ciclista autorizado', sportSettings: [{ types: ['Ride'], ftp: 255, w_prime: 17000 }] },
-        activities: [{ id: 'i9001', icu_athlete_id: 'i123', name: 'Ruta', type: 'Ride', start_date: '2026-09-01T08:00:00Z', moving_time: 3600 }],
-        powerCurves: { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] },
-        plannedWorkouts: [{ id: 45, athlete_id: 'i123', start_date_local: '2026-09-06T08:00:00', name: 'Series', category: 'WORKOUT' }],
-        warnings: [],
-        updated: ['athlete', 'activities', 'power_curves', 'planned_workouts'],
-      },
+      normalized,
       request,
     );
 
-    expect(requests.some(({ url }) => url.includes('/coach_athletes'))).toBe(false);
-    expect(requests.some(({ url }) => url.includes('on_conflict=intervals_athlete_id'))).toBe(false);
-    expect(requests.some(({ url }) => url.includes('/power_curve_snapshots?on_conflict='))).toBe(true);
-    const bodies = requests.flatMap(({ init }) => typeof init?.body === 'string' ? [init.body] : []);
-    expect(bodies.every((body) => !body.includes('"intervals_athlete_id"'))).toBe(true);
-    expect(bodies.filter((body) => body.includes('"athlete_id"')).every((body) => body.includes(internalAthleteId))).toBe(true);
+    expect(persisted).toBe(true);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].url).toBe('https://supabase.test/rest/v1/rpc/persist_athlete_sync');
+    const body = JSON.parse(String(requests[0].init?.body));
+    expect(body).toMatchObject({
+      target_athlete_id: internalAthleteId,
+      expected_sync_key: 'sync-2',
+      target_coach_id: 'coach-1',
+      sync_payload: {
+        status: 'complete',
+        activities: [{ intervals_activity_id: 'i9001' }],
+        snapshot: { points: [{ seconds: 5, watts: 900 }] },
+      },
+    });
+    expect(body.sync_payload).not.toHaveProperty('latest_sync_key');
   });
 });

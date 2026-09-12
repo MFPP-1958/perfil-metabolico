@@ -33,7 +33,9 @@ test('coach reviews real athlete data and opens unfinished module demos explicit
   await page.route('**/.netlify/functions/athletes**', async (route) => {
     const url = new URL(route.request().url());
     const fixture = athlete(firstAthleteId, 'Ciclista Uno');
-    await route.fulfill({ json: url.searchParams.has('athleteId') ? fixture : [fixture] });
+    await route.fulfill({ json: url.searchParams.get('syncState') === 'true'
+      ? null
+      : url.searchParams.has('athleteId') ? fixture : [fixture] });
   });
   await page.route('**/.netlify/functions/observations', async (route) => {
     await route.fulfill({ json: route.request().postDataJSON() });
@@ -100,6 +102,10 @@ test('latest cyclist remains authoritative when delayed power requests resolve i
   await page.route('**/.netlify/functions/athletes**', async (route) => {
     const url = new URL(route.request().url());
     const athleteId = url.searchParams.get('athleteId');
+    if (url.searchParams.get('syncState') === 'true') {
+      await route.fulfill({ json: null });
+      return;
+    }
     if (!athleteId) {
       await route.fulfill({ json: [
         athlete(firstAthleteId, 'Ciclista Uno'),

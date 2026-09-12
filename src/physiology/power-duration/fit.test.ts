@@ -15,8 +15,10 @@ describe('power-duration models', () => {
     const cp = 280, wPrime = 20_000, pmax = 1100;
     const points = [5, 15, 60, 300, 1200].map((seconds) => ({ seconds, watts: cp + wPrime / (seconds + wPrime / (pmax - cp)) }));
     const result = fitPowerDuration({ points, sport: 'Ride', period: '90d', indoor: null }, 'MORTON_3P');
-    expect(result.cpWatts).toBeCloseTo(cp, -1);
-    expect(result.pmaxWatts).toBeGreaterThan(points[0].watts);
+    expect(result.cpWatts).toBeCloseTo(cp, 1);
+    expect(result.wPrimeJoules).toBeCloseTo(wPrime, -1);
+    expect(result.pmaxWatts).toBeCloseTo(pmax, 0);
+    expect(result.rmseWatts).toBeLessThan(0.05);
     expect(result.observedFiveSecondWatts).toBeCloseTo(points[0].watts, 6);
   });
 

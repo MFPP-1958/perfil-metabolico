@@ -258,6 +258,51 @@ describe('immutable power analysis confirmation', () => {
     expect(response.body).not.toContain('createdBy');
   });
 
+  it('recalculates and persists a complete Morton confirmation on the server', async () => {
+    const mortonSnapshot = {
+      ...snapshotRow,
+      points: [
+        { seconds: 5, watts: 960.5590802380133 },
+        { seconds: 15, watts: 787.7739828644887 },
+        { seconds: 60, watts: 517.001636646896 },
+        { seconds: 300, watts: 341.65463729564175 },
+        { seconds: 1200, watts: 296.33469658842506 },
+      ],
+    };
+    const persistAnalysis = vi.fn().mockResolvedValue({
+      created: true,
+      row: {
+        id: '43dad9bf-8f42-4cff-8910-15c34ef24e6b',
+        snapshot_id: snapshotId,
+        model: 'MORTON_3P',
+        algorithm_version: 'pd-morton-3p@1.0.0',
+        cp_watts: 280,
+        w_prime_joules: 20000,
+        pmax_watts: 1100.088800118559,
+        rmse_watts: 0,
+        quality: { complete: true, warnings: [] },
+        confirmed_at: '2026-09-05T12:00:00.000Z',
+      },
+    });
+    const deps = dependencies({ loadSnapshot: vi.fn().mockResolvedValue(mortonSnapshot), persistAnalysis });
+
+    const response = await createPowerAnalysisHandler(deps)(postEvent({
+      snapshotId,
+      model: 'MORTON_3P',
+      result: { cpWatts: 280, wPrimeJoules: 20000, pmaxWatts: 1100.09, rmseWatts: 0 },
+    }));
+
+    expect(response.statusCode).toBe(201);
+    const stored = persistAnalysis.mock.calls[0][0];
+    expect(stored.model).toBe('MORTON_3P');
+    expect(stored.algorithmVersion).toBe('pd-morton-3p@1.0.0');
+    expect(stored.cpWatts).toBeCloseTo(280, 6);
+    expect(stored.wPrimeJoules).toBeCloseTo(20000, 3);
+    expect(stored.pmaxWatts).toBeCloseTo(1100.0888, 3);
+    expect(stored.rmseWatts).toBeCloseTo(0, 6);
+    expect(stored.quality).toEqual({ complete: true, warnings: [] });
+  });
+
   it('returns 409 without persistence when the displayed numbers differ from the server by more than 0.01', async () => {
     const deps = dependencies();
     const response = await createPowerAnalysisHandler(deps)(postEvent({
