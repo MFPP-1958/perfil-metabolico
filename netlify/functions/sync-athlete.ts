@@ -1,7 +1,14 @@
 import { createHash } from 'node:crypto';
 import { authenticateRequest } from './lib/authorization.js';
 import { bearerToken, jsonResponse } from './lib/http.js';
-import { mapActivity, mapPlannedWorkout, mapPowerCurve, mapSportSettings } from '../../src/server/intervals/mappers.js';
+import {
+  mapActivity,
+  mapDurabilityCurves,
+  mapPlannedWorkout,
+  mapPowerCurve,
+  mapSportSettings,
+  type NormalizedDurabilityCurve,
+} from '../../src/server/intervals/mappers.js';
 import { IntervalsClient, type IntervalsTransport } from '../../src/server/intervals/client.js';
 import {
   MAX_SYNC_BODY_BYTES,
@@ -15,12 +22,13 @@ interface SyncEvent {
   body?: string | null;
 }
 
-type SyncComponent = 'athlete' | 'activities' | 'power_curves' | 'planned_workouts';
+type SyncComponent = 'athlete' | 'activities' | 'power_curves' | 'durability_curves' | 'planned_workouts';
 
 interface LoadedAthleteData {
   athlete: unknown | null;
   activities: unknown[];
   powerCurves: unknown | null;
+  durabilityCurves?: unknown | null;
   plannedWorkouts: unknown[];
   warnings: string[];
   updated: string[];
@@ -41,6 +49,7 @@ interface NormalizedAthleteData {
   observations: Array<Record<string, unknown>>;
   derivedResults: Array<Record<string, unknown>>;
   snapshot: ReturnType<typeof createPowerCurveSnapshotPayload> | null;
+  durabilitySnapshot: ReturnType<typeof createDurabilitySnapshotPayload> | null;
   warnings: string[];
   updated: string[];
   counts: Record<SyncComponent, SyncCount>;
@@ -81,6 +90,82 @@ export function createPowerCurveSnapshotPayload(powerCurves: unknown, request: R
     points,
     source_models: sourceModels,
     source_version: 'intervals-openapi-v1',
+    content_hash: createHash('sha256').update(canonical).digest('hex'),
+  };
+}
+
+type PersistedActivity = {
+  intervals_activity_id?: unknown;
+  normalized_data?: { deviceWatts?: unknown };
+};
+
+function durabilityPoint(
+  point: NormalizedDurabilityCurve['points'][number],
+  deviceWattsByActivity: ReadonlyMap<string, boolean>,
+) {
+  const supportingActivityIds = [...new Set(point.supportingActivityIds)].sort();
+  return {
+    seconds: point.seconds,
+    watts: point.watts,
+    activityId: point.activityId,
+    supportingActivityIds,
+    startIndex: point.startIndex,
+    endIndex: point.endIndex,
+    supportingActivityCount: supportingActivityIds.length,
+    supportingEffortCount: point.supportingEffortCount,
+    powerSource: supportingActivityIds.length > 0
+      && supportingActivityIds.every((activityId) => deviceWattsByActivity.get(activityId) === true)
+      ? 'measured' as const
+      : 'unknown' as const,
+  };
+}
+
+function durabilityCurve(
+  curve: NormalizedDurabilityCurve,
+  deviceWattsByActivity: ReadonlyMap<string, boolean>,
+) {
+  return {
+    weightKg: curve.weightKg !== null && curve.weightKg > 0 ? curve.weightKg : null,
+    points: curve.points
+      .map((point) => durabilityPoint(point, deviceWattsByActivity))
+      .sort((left, right) => left.seconds - right.seconds),
+  };
+}
+
+export function createDurabilitySnapshotPayload(
+  raw: unknown,
+  activities: readonly PersistedActivity[],
+  request: ResolvedSyncRequest,
+  synchronizedAt: string,
+) {
+  const normalized = mapDurabilityCurves(raw);
+  if (!normalized.fresh?.points.length) throw new Error('Durability curves do not contain a usable fresh curve');
+  const deviceWattsByActivity = new Map<string, boolean>();
+  for (const activity of activities) {
+    if (typeof activity.intervals_activity_id === 'string') {
+      deviceWattsByActivity.set(activity.intervals_activity_id, activity.normalized_data?.deviceWatts === true);
+    }
+  }
+  const freshCurve = durabilityCurve(normalized.fresh, deviceWattsByActivity);
+  const fatiguedCurves = normalized.fatigued
+    .flatMap((curve) => curve.afterKj === null ? [] : [{
+      level: curve.level,
+      afterKj: curve.afterKj,
+      ...durabilityCurve(curve, deviceWattsByActivity),
+    }])
+    .sort((left, right) => left.afterKj - right.afterKj);
+  const weightKg = freshCurve.weightKg;
+  const canonical = JSON.stringify({ freshCurve, fatiguedCurves, weightKg });
+  return {
+    sport: 'Ride' as const,
+    environment: request.environment,
+    oldest: request.oldest,
+    newest: request.newest,
+    fresh_curve: freshCurve,
+    fatigued_curves: fatiguedCurves,
+    weight_kg: weightKg,
+    weight_observed_at: weightKg === null ? null : synchronizedAt,
+    source_version: 'intervals-openapi-v1' as const,
     content_hash: createHash('sha256').update(canonical).digest('hex'),
   };
 }
@@ -126,41 +211,53 @@ export async function loadIntervalsAthleteData(
   const requests = await Promise.allSettled([
     client.getAthlete(intervalsAthleteId),
     client.getActivities(intervalsAthleteId, request.oldest, request.newest),
-    client.getPowerCurves(intervalsAthleteId, `${request.days}d`, request.newest, indoor),
+    client.getDurabilityCurves(intervalsAthleteId, `${request.days}d`, request.newest, indoor),
     client.getPlannedWorkouts(intervalsAthleteId, request.oldest, request.newest),
   ]);
   const value = (index: number) => requests[index].status === 'fulfilled' ? requests[index].value : null;
-  const components = ['athlete', 'activities', 'power_curves', 'planned_workouts'];
   const athlete = value(0);
   const rawActivities = value(1);
   const rawPowerCurves = value(2);
   const rawPlannedWorkouts = value(3);
   let powerCurves: unknown | null = rawPowerCurves;
+  let durabilityCurves: unknown | null = rawPowerCurves;
   try {
     if (powerCurves !== null) createPowerCurveSnapshotPayload(powerCurves, request);
   } catch {
     powerCurves = null;
   }
-  const usable = [
-    athlete !== null,
-    Array.isArray(rawActivities),
-    powerCurves !== null,
-    Array.isArray(rawPlannedWorkouts),
-  ];
-  const warnings = components.filter((_, index) => !usable[index]);
+  try {
+    if (!mapDurabilityCurves(durabilityCurves).fresh?.points.length) durabilityCurves = null;
+  } catch {
+    durabilityCurves = null;
+  }
+  const usable: Record<SyncComponent, boolean> = {
+    athlete: athlete !== null,
+    activities: Array.isArray(rawActivities),
+    power_curves: powerCurves !== null,
+    durability_curves: durabilityCurves !== null,
+    planned_workouts: Array.isArray(rawPlannedWorkouts),
+  };
+  const components = Object.keys(usable) as SyncComponent[];
+  const warnings = components.filter((component) => !usable[component]);
+  const rawCurveList = (rawPowerCurves as { list?: unknown } | null)?.list;
   return {
     athlete,
     activities: Array.isArray(rawActivities) ? rawActivities : [],
     powerCurves,
+    durabilityCurves,
     plannedWorkouts: Array.isArray(rawPlannedWorkouts) ? rawPlannedWorkouts : [],
     warnings,
-    updated: components.filter((_, index) => usable[index]),
+    updated: components.filter((component) => usable[component]),
     received: {
       athlete: requests[0].status === 'fulfilled' ? 1 : 0,
       activities: requests[1].status === 'fulfilled'
         ? Array.isArray(rawActivities) ? rawActivities.length : 1
         : 0,
       power_curves: requests[2].status === 'fulfilled' ? 1 : 0,
+      durability_curves: requests[2].status === 'fulfilled'
+        ? Array.isArray(rawCurveList) ? Math.max(rawCurveList.length, 1) : 1
+        : 0,
       planned_workouts: requests[3].status === 'fulfilled'
         ? Array.isArray(rawPlannedWorkouts) ? rawPlannedWorkouts.length : 1
         : 0,
@@ -218,9 +315,9 @@ export function normalizeAthleteData(
   now: Date,
 ): NormalizedAthleteData {
   const warnings = new Set<string>(data.warnings.filter((warning): warning is SyncComponent =>
-    ['athlete', 'activities', 'power_curves', 'planned_workouts'].includes(warning)));
+    ['athlete', 'activities', 'power_curves', 'durability_curves', 'planned_workouts'].includes(warning)));
   const updated = new Set(data.updated.filter((component): component is SyncComponent =>
-    ['athlete', 'activities', 'power_curves', 'planned_workouts'].includes(component)));
+    ['athlete', 'activities', 'power_curves', 'durability_curves', 'planned_workouts'].includes(component)));
   let profileName: string | null = null;
   let observations: Array<Record<string, unknown>> = [];
   let athleteAccepted = 0;
@@ -261,6 +358,7 @@ export function normalizeAthleteData(
           averagePowerWatts: activity.averagePowerWatts,
           averageHeartRateBpm: activity.averageHeartRateBpm,
           averageCadenceRpm: activity.averageCadenceRpm,
+          deviceWatts: activity.deviceWatts,
         },
       }];
     } catch { return []; }
@@ -285,6 +383,8 @@ export function normalizeAthleteData(
   }
 
   let snapshot: ReturnType<typeof createPowerCurveSnapshotPayload> | null = null;
+  let durabilitySnapshot: ReturnType<typeof createDurabilitySnapshotPayload> | null = null;
+  let durabilityAccepted = 0;
   let derivedResults: Array<Record<string, unknown>> = [];
   if (data.powerCurves !== null) {
     try {
@@ -307,10 +407,35 @@ export function normalizeAthleteData(
     }
   }
 
+  if (data.durabilityCurves != null) {
+    try {
+      const mapped = mapDurabilityCurves(data.durabilityCurves);
+      durabilitySnapshot = createDurabilitySnapshotPayload(
+        data.durabilityCurves,
+        activities,
+        request,
+        now.toISOString(),
+      );
+      durabilityAccepted = 1 + mapped.fatigued.length;
+      if (mapped.fatigued.length < 2 && mapped.rejected.length === 0) {
+        warnings.add('Faltan curvas fatigadas de Durabilidad para uno o más umbrales.');
+      }
+    } catch {
+      warnings.add('durability_curves:1_rejected');
+      updated.delete('durability_curves');
+    }
+  }
+
   const counts = {
     athlete: count(data.received?.athlete ?? (data.athlete === null ? 0 : 1), athleteAccepted),
     activities: count(data.received?.activities ?? data.activities.length, activities.length),
     power_curves: count(data.received?.power_curves ?? (data.powerCurves === null ? 0 : 1), snapshot ? 1 : 0),
+    durability_curves: count(
+      data.received?.durability_curves ?? (
+        data.durabilityCurves == null ? 0 : durabilityAccepted
+      ),
+      durabilityAccepted,
+    ),
     planned_workouts: count(data.received?.planned_workouts ?? data.plannedWorkouts.length, plannedWorkouts.length),
   };
   (Object.entries(counts) as Array<[SyncComponent, SyncCount]>).forEach(([component, componentCount]) => {
@@ -325,6 +450,7 @@ export function normalizeAthleteData(
     observations,
     derivedResults,
     snapshot,
+    durabilitySnapshot,
     warnings: [...warnings],
     updated: [...updated],
     counts,
@@ -363,6 +489,7 @@ export async function persistNormalizedAthleteData(
         observations: data.observations,
         derived_results: data.derivedResults,
         snapshot: data.snapshot,
+        durability_snapshot: data.durabilitySnapshot,
       },
     }),
     signal: AbortSignal.timeout(8_000),

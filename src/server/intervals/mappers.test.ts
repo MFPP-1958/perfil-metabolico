@@ -21,6 +21,12 @@ describe('Intervals.icu explicit mappers', () => {
     expect(mapped.points.find((point) => point.seconds === 5)).toMatchObject({ watts: 925, metricCode: 'power_5s' });
   });
 
+  it('selects the fresh curve for power when the grouped response starts with a fatigued curve', () => {
+    const mapped = mapPowerCurve(durabilityCurves);
+
+    expect(mapped.points.find((point) => point.seconds === 10)?.watts).toBe(900);
+  });
+
   it('normalizes curve points to positive, sorted, unique best powers', () => {
     const mapped = mapPowerCurve({
       list: [{
@@ -53,6 +59,7 @@ describe('Intervals.icu explicit mappers', () => {
       endIndex: 11,
     });
     expect(mapped.fatigued.find((curve) => curve.level === 'kj1')?.points[0].supportingActivityIds).toEqual(['i3', 'i5', 'i6']);
+    expect(mapped.fatigued.find((curve) => curve.level === 'kj1')?.points[0].supportingEffortCount).toBe(3);
   });
 
   it('keeps a valid fresh curve when a fatigued curve is malformed', () => {
@@ -122,8 +129,8 @@ describe('Intervals.icu explicit mappers', () => {
   });
 
   it('maps an activity without retaining the raw object', () => {
-    expect(mapActivity(activity)).toEqual(expect.objectContaining({
-      sourceId: 'i9001', athleteSourceId: 'i123', durationSeconds: 5400, averagePowerWatts: 218,
+    expect(mapActivity({ ...activity, device_watts: true })).toEqual(expect.objectContaining({
+      sourceId: 'i9001', athleteSourceId: 'i123', durationSeconds: 5400, averagePowerWatts: 218, deviceWatts: true,
     }));
   });
 

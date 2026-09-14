@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { IntervalsClient } from '../../src/server/intervals/client';
 import {
+  createDurabilitySnapshotPayload,
   createPowerCurveSnapshotPayload,
   createSyncHandler,
   loadIntervalsAthleteData,
   normalizeAthleteData,
   persistNormalizedAthleteData,
 } from '../../netlify/functions/sync-athlete';
+import durabilityCurves from '../../src/server/intervals/fixtures/durability-curves.json';
 
 const internalAthleteId = '8ca7cc82-02b0-47ca-84ca-253607a04b72';
 
@@ -34,9 +36,18 @@ function dependencies(overrides = {}) {
     beginSync: vi.fn().mockResolvedValue(undefined),
     load: vi.fn().mockResolvedValue({
       athlete: { id: 'i123', name: 'Test athlete', sportSettings: [] }, activities: [],
-      powerCurves: { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] },
+      powerCurves: { list: [
+        { id: '90d', weight: 70, secs: [5], values: [900], powerModels: [] },
+        { id: '90d-kj0', after_kj: 700, weight: 70, secs: [5], values: [850], powerModels: [] },
+        { id: '90d-kj1', after_kj: 1400, weight: 70, secs: [5], values: [800], powerModels: [] },
+      ] },
+      durabilityCurves: { list: [
+        { id: '90d', weight: 70, secs: [5], values: [900], powerModels: [] },
+        { id: '90d-kj0', after_kj: 700, weight: 70, secs: [5], values: [850], powerModels: [] },
+        { id: '90d-kj1', after_kj: 1400, weight: 70, secs: [5], values: [800], powerModels: [] },
+      ] },
       plannedWorkouts: [], warnings: [],
-      updated: ['athlete', 'activities', 'power_curves', 'planned_workouts'],
+      updated: ['athlete', 'activities', 'power_curves', 'durability_curves', 'planned_workouts'],
     }),
     commit: vi.fn().mockResolvedValue(true),
     ...overrides,
@@ -106,14 +117,20 @@ describe('athlete synchronization', () => {
   it('reports partial upstream failures without discarding usable data', async () => {
     const deps = dependencies({
       load: vi.fn().mockResolvedValue({
-        athlete: { id: 'i123', name: 'Test athlete', sportSettings: [] }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: ['power_curves'],
+        athlete: { id: 'i123', name: 'Test athlete', sportSettings: [] }, activities: [], powerCurves: null, durabilityCurves: null,
+        plannedWorkouts: [], warnings: ['power_curves', 'durability_curves'],
         updated: ['athlete', 'activities', 'planned_workouts'],
       }),
     });
     const response = await createSyncHandler(deps)(event());
     expect(response.statusCode).toBe(207);
-    expect(JSON.parse(response.body)).toMatchObject({ status: 'partial', warnings: ['power_curves'] });
+    expect(JSON.parse(response.body)).toMatchObject({ status: 'partial', warnings: ['power_curves', 'durability_curves'] });
     expect(deps.commit).toHaveBeenCalledOnce();
+    expect(deps.commit).toHaveBeenCalledWith(
+      'coach-1', internalAthleteId, 'sync-2',
+      expect.objectContaining({ snapshot: null, durabilitySnapshot: null }),
+      expect.any(Object),
+    );
   });
 
   it('returns only a normalized synchronization summary', async () => {
@@ -122,12 +139,13 @@ describe('athlete synchronization', () => {
     expect(JSON.parse(response.body)).toEqual({
       synchronizedAt: '2026-09-05T12:00:00.000Z',
       status: 'complete',
-      updated: ['athlete', 'activities', 'power_curves', 'planned_workouts'],
+      updated: ['athlete', 'activities', 'power_curves', 'durability_curves', 'planned_workouts'],
       warnings: [],
       counts: {
         athlete: { received: 1, accepted: 1, rejected: 0 },
         activities: { received: 0, accepted: 0, rejected: 0 },
         power_curves: { received: 1, accepted: 1, rejected: 0 },
+        durability_curves: { received: 3, accepted: 3, rejected: 0 },
         planned_workouts: { received: 0, accepted: 0, rejected: 0 },
       },
     });
@@ -148,15 +166,25 @@ describe('athlete synchronization', () => {
       const promise = new Promise<Awaited<ReturnType<ReturnType<typeof dependencies>['load']>>>((done) => { resolve = done; });
       return { promise, resolve };
     })();
-    const committed: string[] = [];
+    const grouped = (watts: number) => ({ list: [
+      { id: '90d', secs: [5], values: [watts], powerModels: [] },
+      { id: '90d-kj0', after_kj: 700, secs: [5], values: [watts - 50], powerModels: [] },
+      { id: '90d-kj1', after_kj: 1400, secs: [5], values: [watts - 100], powerModels: [] },
+    ] });
+    const loaded = (name: string, watts: number) => ({
+      athlete: { id: 'i123', name, sportSettings: [] }, activities: [],
+      powerCurves: grouped(watts), durabilityCurves: grouped(watts), plannedWorkouts: [], warnings: [],
+      updated: ['power_curves', 'durability_curves'],
+    });
+    const committed: Array<{ key: string; freshWatts: number }> = [];
     const deps = dependencies({
       beginSync: vi.fn(async (_athleteId: string, key: string) => { latestKey = key; }),
       load: vi.fn((_externalId: string, request: { syncKey: string }) => request.syncKey === 'sync-a'
         ? aLoaded.promise
-        : Promise.resolve({ athlete: { id: 'i123', name: 'B', sportSettings: [] }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: [], updated: [] })),
-      commit: vi.fn(async (_coachId: string, _athleteId: string, key: string) => {
+        : Promise.resolve(loaded('B', 901))),
+      commit: vi.fn(async (_coachId: string, _athleteId: string, key: string, data: { durabilitySnapshot: { fresh_curve: { points: Array<{ watts: number }> } } }) => {
         if (key !== latestKey) return false;
-        committed.push(key);
+        committed.push({ key, freshWatts: data.durabilitySnapshot.fresh_curve.points[0].watts });
         return true;
       }),
     });
@@ -167,10 +195,10 @@ describe('athlete synchronization', () => {
     const requestB = handler(event({ syncKey: 'sync-b' }));
     await vi.waitFor(() => expect(deps.beginSync).toHaveBeenCalledWith(internalAthleteId, 'sync-b'));
     expect((await requestB).statusCode).toBe(200);
-    aLoaded.resolve({ athlete: { id: 'i123', name: 'A', sportSettings: [] }, activities: [], powerCurves: null, plannedWorkouts: [], warnings: [], updated: [] });
+    aLoaded.resolve(loaded('A', 801));
 
     expect((await requestA).statusCode).toBe(409);
-    expect(committed).toEqual(['sync-b']);
+    expect(committed).toEqual([{ key: 'sync-b', freshWatts: 901 }]);
   });
 
   it('reports sanitized rejection counts for mixed arrays and an invalid profile', async () => {
@@ -229,7 +257,11 @@ describe('athlete synchronization', () => {
       async get(path, query) {
         calls.push({ path, query });
         if (path.endsWith('/activities') || path.endsWith('/events')) return [];
-        if (path.endsWith('/power-curves')) return { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] };
+        if (path.endsWith('/power-curves')) return { list: [
+          { id: '90d-kj1', after_kj: 1400, secs: [5], values: [800], powerModels: [] },
+          { id: '90d', secs: [5], values: [900], powerModels: [] },
+          { id: '90d-kj0', after_kj: 700, secs: [5], values: [850], powerModels: [] },
+        ] };
         return { id: 'i123', name: 'Ciclista', sportSettings: [] };
       },
     });
@@ -243,10 +275,12 @@ describe('athlete synchronization', () => {
       { path: '/athlete/i123', query: undefined },
       { path: '/athlete/i123/activities', query: { oldest: '2026-06-08', newest: '2026-09-05' } },
       { path: '/athlete/i123/power-curves', query: {
-        curves: '90d', newest: '2026-09-05', type: 'Ride', ...(expectedFilters ? { filters: expectedFilters } : {}),
+        curves: '90d,90d-kj0,90d-kj1', newest: '2026-09-05', type: 'Ride', subMaxEfforts: '3',
+        ...(expectedFilters ? { filters: expectedFilters } : {}),
       } },
       { path: '/athlete/i123/events', query: { oldest: '2026-06-08', newest: '2026-09-05', category: 'WORKOUT' } },
     ]);
+    expect(result.durabilityCurves).not.toBeNull();
     expect(result.warnings).toEqual([]);
   });
 
@@ -262,7 +296,7 @@ describe('athlete synchronization', () => {
       athleteId: internalAthleteId,
       oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all', syncKey: 'sync-2',
     });
-    expect(result.warnings).toEqual(['power_curves']);
+    expect(result.warnings).toEqual(['power_curves', 'durability_curves']);
     expect(result.updated).toEqual(['athlete', 'activities', 'planned_workouts']);
   });
 
@@ -280,6 +314,7 @@ describe('athlete synchronization', () => {
     });
     expect(result.powerCurves).toBeNull();
     expect(result.warnings).toContain('power_curves');
+    expect(result.warnings).toContain('durability_curves');
     expect(result.updated).not.toContain('power_curves');
     const normalized = normalizeAthleteData(result, {
       athleteId: internalAthleteId,
@@ -294,7 +329,11 @@ describe('athlete synchronization', () => {
       async get(path) {
         if (path.endsWith('/activities')) return { privateActivity: 'do-not-expose' };
         if (path.endsWith('/events')) return { privateWorkout: 'do-not-expose' };
-        if (path.endsWith('/power-curves')) return { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] };
+        if (path.endsWith('/power-curves')) return { list: [
+          { id: '90d', secs: [5], values: [900], powerModels: [] },
+          { id: '90d-kj0', after_kj: 700, secs: [5], values: [850], powerModels: [] },
+          { id: '90d-kj1', after_kj: 1400, secs: [5], values: [800], powerModels: [] },
+        ] };
         return { id: 'i123', name: 'Ciclista', sportSettings: [] };
       },
     });
@@ -339,6 +378,109 @@ describe('athlete synchronization', () => {
     expect(JSON.stringify(payload)).not.toContain('never-store-this');
   });
 
+  it('uses the fresh member of a grouped response for the power snapshot', () => {
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
+    };
+
+    expect(createPowerCurveSnapshotPayload(durabilityCurves, request).points[0]).toEqual({ seconds: 10, watts: 900 });
+  });
+
+  it('persists a partial durability snapshot without discarding fresh and valid fatigued curves', () => {
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
+    };
+    const normalized = normalizeAthleteData({
+      athlete: null,
+      activities: [],
+      powerCurves: { list: [durabilityCurves.list[1]] },
+      durabilityCurves: { list: [
+        durabilityCurves.list[1],
+        { id: '90d-kj0', after_kj: 700, secs: [10], values: [] },
+        durabilityCurves.list[0],
+      ] },
+      plannedWorkouts: [],
+      warnings: [],
+      updated: ['power_curves', 'durability_curves'],
+      received: { durability_curves: 3 },
+    }, request, new Date('2026-09-05T12:00:00Z'));
+
+    expect(normalized.durabilitySnapshot?.fresh_curve).toBeDefined();
+    expect(normalized.durabilitySnapshot?.fatigued_curves).toHaveLength(1);
+    expect(normalized.warnings).toContain('durability_curves:1_rejected');
+    expect(normalized.counts.durability_curves).toEqual({ received: 3, accepted: 2, rejected: 1 });
+  });
+
+  it('keeps a fresh-only durability snapshot with a readable partial warning', () => {
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
+    };
+    const normalized = normalizeAthleteData({
+      athlete: null,
+      activities: [],
+      powerCurves: { list: [durabilityCurves.list[1]] },
+      durabilityCurves: { list: [durabilityCurves.list[1]] },
+      plannedWorkouts: [],
+      warnings: [],
+      updated: ['power_curves', 'durability_curves'],
+      received: { durability_curves: 1 },
+    }, request, new Date('2026-09-05T12:00:00Z'));
+
+    expect(normalized.durabilitySnapshot?.fresh_curve.points).toHaveLength(4);
+    expect(normalized.warnings).toContain('Faltan curvas fatigadas de Durabilidad para uno o más umbrales.');
+  });
+
+  it('normalizes a non-positive source weight to null before atomic persistence', () => {
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
+    };
+    const payload = createDurabilitySnapshotPayload({
+      list: [{ id: '90d', weight: 0, secs: [10], values: [900], powerModels: [] }],
+    }, [], request, '2026-09-05T12:00:00.000Z');
+
+    expect(payload.weight_kg).toBeNull();
+    expect(payload.weight_observed_at).toBeNull();
+    expect(payload.fresh_curve.weightKg).toBeNull();
+  });
+
+  it('stores complete durability provenance and hashes canonical curve order', () => {
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
+    };
+    const activities = [
+      { intervals_activity_id: 'i1', normalized_data: { name: 'Private one', deviceWatts: true } },
+      { intervals_activity_id: 'i2', normalized_data: { name: 'Private two', deviceWatts: true } },
+      { intervals_activity_id: 'i3', normalized_data: { name: 'Private three', deviceWatts: false } },
+    ];
+    const payload = createDurabilitySnapshotPayload(durabilityCurves, activities, request, '2026-09-05T12:00:00.000Z');
+    const reordered = createDurabilitySnapshotPayload(
+      { list: [...durabilityCurves.list].reverse() }, activities, request, '2026-09-05T12:00:00.000Z',
+    );
+
+    expect(payload.fresh_curve.points[0]).toMatchObject({
+      seconds: 10,
+      activityId: 'i1',
+      supportingActivityIds: ['i1'],
+      supportingActivityCount: 1,
+      supportingEffortCount: 1,
+      powerSource: 'measured',
+      startIndex: 1,
+      endIndex: 11,
+    });
+    expect(payload.fatigued_curves.map((curve) => curve.afterKj)).toEqual([700, 1400]);
+    expect(payload.fatigued_curves[1].points[0]).toMatchObject({
+      supportingActivityIds: ['i3', 'i5', 'i6'], supportingActivityCount: 3, supportingEffortCount: 3, powerSource: 'unknown',
+    });
+    expect(payload).toMatchObject({ weight_kg: 70, weight_observed_at: '2026-09-05T12:00:00.000Z' });
+    expect(payload.content_hash).toBe(reordered.content_hash);
+    expect(JSON.stringify(payload)).not.toContain('Private');
+  });
+
   it('keeps the same logical hash when source models arrive reordered', () => {
     const request = {
       athleteId: internalAthleteId,
@@ -369,11 +511,20 @@ describe('athlete synchronization', () => {
     };
     const normalized = normalizeAthleteData({
       athlete: { id: 'i123', name: 'Authorized athlete', sportSettings: [{ types: ['Ride'], ftp: 255, w_prime: 17000 }] },
-      activities: [{ id: 'i9001', icu_athlete_id: 'i123', name: 'Ride', type: 'Ride', start_date: '2026-09-01T08:00:00Z', moving_time: 3600 }],
-      powerCurves: { list: [{ id: '90d', secs: [5], values: [900], powerModels: [] }] },
+      activities: [{ id: 'i9001', icu_athlete_id: 'i123', name: 'Ride', type: 'Ride', start_date: '2026-09-01T08:00:00Z', moving_time: 3600, device_watts: true }],
+      powerCurves: { list: [
+        { id: '90d', weight: 70, secs: [5], values: [900], activity_id: ['i9001'], powerModels: [] },
+        { id: '90d-kj0', after_kj: 700, weight: 70, secs: [5], values: [850], activity_id: ['i9001'], powerModels: [] },
+        { id: '90d-kj1', after_kj: 1400, weight: 70, secs: [5], values: [800], activity_id: ['i9001'], powerModels: [] },
+      ] },
+      durabilityCurves: { list: [
+        { id: '90d', weight: 70, secs: [5], values: [900], activity_id: ['i9001'], powerModels: [] },
+        { id: '90d-kj0', after_kj: 700, weight: 70, secs: [5], values: [850], activity_id: ['i9001'], powerModels: [] },
+        { id: '90d-kj1', after_kj: 1400, weight: 70, secs: [5], values: [800], activity_id: ['i9001'], powerModels: [] },
+      ] },
       plannedWorkouts: [{ id: 45, athlete_id: 'i123', start_date_local: '2026-09-06T08:00:00', name: 'Workout', category: 'WORKOUT' }],
       warnings: [],
-      updated: ['athlete', 'activities', 'power_curves', 'planned_workouts'],
+      updated: ['athlete', 'activities', 'power_curves', 'durability_curves', 'planned_workouts'],
     }, request, new Date('2026-09-05T12:00:00Z'));
 
     const persisted = await persistNormalizedAthleteData(
@@ -398,6 +549,10 @@ describe('athlete synchronization', () => {
         status: 'complete',
         activities: [{ intervals_activity_id: 'i9001' }],
         snapshot: { points: [{ seconds: 5, watts: 900 }] },
+        durability_snapshot: {
+          fresh_curve: { points: [{ seconds: 5, watts: 900, supportingActivityCount: 1, supportingEffortCount: 1 }] },
+          fatigued_curves: [{ afterKj: 700 }, { afterKj: 1400 }],
+        },
       },
     });
     expect(body.sync_payload).not.toHaveProperty('latest_sync_key');

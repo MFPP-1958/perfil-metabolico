@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { activitySchema, athleteSchema, plannedWorkoutSchema, powerCurveResponseSchema, powerCurveSchema } from './schemas';
+import { activitySchema, athleteSchema, plannedWorkoutSchema, powerCurveSchema } from './schemas';
 
 export type DurabilityCurveLevel = 'fresh' | 'kj0' | 'kj1';
 
@@ -12,6 +12,7 @@ export interface NormalizedDurabilityCurve {
     watts: number;
     activityId: string | null;
     supportingActivityIds: string[];
+    supportingEffortCount: number;
     startIndex: number | null;
     endIndex: number | null;
   }>;
@@ -42,8 +43,13 @@ function mapSupportingActivityIds(
   const primary = primaryActivityId == null ? [] : [primaryActivityId];
   const values = supportingValuesSchema.safeParse(submaxValues?.[index]);
   const activities = supportingActivityIdsSchema.safeParse(submaxActivityIds?.[index]);
-  if (!values.success || !activities.success || values.data.length !== activities.data.length) return primary;
-  return [...new Set([...primary, ...activities.data])];
+  if (!values.success || !activities.success || values.data.length !== activities.data.length) {
+    return { activityIds: primary, effortCount: 1 };
+  }
+  return {
+    activityIds: [...new Set([...primary, ...activities.data])],
+    effortCount: 1 + activities.data.length,
+  };
 }
 
 function mapDurabilityCurve(curve: z.infer<typeof powerCurveSchema>, level: DurabilityCurveLevel): NormalizedDurabilityCurve {
@@ -55,16 +61,18 @@ function mapDurabilityCurve(curve: z.infer<typeof powerCurveSchema>, level: Dura
     points: curve.secs.flatMap((seconds, index) => {
       const watts = values[index];
       if (seconds <= 0 || watts <= 0) return [];
+      const supporting = mapSupportingActivityIds(
+        curve.activity_id?.[index],
+        curve.submax_values,
+        curve.submax_activity_id,
+        index,
+      );
       return [{
         seconds,
         watts,
         activityId: curve.activity_id?.[index] ?? null,
-        supportingActivityIds: mapSupportingActivityIds(
-          curve.activity_id?.[index],
-          curve.submax_values,
-          curve.submax_activity_id,
-          index,
-        ),
+        supportingActivityIds: supporting.activityIds,
+        supportingEffortCount: supporting.effortCount,
         startIndex: curve.start_index?.[index] ?? null,
         endIndex: curve.end_index?.[index] ?? null,
       }];
@@ -88,6 +96,10 @@ export function mapDurabilityCurves(input: unknown): NormalizedDurabilityCurves 
       continue;
     }
     const mapped = mapDurabilityCurve(curve.data, level);
+    if (!mapped.points.length || (level !== 'fresh' && mapped.afterKj === null)) {
+      rejected.push(level);
+      continue;
+    }
     if (level === 'fresh') fresh = mapped;
     else fatigued.push(mapped);
   }
@@ -117,7 +129,12 @@ export function mapSportSettings(input: unknown) {
 }
 
 export function mapPowerCurve(input: unknown) {
-  const curve = powerCurveResponseSchema.parse(input).list[0];
+  const response = durabilityCurveResponseSchema.parse(input);
+  const rawCurve = response.list.find((candidate) => {
+    const id = z.object({ id: z.string() }).safeParse(candidate);
+    return id.success && durabilityCurveLevel(id.data.id) === 'fresh';
+  });
+  const curve = powerCurveSchema.parse(rawCurve);
   const values = curve.values ?? curve.watts ?? [];
   const bestWattsByDuration = new Map<number, number>();
   curve.secs.forEach((seconds, index) => {
@@ -163,6 +180,7 @@ export function mapActivity(input: unknown) {
     durationSeconds: activity.moving_time,
     distanceMetres: activity.distance ?? null,
     indoor: activity.trainer ?? null,
+    deviceWatts: activity.device_watts ?? null,
     averagePowerWatts: activity.icu_average_watts ?? null,
     averageHeartRateBpm: activity.average_heartrate ?? null,
     averageCadenceRpm: activity.average_cadence ?? null,

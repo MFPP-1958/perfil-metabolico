@@ -55,6 +55,7 @@ export const activitySchema = z.object({
   moving_time: z.number().int().nonnegative(),
   distance: nullableNumber,
   trainer: z.boolean().nullable().optional(),
+  device_watts: z.boolean().nullable().optional(),
   icu_average_watts: nullableNumber,
   average_heartrate: nullableNumber,
   average_cadence: nullableNumber,
