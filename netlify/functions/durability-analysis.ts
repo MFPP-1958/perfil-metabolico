@@ -35,11 +35,18 @@ export interface PersistedDurabilityAnalysis {
   quality: { coverage: CoverageQuality; warnings: string[] };
 }
 
+interface DurabilityAnalysisKey {
+  snapshotId: string;
+  algorithmVersion: typeof DURABILITY_ALGORITHM_VERSION;
+  createdBy: string;
+}
+
 export interface DurabilityAnalysisDependencies {
   authenticate(event: DurabilityAnalysisEvent): Promise<{ id: string } | null>;
   authorize(coachId: string, athleteId: string): Promise<AnalysisRole | null>;
   loadLatestSnapshot(query: DurabilityQuery): Promise<unknown | null>;
   loadSnapshot(snapshotId: string): Promise<unknown | null>;
+  loadConfirmedAnalysis(input: DurabilityAnalysisKey): Promise<unknown | null>;
   persistAnalysis(input: PersistedDurabilityAnalysis): Promise<{ row: unknown; created: boolean }>;
   now(): Date;
 }
@@ -132,6 +139,7 @@ const resultSchema = z.strictObject({
 const rawAnalysisRunSchema = z.object({
   id: z.uuid(),
   snapshot_id: z.uuid(),
+  created_by: z.uuid(),
   algorithm_version: z.literal(DURABILITY_ALGORITHM_VERSION),
   comparisons: z.array(durabilityRowSchema),
   quality: qualitySchema,
@@ -218,7 +226,7 @@ export async function loadLatestDurabilitySnapshot(
     environment: `eq.${query.environment}`,
     oldest: `eq.${query.oldest}`,
     newest: `eq.${query.newest}`,
-    order: 'synchronized_at.desc',
+    order: 'synchronized_at.desc,id.desc',
     limit: '1',
   });
   const response = await fetchImpl(`${service.url}/rest/v1/durability_curve_snapshots?${search}`, {
@@ -243,6 +251,30 @@ async function loadSnapshotDefault(snapshotId: string) {
   });
   if (!response.ok) throw new Error('Unable to load durability snapshot');
   return ((await response.json()) as unknown[])[0] ?? null;
+}
+
+async function loadConfirmedDurabilityAnalysis(
+  fetchImpl: typeof fetch,
+  service: SupabaseService,
+  input: DurabilityAnalysisKey,
+) {
+  const query = new URLSearchParams({
+    select: 'id,snapshot_id,created_by,algorithm_version,comparisons,quality,confirmed_at',
+    snapshot_id: `eq.${input.snapshotId}`,
+    algorithm_version: `eq.${input.algorithmVersion}`,
+    created_by: `eq.${input.createdBy}`,
+    limit: '1',
+  });
+  const response = await fetchImpl(`${service.url}/rest/v1/durability_analysis_runs?${query}`, {
+    headers: service.headers,
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!response.ok) throw new Error('Unable to load confirmed durability analysis');
+  return ((await response.json()) as unknown[])[0] ?? null;
+}
+
+async function loadConfirmedAnalysisDefault(input: DurabilityAnalysisKey) {
+  return loadConfirmedDurabilityAnalysis(fetch, configuration(), input);
 }
 
 export async function persistConfirmedDurabilityAnalysis(
@@ -270,21 +302,9 @@ export async function persistConfirmedDurabilityAnalysis(
   const inserted = await insertResponse.json() as unknown[];
   if (inserted[0]) return { row: inserted[0], created: true };
 
-  const existingQuery = new URLSearchParams({
-    select: 'id,snapshot_id,algorithm_version,comparisons,quality,confirmed_at',
-    snapshot_id: `eq.${input.snapshotId}`,
-    algorithm_version: `eq.${input.algorithmVersion}`,
-    created_by: `eq.${input.createdBy}`,
-    limit: '1',
-  });
-  const existingResponse = await fetchImpl(
-    `${service.url}/rest/v1/durability_analysis_runs?${existingQuery}`,
-    { headers: service.headers, signal: AbortSignal.timeout(8_000) },
-  );
-  if (!existingResponse.ok) throw new Error('Unable to load confirmed durability analysis');
-  const existing = await existingResponse.json() as unknown[];
-  if (!existing[0]) throw new Error('Confirmed durability analysis was not returned');
-  return { row: existing[0], created: false };
+  const existing = await loadConfirmedDurabilityAnalysis(fetchImpl, service, input);
+  if (!existing) throw new Error('Confirmed durability analysis was not returned');
+  return { row: existing, created: false };
 }
 
 async function persistAnalysisDefault(input: PersistedDurabilityAnalysis) {
@@ -296,6 +316,7 @@ const defaults: DurabilityAnalysisDependencies = {
   authorize: authorizeDefault,
   loadLatestSnapshot: loadLatestSnapshotDefault,
   loadSnapshot: loadSnapshotDefault,
+  loadConfirmedAnalysis: loadConfirmedAnalysisDefault,
   persistAnalysis: persistAnalysisDefault,
   now: () => new Date(),
 };
@@ -356,8 +377,15 @@ function snapshotResponse(raw: unknown) {
   };
 }
 
-function analysisResponse(raw: unknown) {
+function analysisResponse(raw: unknown, expected?: DurabilityAnalysisKey) {
   const row = rawAnalysisRunSchema.parse(raw);
+  if (expected && (
+    row.snapshot_id !== expected.snapshotId
+    || row.algorithm_version !== expected.algorithmVersion
+    || row.created_by !== expected.createdBy
+  )) {
+    throw new Error('Confirmed durability analysis does not match its owner');
+  }
   return {
     id: row.id,
     snapshotId: row.snapshot_id,
@@ -374,7 +402,7 @@ export function createDurabilityAnalysisHandler(
   const deps = { ...defaults, ...dependencies };
   return async (event: DurabilityAnalysisEvent) => {
     if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') {
-      return jsonResponse(405, { error: 'Método no permitido.' });
+      return jsonResponse(405, { error: 'Método no permitido.' }, { Allow: 'GET, POST' });
     }
     if (!bearerToken(event.headers)) {
       return jsonResponse(401, { error: 'Sesión necesaria o caducada.' });
@@ -416,6 +444,14 @@ export function createDurabilityAnalysisHandler(
       if ((await deps.authorize(user.id, snapshot.athlete_id)) !== 'coach') {
         return jsonResponse(403, { error: 'No tienes permiso para confirmar este análisis.' });
       }
+
+      const analysisKey = {
+        snapshotId: snapshot.id,
+        algorithmVersion: DURABILITY_ALGORITHM_VERSION,
+        createdBy: user.id,
+      } as const;
+      const existing = await deps.loadConfirmedAnalysis(analysisKey);
+      if (existing) return jsonResponse(200, analysisResponse(existing, analysisKey));
 
       const rawLatest = await deps.loadLatestSnapshot(snapshotQuery(snapshot));
       if (!rawLatest || rawSnapshotSchema.parse(rawLatest).id !== snapshot.id) {
