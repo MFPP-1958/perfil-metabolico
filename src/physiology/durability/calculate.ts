@@ -1,47 +1,159 @@
-import type { PowerDurationPoint } from '../power-duration/types';
+import type {
+  CellQuality,
+  CoverageQuality,
+  DurabilityInput,
+  DurabilityLevel,
+  DurabilityLevelResult,
+  DurabilityPoint,
+  DurabilityResult,
+  DurabilityRow,
+} from './types';
 
-export interface DurabilitySnapshot {
-  sport: string;
-  indoor: boolean | null;
-  observations: number;
-  points: readonly PowerDurationPoint[];
-}
-export interface DurabilityWorkload {
-  priorKjPerKg: number;
-  priorWorkAboveCpKj: number;
-  intensityDistribution: { low: number; moderate: number; high: number };
-}
-export interface DurabilityResult {
-  valid: boolean;
-  comparisons: readonly { seconds: number; freshWatts: number; fatiguedWatts: number; declinePercent: number }[];
-  workload: DurabilityWorkload;
-  onsetSeconds: number | null;
-  confidence: 'low' | 'moderate' | 'high';
-  warnings: string[];
+export const DURABILITY_ALGORITHM_VERSION = 'durability-record-profile@2.0.0' as const;
+export const CANONICAL_DURATIONS = [10, 60, 300, 1200] as const;
+
+function declinePercent(freshWatts: number, fatiguedWatts: number): number {
+  return ((freshWatts - fatiguedWatts) / freshWatts) * 100;
 }
 
-const targetDurations = [10, 60, 300, 1200];
+function validWeight(weightKg: number | null): weightKg is number {
+  return weightKg !== null && Number.isFinite(weightKg) && weightKg > 0;
+}
 
-export function calculateDurability(fresh: DurabilitySnapshot, fatigued: DurabilitySnapshot, workload: DurabilityWorkload): DurabilityResult {
-  const warnings: string[] = [];
-  if (fresh.sport !== fatigued.sport) warnings.push('Las curvas pertenecen a deportes distintos.');
-  if (fresh.indoor !== null && fatigued.indoor !== null && fresh.indoor !== fatigued.indoor) warnings.push('No se deben comparar condiciones de interior y exterior sin advertencia.');
-  const comparisons = targetDurations.flatMap((seconds) => {
-    const before = fresh.points.find((point) => point.seconds === seconds);
-    const after = fatigued.points.find((point) => point.seconds === seconds);
-    if (!before || !after || before.watts <= 0) return [];
-    return [{ seconds, freshWatts: before.watts, fatiguedWatts: after.watts, declinePercent: ((before.watts - after.watts) / before.watts) * 100 }];
-  });
-  if (!comparisons.length) warnings.push('No existen duraciones objetivo coincidentes entre las dos curvas.');
-  const observationFloor = Math.min(fresh.observations, fatigued.observations);
-  if (observationFloor < 3) warnings.push('Hay pocas observaciones para estimar la variabilidad habitual.');
-  const incompatible = fresh.sport !== fatigued.sport || (fresh.indoor !== null && fatigued.indoor !== null && fresh.indoor !== fatigued.indoor);
+function assertFiniteInput(input: DurabilityInput): void {
+  const points = [input.fresh.points, ...input.fatigued.map((curve) => curve.points)].flat();
+  if (points.some((point) => !Number.isFinite(point.seconds) || !Number.isFinite(point.watts))) {
+    throw new Error('Las duraciones y potencias deben tener valores finitos.');
+  }
+  if (input.fatigued.some((curve) => !Number.isFinite(curve.afterKj))) {
+    throw new Error('El trabajo acumulado debe tener un valor finito.');
+  }
+}
+
+function compatibleContext(input: DurabilityInput): boolean {
+  const sport: unknown = input.sport;
+  const environment: unknown = input.environment;
+  return sport === 'Ride' && (environment === 'all' || environment === 'outdoor' || environment === 'indoor');
+}
+
+function unavailableComparison(
+  afterKj: number,
+  weightKg: number | null,
+  quality: CellQuality,
+): DurabilityLevelResult {
   return {
-    valid: comparisons.length > 0 && !incompatible,
-    comparisons,
-    workload,
-    onsetSeconds: comparisons.find((comparison) => comparison.declinePercent >= 5)?.seconds ?? null,
-    confidence: observationFloor < 3 ? 'low' : comparisons.length >= 3 && observationFloor >= 5 ? 'high' : 'moderate',
+    afterKj,
+    afterKjPerKg: validWeight(weightKg) ? afterKj / weightKg : null,
+    fatiguedWatts: null,
+    declinePercent: null,
+    quality,
+    supportingActivityCount: 0,
+    supportingEffortCount: 0,
+    powerSource: 'unknown',
+  };
+}
+
+function comparison(
+  freshPoint: DurabilityPoint | undefined,
+  fatiguedPoint: DurabilityPoint | undefined,
+  afterKj: number,
+  weightKg: number | null,
+): DurabilityLevelResult {
+  if (!freshPoint || !fatiguedPoint || freshPoint.watts <= 0 || fatiguedPoint.watts <= 0) {
+    return unavailableComparison(afterKj, weightKg, 'insufficient');
+  }
+
+  return {
+    afterKj,
+    afterKjPerKg: validWeight(weightKg) ? afterKj / weightKg : null,
+    fatiguedWatts: fatiguedPoint.watts,
+    declinePercent: declinePercent(freshPoint.watts, fatiguedPoint.watts),
+    quality: 'observed',
+    supportingActivityCount: Math.min(freshPoint.supportingActivityCount, fatiguedPoint.supportingActivityCount),
+    supportingEffortCount: Math.min(freshPoint.supportingEffortCount, fatiguedPoint.supportingEffortCount),
+    powerSource: freshPoint.powerSource === 'measured' && fatiguedPoint.powerSource === 'measured' ? 'measured' : 'unknown',
+  };
+}
+
+function coverageQuality(input: DurabilityInput, rows: readonly DurabilityRow[]): CoverageQuality {
+  const observedByLevel: Record<DurabilityLevel, DurabilityLevelResult[]> = { kj0: [], kj1: [] };
+  for (const row of rows) {
+    for (const level of ['kj0', 'kj1'] as const) {
+      const cell = row.levels[level];
+      if (cell?.quality === 'observed') observedByLevel[level].push(cell);
+    }
+  }
+
+  const observed = [...observedByLevel.kj0, ...observedByLevel.kj1];
+  if (observed.length === 0) return 'insufficient';
+
+  const hasValidWeight = validWeight(input.fresh.weightKg)
+    && input.fatigued.every((curve) => validWeight(curve.weightKg));
+  const hasLimitedProvenance = observed.some(
+    (cell) => cell.powerSource === 'unknown' || cell.supportingActivityCount < 2,
+  );
+  if (!hasValidWeight || hasLimitedProvenance) return 'low';
+
+  const kj0Count = observedByLevel.kj0.length;
+  const kj1Count = observedByLevel.kj1.length;
+  if (kj0Count >= 3 && kj1Count >= 3) return 'high';
+  if ((kj0Count >= 2 && kj1Count >= 2) || Math.max(kj0Count, kj1Count) >= 3) return 'moderate';
+  return 'low';
+}
+
+export function calculateDurability(input: DurabilityInput): DurabilityResult {
+  assertFiniteInput(input);
+  const contextIsCompatible = compatibleContext(input);
+  const rows: DurabilityRow[] = CANONICAL_DURATIONS.map((seconds) => {
+    const freshPoint = input.fresh.points.find((point) => point.seconds === seconds);
+    const levels: DurabilityRow['levels'] = {};
+
+    for (const curve of input.fatigued) {
+      levels[curve.level] = contextIsCompatible
+        ? comparison(
+          freshPoint,
+          curve.points.find((point) => point.seconds === seconds),
+          curve.afterKj,
+          curve.weightKg,
+        )
+        : unavailableComparison(curve.afterKj, curve.weightKg, 'incompatible');
+    }
+
+    const onset = Object.values(levels)
+      .filter((level): level is DurabilityLevelResult => level?.declinePercent !== null && level.declinePercent >= 5)
+      .sort((left, right) => left.afterKj - right.afterKj)[0];
+
+    return {
+      seconds,
+      freshWatts: freshPoint?.watts ?? null,
+      levels,
+      onsetAfterKj: onset?.afterKj ?? null,
+      onsetAfterKjPerKg: onset?.afterKjPerKg ?? null,
+    };
+  });
+
+  if (!contextIsCompatible) {
+    return {
+      algorithmVersion: DURABILITY_ALGORITHM_VERSION,
+      rows,
+      coverage: 'insufficient',
+      warnings: ['El contexto de las curvas es incompatible.'],
+    };
+  }
+
+  const coverage = coverageQuality(input, rows);
+  const warnings: string[] = [];
+  if (input.fatigued.some((curve) => !validWeight(curve.weightKg)) || !validWeight(input.fresh.weightKg)) {
+    warnings.push('No hay un peso válido para expresar el trabajo en kJ/kg.');
+  }
+  if (coverage === 'insufficient') {
+    warnings.push('No existen duraciones canónicas coincidentes entre las curvas.');
+  }
+
+  return {
+    algorithmVersion: DURABILITY_ALGORITHM_VERSION,
+    rows,
+    coverage,
     warnings,
   };
 }
