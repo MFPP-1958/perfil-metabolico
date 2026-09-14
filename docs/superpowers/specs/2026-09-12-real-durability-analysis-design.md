@@ -81,6 +81,10 @@ final, periodo y filtro de interior/exterior:
 - curva fatigada configurada como `kJ0`;
 - curva fatigada configurada como `kJ1`.
 
+La misma petición solicitará hasta tres esfuerzos secundarios por punto mediante
+`subMaxEfforts=3`. Esto permitirá contar esfuerzos y actividades distintas sin descargar
+streams completos.
+
 El normalizador no dependerá del orden de la lista devuelta. Identificará cada curva por
 su variante y conservará:
 
@@ -93,6 +97,8 @@ su variante y conservará:
 
 Los datos no válidos se rechazarán por componente y producirán recuentos de recibidos,
 aceptados y rechazados. Una curva malformada no invalidará otras curvas utilizables.
+Los identificadores externos usados para calcular procedencia permanecerán en el servidor;
+la respuesta pública solo expondrá recuentos.
 
 ## Modelo fisiológico
 
@@ -148,12 +154,12 @@ Cada celda de comparación tendrá procedencia y uno de estos estados:
 
 La calidad de cobertura general podrá ser:
 
-- alta: tres o más duraciones exactas válidas en dos niveles fatigados, peso válido y
-  procedencia de potencia medida;
+- alta: tres o más duraciones exactas válidas en dos niveles fatigados, peso válido,
+  procedencia de potencia medida y al menos dos actividades independientes por celda;
 - moderada: al menos dos duraciones exactas válidas en ambos niveles fatigados, o tres
   duraciones exactas válidas en un solo nivel, con procedencia identificada;
-- baja: una o dos duraciones válidas en un solo nivel, peso ausente o procedencia no
-  identificada;
+- baja: una o dos duraciones válidas en un solo nivel, peso ausente, una sola actividad o
+  procedencia no identificada;
 - insuficiente: ninguna comparación válida o contexto incompatible.
 
 La etiqueta describirá cobertura del dato y nunca se denominará confianza fisiológica.
