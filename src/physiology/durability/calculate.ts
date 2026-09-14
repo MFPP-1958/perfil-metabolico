@@ -25,6 +25,14 @@ function assertFiniteInput(input: DurabilityInput): void {
   if (points.some((point) => !Number.isFinite(point.seconds) || !Number.isFinite(point.watts))) {
     throw new Error('Las duraciones y potencias deben tener valores finitos.');
   }
+  if (points.some((point) => (
+    !Number.isInteger(point.supportingActivityCount)
+    || point.supportingActivityCount < 0
+    || !Number.isInteger(point.supportingEffortCount)
+    || point.supportingEffortCount < 0
+  ))) {
+    throw new Error('Los recuentos de soporte deben ser finitos, enteros y no negativos.');
+  }
   if (input.fatigued.some((curve) => !Number.isFinite(curve.afterKj))) {
     throw new Error('El trabajo acumulado debe tener un valor finito.');
   }
@@ -96,8 +104,11 @@ function coverageQuality(input: DurabilityInput, rows: readonly DurabilityRow[])
 
   const kj0Count = observedByLevel.kj0.length;
   const kj1Count = observedByLevel.kj1.length;
-  if (kj0Count >= 3 && kj1Count >= 3) return 'high';
-  if ((kj0Count >= 2 && kj1Count >= 2) || Math.max(kj0Count, kj1Count) >= 3) return 'moderate';
+  const sharedCount = rows.filter((row) => (
+    row.levels.kj0?.quality === 'observed' && row.levels.kj1?.quality === 'observed'
+  )).length;
+  if (sharedCount >= 3) return 'high';
+  if (sharedCount >= 2 || Math.max(kj0Count, kj1Count) >= 3) return 'moderate';
   return 'low';
 }
 

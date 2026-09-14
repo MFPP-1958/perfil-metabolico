@@ -88,11 +88,17 @@ describe('versioned physiological durability', () => {
   });
 
   it('uses the lowest available workload that reaches the five percent boundary', () => {
-    const input = twoLevelInput();
+    const input = inputWith({
+      fresh: [[300, 300]],
+      kj0: { afterKj: 700, points: [[300, 270]] },
+      kj1: { afterKj: 1400, points: [[300, 240]] },
+    });
     const result = calculateDurability({ ...input, fatigued: [...input.fatigued].reverse() });
 
-    expect(result.rows.find((row) => row.seconds === 10)?.onsetAfterKj).toBe(1400);
-    expect(result.rows.find((row) => row.seconds === 60)?.onsetAfterKj).toBe(1400);
+    const row = result.rows.find((candidate) => candidate.seconds === 300);
+    expect(row?.levels.kj0?.declinePercent).toBe(10);
+    expect(row?.levels.kj1?.declinePercent).toBe(20);
+    expect(row).toMatchObject({ onsetAfterKj: 700, onsetAfterKjPerKg: 10 });
   });
 
   it('keeps canonical rows when no fatigued curves are available', () => {
@@ -111,6 +117,16 @@ describe('versioned physiological durability', () => {
     }));
 
     expect(result.coverage).toBe('high');
+  });
+
+  it('uses the exact duration intersection when rating both levels', () => {
+    const result = calculateDurability(inputWith({
+      fresh: [[10, 900], [60, 400], [300, 300], [1200, 240]],
+      kj0: { afterKj: 700, points: [[10, 850], [60, 380], [300, 280]] },
+      kj1: { afterKj: 1400, points: [[60, 360], [300, 260], [1200, 210]] },
+    }));
+
+    expect(result.coverage).toBe('moderate');
   });
 
   it('reports moderate coverage from two observed durations in both levels', () => {
@@ -142,19 +158,44 @@ describe('versioned physiological durability', () => {
   });
 
   it.each([null, 0, -70, Number.POSITIVE_INFINITY, Number.NaN])(
-    'omits kJ/kg and lowers coverage for invalid weight %s',
+    'lowers otherwise high coverage for invalid weight %s',
     (weightKg) => {
-      const result = calculateDurability(inputWith({
-        fresh: [[10, 900]],
-        kj0: { afterKj: 700, points: [[10, 810]] },
+      const valid = twoLevelInput();
+      const invalid = inputWith({
+        fresh: [[10, 900], [60, 400], [300, 300], [1200, 240]],
+        kj0: { afterKj: 700, points: [[10, 880], [60, 390], [300, 291], [1200, 232]] },
+        kj1: { afterKj: 1400, points: [[10, 850], [60, 375], [300, 270], [1200, 215]] },
         weightKg,
-      }));
+      });
+      const result = calculateDurability(invalid);
 
+      expect(calculateDurability(valid).coverage).toBe('high');
       expect(result.coverage).toBe('low');
       expect(result.rows[0].levels.kj0?.afterKjPerKg).toBeNull();
       expect(result.warnings).toContain('No hay un peso válido para expresar el trabajo en kJ/kg.');
     },
   );
+
+  it('lowers otherwise high coverage when only fresh weight is absent', () => {
+    const input = twoLevelInput();
+    const result = calculateDurability({ ...input, fresh: { ...input.fresh, weightKg: null } });
+
+    expect(calculateDurability(input).coverage).toBe('high');
+    expect(result.coverage).toBe('low');
+    expect(result.warnings).toContain('No hay un peso válido para expresar el trabajo en kJ/kg.');
+  });
+
+  it('lowers otherwise high coverage when only one fatigued weight is absent', () => {
+    const input = twoLevelInput();
+    const fatigued = input.fatigued.map((curve) => curve.level === 'kj1' ? { ...curve, weightKg: null } : curve);
+    const result = calculateDurability({ ...input, fatigued });
+
+    expect(calculateDurability(input).coverage).toBe('high');
+    expect(result.coverage).toBe('low');
+    expect(result.rows[0].levels.kj0?.afterKjPerKg).toBe(10);
+    expect(result.rows[0].levels.kj1?.afterKjPerKg).toBeNull();
+    expect(result.warnings).toContain('No hay un peso válido para expresar el trabajo en kJ/kg.');
+  });
 
   it('lowers coverage when a valid cell has one supporting activity', () => {
     const input = twoLevelInput();
@@ -221,6 +262,48 @@ describe('versioned physiological durability', () => {
     });
 
     expect(() => calculateDurability(input)).toThrow(/finito/i);
+  });
+
+  it('rejects a non-finite fresh activity count', () => {
+    const input = twoLevelInput();
+    const freshPoints = input.fresh.points.map((point, index) => index === 0
+      ? { ...point, supportingActivityCount: Number.NaN }
+      : point);
+
+    expect(() => calculateDurability({ ...input, fresh: { ...input.fresh, points: freshPoints } }))
+      .toThrow(/recuentos.*enteros.*no negativos/i);
+  });
+
+  it('rejects a non-finite fresh effort count', () => {
+    const input = twoLevelInput();
+    const freshPoints = input.fresh.points.map((point, index) => index === 0
+      ? { ...point, supportingEffortCount: Number.POSITIVE_INFINITY }
+      : point);
+
+    expect(() => calculateDurability({ ...input, fresh: { ...input.fresh, points: freshPoints } }))
+      .toThrow(/recuentos.*enteros.*no negativos/i);
+  });
+
+  it('rejects a negative fatigued activity count', () => {
+    const input = twoLevelInput();
+    const fatigued = input.fatigued.map((curve) => ({
+      ...curve,
+      points: curve.points.map((point, index) => index === 0 ? { ...point, supportingActivityCount: -1 } : point),
+    }));
+
+    expect(() => calculateDurability({ ...input, fatigued }))
+      .toThrow(/recuentos.*enteros.*no negativos/i);
+  });
+
+  it('rejects a fractional fatigued effort count', () => {
+    const input = twoLevelInput();
+    const fatigued = input.fatigued.map((curve) => ({
+      ...curve,
+      points: curve.points.map((point, index) => index === 0 ? { ...point, supportingEffortCount: 1.5 } : point),
+    }));
+
+    expect(() => calculateDurability({ ...input, fatigued }))
+      .toThrow(/recuentos.*enteros.*no negativos/i);
   });
 
   it.each([
