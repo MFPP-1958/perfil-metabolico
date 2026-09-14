@@ -192,6 +192,68 @@ for each row execute function public.prevent_power_analysis_mutation();
 
 revoke all on function public.prevent_power_analysis_mutation() from public, anon, authenticated;
 
+create table public.durability_curve_snapshots (
+  id uuid primary key default extensions.gen_random_uuid(),
+  athlete_id uuid not null references public.athletes(id) on delete cascade,
+  created_by uuid not null references public.coach_profiles(id),
+  sport text not null check (sport = 'Ride'),
+  environment text not null check (environment in ('all', 'outdoor', 'indoor')),
+  oldest date not null,
+  newest date not null,
+  fresh_curve jsonb not null check (jsonb_typeof(fresh_curve) = 'object'),
+  fatigued_curves jsonb not null check (jsonb_typeof(fatigued_curves) = 'array'),
+  weight_kg numeric check (weight_kg is null or weight_kg > 0),
+  weight_observed_at timestamptz,
+  source_version text not null,
+  content_hash text not null check (content_hash ~ '^[0-9a-f]{64}$'),
+  synchronized_at timestamptz not null,
+  check (oldest <= newest),
+  unique (athlete_id, sport, environment, oldest, newest, content_hash),
+  unique (id, athlete_id)
+);
+
+create index durability_curve_snapshots_context_time_idx
+on public.durability_curve_snapshots (athlete_id, sport, environment, oldest, newest, synchronized_at desc);
+create index durability_curve_snapshots_created_by_idx
+on public.durability_curve_snapshots (created_by);
+
+create table public.durability_analysis_runs (
+  id uuid primary key default extensions.gen_random_uuid(),
+  athlete_id uuid not null references public.athletes(id) on delete cascade,
+  snapshot_id uuid not null,
+  created_by uuid not null references public.coach_profiles(id),
+  algorithm_version text not null,
+  comparisons jsonb not null check (jsonb_typeof(comparisons) = 'array'),
+  quality jsonb not null check (jsonb_typeof(quality) = 'object'),
+  confirmed_at timestamptz not null default now(),
+  foreign key (snapshot_id, athlete_id) references public.durability_curve_snapshots(id, athlete_id) on delete restrict,
+  unique (snapshot_id, algorithm_version, created_by)
+);
+
+create index durability_analysis_runs_athlete_confirmed_idx
+on public.durability_analysis_runs (athlete_id, confirmed_at desc);
+create index durability_analysis_runs_snapshot_athlete_idx
+on public.durability_analysis_runs (snapshot_id, athlete_id);
+create index durability_analysis_runs_created_by_idx
+on public.durability_analysis_runs (created_by);
+
+create or replace function public.prevent_durability_analysis_mutation()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  raise exception 'Confirmed durability analyses are immutable';
+end;
+$$;
+
+create trigger durability_analysis_runs_immutable_after_confirmation
+before update or delete on public.durability_analysis_runs
+for each row execute function public.prevent_durability_analysis_mutation();
+
+revoke all on function public.prevent_durability_analysis_mutation() from public, anon, authenticated;
+
 create or replace function public.persist_athlete_sync(
   target_athlete_id uuid,
   expected_sync_key text,
@@ -338,6 +400,28 @@ begin
       sync_payload->'snapshot'->'source_models',
       sync_payload->'snapshot'->>'source_version',
       sync_payload->'snapshot'->>'content_hash',
+      (sync_payload->>'synchronized_at')::timestamptz
+    ) on conflict (athlete_id, sport, environment, oldest, newest, content_hash) do nothing;
+  end if;
+
+  if jsonb_typeof(sync_payload->'durability_snapshot') = 'object' then
+    insert into public.durability_curve_snapshots (
+      athlete_id, created_by, sport, environment, oldest, newest, fresh_curve,
+      fatigued_curves, weight_kg, weight_observed_at, source_version, content_hash,
+      synchronized_at
+    ) values (
+      target_athlete_id,
+      target_coach_id,
+      sync_payload->'durability_snapshot'->>'sport',
+      sync_payload->'durability_snapshot'->>'environment',
+      (sync_payload->'durability_snapshot'->>'oldest')::date,
+      (sync_payload->'durability_snapshot'->>'newest')::date,
+      sync_payload->'durability_snapshot'->'fresh_curve',
+      sync_payload->'durability_snapshot'->'fatigued_curves',
+      (sync_payload->'durability_snapshot'->>'weight_kg')::numeric,
+      (sync_payload->'durability_snapshot'->>'weight_observed_at')::timestamptz,
+      sync_payload->'durability_snapshot'->>'source_version',
+      sync_payload->'durability_snapshot'->>'content_hash',
       (sync_payload->>'synchronized_at')::timestamptz
     ) on conflict (athlete_id, sport, environment, oldest, newest, content_hash) do nothing;
   end if;
