@@ -27,6 +27,20 @@ describe('Intervals.icu explicit mappers', () => {
     expect(mapped.points.find((point) => point.seconds === 10)?.watts).toBe(900);
   });
 
+  it('reports the actual grouped-response position of fresh power models', () => {
+    const mapped = mapPowerCurve({
+      list: [
+        durabilityCurves.list[0],
+        {
+          ...durabilityCurves.list[1],
+          powerModels: [{ type: 'ECP', criticalPower: 265, wPrime: 17000, pMax: 980, ftp: 255 }],
+        },
+      ],
+    });
+
+    expect(mapped.models[0].sourceField).toBe('list[1].powerModels');
+  });
+
   it('normalizes curve points to positive, sorted, unique best powers', () => {
     const mapped = mapPowerCurve({
       list: [{

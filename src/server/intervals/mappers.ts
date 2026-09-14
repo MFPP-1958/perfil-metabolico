@@ -130,11 +130,11 @@ export function mapSportSettings(input: unknown) {
 
 export function mapPowerCurve(input: unknown) {
   const response = durabilityCurveResponseSchema.parse(input);
-  const rawCurve = response.list.find((candidate) => {
+  const freshIndex = response.list.findIndex((candidate) => {
     const id = z.object({ id: z.string() }).safeParse(candidate);
     return id.success && durabilityCurveLevel(id.data.id) === 'fresh';
   });
-  const curve = powerCurveSchema.parse(rawCurve);
+  const curve = powerCurveSchema.parse(response.list[freshIndex]);
   const values = curve.values ?? curve.watts ?? [];
   const bestWattsByDuration = new Map<number, number>();
   curve.secs.forEach((seconds, index) => {
@@ -157,7 +157,7 @@ export function mapPowerCurve(input: unknown) {
       pmaxWatts: model.pMax ?? null,
       ftpWatts: model.ftp ?? null,
       r2: model.r2 ?? null,
-      sourceField: 'list[0].powerModels',
+      sourceField: `list[${freshIndex}].powerModels`,
     })).sort((left, right) => {
       const leftKey = JSON.stringify([left.type, left.cpWatts, left.wPrimeKj, left.pmaxWatts, left.ftpWatts, left.r2]);
       const rightKey = JSON.stringify([right.type, right.cpWatts, right.wPrimeKj, right.pmaxWatts, right.ftpWatts, right.r2]);

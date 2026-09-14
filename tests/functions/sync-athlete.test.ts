@@ -481,6 +481,30 @@ describe('athlete synchronization', () => {
     expect(JSON.stringify(payload)).not.toContain('Private');
   });
 
+  it('does not claim measured power when the record has no primary activity id', () => {
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-2',
+    };
+    const payload = createDurabilitySnapshotPayload({
+      list: [{
+        id: '90d',
+        weight: 70,
+        secs: [10],
+        values: [900],
+        submax_values: [[890]],
+        submax_activity_id: [['i2']],
+        powerModels: [],
+      }],
+    }, [{ intervals_activity_id: 'i2', normalized_data: { deviceWatts: true } }], request, '2026-09-05T12:00:00.000Z');
+
+    expect(payload.fresh_curve.points[0]).toMatchObject({
+      activityId: null,
+      supportingActivityIds: ['i2'],
+      powerSource: 'unknown',
+    });
+  });
+
   it('keeps the same logical hash when source models arrive reordered', () => {
     const request = {
       athleteId: internalAthleteId,

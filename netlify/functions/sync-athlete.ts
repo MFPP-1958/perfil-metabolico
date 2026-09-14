@@ -113,7 +113,8 @@ function durabilityPoint(
     endIndex: point.endIndex,
     supportingActivityCount: supportingActivityIds.length,
     supportingEffortCount: point.supportingEffortCount,
-    powerSource: supportingActivityIds.length > 0
+    powerSource: point.activityId !== null
+      && supportingActivityIds.length > 0
       && supportingActivityIds.every((activityId) => deviceWattsByActivity.get(activityId) === true)
       ? 'measured' as const
       : 'unknown' as const,
