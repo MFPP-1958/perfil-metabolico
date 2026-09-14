@@ -1,0 +1,38 @@
+{
+  "list": [
+    {
+      "id": "90d-kj1",
+      "after_kj": 1400,
+      "weight": 70,
+      "secs": [10, 60, 300, 1200],
+      "values": [820, 370, 260, 212],
+      "activity_id": ["i3", "i3", "i4", "i4"],
+      "submax_values": [[810, 805], [365], [255], [208]],
+      "submax_activity_id": [["i5", "i6"], ["i5"], ["i6"], ["i6"]],
+      "start_index": [1, 2, 3, 4],
+      "end_index": [11, 62, 303, 1204],
+      "powerModels": []
+    },
+    {
+      "id": "90d",
+      "weight": 70,
+      "secs": [10, 60, 300, 1200],
+      "values": [900, 410, 285, 238],
+      "activity_id": ["i1", "i1", "i2", "i2"],
+      "start_index": [1, 2, 3, 4],
+      "end_index": [11, 62, 303, 1204],
+      "powerModels": []
+    },
+    {
+      "id": "90d-kj0",
+      "after_kj": 700,
+      "weight": 70,
+      "secs": [10, 60, 300, 1200],
+      "values": [870, 395, 274, 226],
+      "activity_id": ["i2", "i2", "i3", "i3"],
+      "start_index": [1, 2, 3, 4],
+      "end_index": [11, 62, 303, 1204],
+      "powerModels": []
+    }
+  ]
+}

@@ -25,13 +25,19 @@ export const powerModelSchema = z.object({
 }).loose();
 
 export const powerCurveSchema = z.object({
-  id: z.string(),
+  id: z.string().min(1),
+  after_kj: z.number().int().nonnegative().nullable().optional(),
   start_date_local: z.string().optional(),
   end_date_local: z.string().optional(),
   weight: nullableNumber,
   secs: z.array(z.number().int()),
   values: z.array(z.number().finite()).optional(),
   watts: z.array(z.number().finite()).optional(),
+  activity_id: z.array(z.string()).optional(),
+  submax_values: z.array(z.unknown()).optional().catch(undefined),
+  submax_activity_id: z.array(z.unknown()).optional().catch(undefined),
+  start_index: z.array(z.number().int()).optional(),
+  end_index: z.array(z.number().int()).optional(),
   vo2max_5m: nullableNumber,
   powerModels: z.array(powerModelSchema).default([]),
 }).loose().refine((curve) => (curve.values ?? curve.watts)?.length === curve.secs.length, {

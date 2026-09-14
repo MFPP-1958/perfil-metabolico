@@ -1,4 +1,103 @@
-import { activitySchema, athleteSchema, plannedWorkoutSchema, powerCurveResponseSchema } from './schemas';
+import { z } from 'zod';
+import { activitySchema, athleteSchema, plannedWorkoutSchema, powerCurveResponseSchema, powerCurveSchema } from './schemas';
+
+export type DurabilityCurveLevel = 'fresh' | 'kj0' | 'kj1';
+
+export interface NormalizedDurabilityCurve {
+  level: DurabilityCurveLevel;
+  afterKj: number | null;
+  weightKg: number | null;
+  points: Array<{
+    seconds: number;
+    watts: number;
+    activityId: string | null;
+    supportingActivityIds: string[];
+    startIndex: number | null;
+    endIndex: number | null;
+  }>;
+}
+
+export interface NormalizedDurabilityCurves {
+  fresh: NormalizedDurabilityCurve | null;
+  fatigued: NormalizedDurabilityCurve[];
+  rejected: DurabilityCurveLevel[];
+}
+
+const durabilityCurveResponseSchema = z.object({ list: z.array(z.unknown()).min(1) }).loose();
+const supportingValuesSchema = z.array(z.number().finite());
+const supportingActivityIdsSchema = z.array(z.string());
+
+function durabilityCurveLevel(id: string): DurabilityCurveLevel {
+  if (id.endsWith('-kj0')) return 'kj0';
+  if (id.endsWith('-kj1')) return 'kj1';
+  return 'fresh';
+}
+
+function mapSupportingActivityIds(
+  primaryActivityId: string | undefined,
+  submaxValues: unknown[] | undefined,
+  submaxActivityIds: unknown[] | undefined,
+  index: number,
+) {
+  const primary = primaryActivityId == null ? [] : [primaryActivityId];
+  const values = supportingValuesSchema.safeParse(submaxValues?.[index]);
+  const activities = supportingActivityIdsSchema.safeParse(submaxActivityIds?.[index]);
+  if (!values.success || !activities.success || values.data.length !== activities.data.length) return primary;
+  return [...new Set([...primary, ...activities.data])];
+}
+
+function mapDurabilityCurve(curve: z.infer<typeof powerCurveSchema>, level: DurabilityCurveLevel): NormalizedDurabilityCurve {
+  const values = curve.values ?? curve.watts ?? [];
+  return {
+    level,
+    afterKj: curve.after_kj ?? null,
+    weightKg: curve.weight ?? null,
+    points: curve.secs.flatMap((seconds, index) => {
+      const watts = values[index];
+      if (seconds <= 0 || watts <= 0) return [];
+      return [{
+        seconds,
+        watts,
+        activityId: curve.activity_id?.[index] ?? null,
+        supportingActivityIds: mapSupportingActivityIds(
+          curve.activity_id?.[index],
+          curve.submax_values,
+          curve.submax_activity_id,
+          index,
+        ),
+        startIndex: curve.start_index?.[index] ?? null,
+        endIndex: curve.end_index?.[index] ?? null,
+      }];
+    }),
+  };
+}
+
+export function mapDurabilityCurves(input: unknown): NormalizedDurabilityCurves {
+  const response = durabilityCurveResponseSchema.parse(input);
+  let fresh: NormalizedDurabilityCurve | null = null;
+  const fatigued: NormalizedDurabilityCurve[] = [];
+  const rejected: DurabilityCurveLevel[] = [];
+
+  for (const rawCurve of response.list) {
+    const id = z.object({ id: z.string() }).safeParse(rawCurve);
+    if (!id.success) continue;
+    const level = durabilityCurveLevel(id.data.id);
+    const curve = powerCurveSchema.safeParse(rawCurve);
+    if (!curve.success) {
+      rejected.push(level);
+      continue;
+    }
+    const mapped = mapDurabilityCurve(curve.data, level);
+    if (level === 'fresh') fresh = mapped;
+    else fatigued.push(mapped);
+  }
+
+  return {
+    fresh,
+    fatigued: fatigued.sort((left, right) => left.level.localeCompare(right.level)),
+    rejected,
+  };
+}
 
 export interface ImportedMetric {
   metricCode: 'ftp' | 'w_prime';

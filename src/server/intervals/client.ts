@@ -20,6 +20,18 @@ export class IntervalsClient {
     }
     return this.transport.get(`/athlete/${athleteId}/power-curves`, query);
   }
+  getDurabilityCurves(athleteId: string, period: string, newest: string, indoor?: boolean) {
+    const query: Record<string, string> = {
+      curves: [period, `${period}-kj0`, `${period}-kj1`].join(','),
+      newest,
+      type: 'Ride',
+      subMaxEfforts: '3',
+    };
+    if (indoor !== undefined) {
+      query.filters = JSON.stringify([{ field_id: 'indoor', operator: 'eq', value: indoor }]);
+    }
+    return this.transport.get(`/athlete/${athleteId}/power-curves`, query);
+  }
   getActivityStreams(activityId: string, types: string) {
     return this.transport.get(`/activity/${activityId}/streams`, { types });
   }

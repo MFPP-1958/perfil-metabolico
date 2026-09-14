@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import athlete from './fixtures/athlete.json';
 import activity from './fixtures/activity.json';
 import curve from './fixtures/power-curve.json';
+import durabilityCurves from './fixtures/durability-curves.json';
 import planned from './fixtures/planned-workout.json';
-import { mapActivity, mapPlannedWorkout, mapPowerCurve, mapSportSettings } from './mappers';
+import { mapActivity, mapDurabilityCurves, mapPlannedWorkout, mapPowerCurve, mapSportSettings } from './mappers';
 
 describe('Intervals.icu explicit mappers', () => {
   it('maps cycling FTP and W-prime with their field origin', () => {
@@ -34,6 +35,63 @@ describe('Intervals.icu explicit mappers', () => {
       { seconds: 60, watts: 510 },
       { seconds: 300, watts: 320 },
     ]);
+  });
+
+  it('maps fresh, kj0 and kj1 independently of response order', () => {
+    const mapped = mapDurabilityCurves(durabilityCurves);
+
+    expect(mapped.fresh?.level).toBe('fresh');
+    expect(mapped.fatigued.map((curve) => [curve.level, curve.afterKj])).toEqual([
+      ['kj0', 700],
+      ['kj1', 1400],
+    ]);
+    expect(mapped.fatigued[0].points[0]).toMatchObject({
+      seconds: 10,
+      watts: 870,
+      activityId: 'i2',
+      startIndex: 1,
+      endIndex: 11,
+    });
+    expect(mapped.fatigued.find((curve) => curve.level === 'kj1')?.points[0].supportingActivityIds).toEqual(['i3', 'i5', 'i6']);
+  });
+
+  it('keeps a valid fresh curve when a fatigued curve is malformed', () => {
+    const mapped = mapDurabilityCurves({
+      list: [durabilityCurves.list[1], { id: '90d-kj0', secs: [10], values: [] }],
+    });
+
+    expect(mapped.fresh?.points).toHaveLength(4);
+    expect(mapped.fatigued).toHaveLength(0);
+    expect(mapped.rejected).toEqual(['kj0']);
+  });
+
+  it('keeps best-power points when one submax support fragment is malformed', () => {
+    const mapped = mapDurabilityCurves({
+      list: [{
+        ...durabilityCurves.list[2],
+        submax_values: [[860], [390], [270], [225]],
+        submax_activity_id: [['i8'], 'unexpected', ['i9'], ['i10']],
+      }],
+    });
+
+    expect(mapped.fatigued).toHaveLength(1);
+    expect(mapped.fatigued[0].points.map((point) => point.watts)).toEqual([870, 395, 274, 226]);
+    expect(mapped.fatigued[0].points[0].supportingActivityIds).toEqual(['i2', 'i8']);
+    expect(mapped.fatigued[0].points[1].supportingActivityIds).toEqual(['i2']);
+    expect(mapped.fatigued[0].points[2].supportingActivityIds).toEqual(['i3', 'i9']);
+  });
+
+  it('keeps a curve when the complete optional submax metadata is malformed', () => {
+    const mapped = mapDurabilityCurves({
+      list: [{
+        ...durabilityCurves.list[2],
+        submax_values: 'unexpected',
+        submax_activity_id: 'unexpected',
+      }],
+    });
+
+    expect(mapped.rejected).toEqual([]);
+    expect(mapped.fatigued[0].points[0]).toMatchObject({ watts: 870, supportingActivityIds: ['i2'] });
   });
 
   it('normalizes and sorts all documented source power models', () => {
