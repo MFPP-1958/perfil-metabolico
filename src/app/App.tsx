@@ -6,10 +6,12 @@ import { AuthGate } from '../auth/AuthGate';
 import type { AuthAdapter } from '../auth/AuthGate';
 import { athleteApi as defaultAthleteApi, type AthleteApi } from '../features/athletes/athleteApi';
 import { AthleteWorkspace } from '../features/athletes/AthleteWorkspace';
+import { DurabilityWorkspace } from '../features/durability/DurabilityWorkspace';
+import type { DurabilityApi } from '../features/durability/durabilityApi';
 import { PowerWorkspace } from '../features/power/PowerWorkspace';
 import type { PowerApi } from '../features/power/powerApi';
 import { appRoutes, type AppRoute } from './routes';
-import { DurabilityDemo, EvolutionDemo, PrescriptionDemo, ReportsDemo, SessionsDemo, TestsDemo } from './DemoViews';
+import { EvolutionDemo, PrescriptionDemo, ReportsDemo, SessionsDemo, TestsDemo } from './DemoViews';
 
 function EmptyWorkspace({ route }: { route: AppRoute }) {
   return (
@@ -45,9 +47,15 @@ function EmptyWorkspace({ route }: { route: AppRoute }) {
   );
 }
 
-function Application({ powerAnalysisApi }: { powerAnalysisApi?: PowerApi }) {
+function Application({
+  durabilityAnalysisApi,
+  powerAnalysisApi,
+}: {
+  durabilityAnalysisApi?: DurabilityApi;
+  powerAnalysisApi?: PowerApi;
+}) {
   const routeContent: Record<string, ReactNode> = {
-    '/potencia': <PowerWorkspace api={powerAnalysisApi} />, '/durabilidad': <DurabilityDemo />, '/tests': <TestsDemo />, '/sesiones': <SessionsDemo />,
+    '/potencia': <PowerWorkspace api={powerAnalysisApi} />, '/durabilidad': <DurabilityWorkspace api={durabilityAnalysisApi} />, '/tests': <TestsDemo />, '/sesiones': <SessionsDemo />,
     '/prescripcion': <PrescriptionDemo />, '/evolucion': <EvolutionDemo />, '/informes': <ReportsDemo />,
   };
   return (
@@ -77,17 +85,19 @@ function Application({ powerAnalysisApi }: { powerAnalysisApi?: PowerApi }) {
 export function App({
   auth,
   athleteApi = defaultAthleteApi,
+  durabilityApi,
   powerApi,
 }: {
   auth?: AuthAdapter;
   athleteApi?: AthleteApi;
+  durabilityApi?: DurabilityApi;
   powerApi?: PowerApi;
 }) {
   return (
     <AuthGate auth={auth}>
       <BrowserRouter>
         <AnalysisProvider api={athleteApi}>
-          <Application powerAnalysisApi={powerApi} />
+          <Application durabilityAnalysisApi={durabilityApi} powerAnalysisApi={powerApi} />
         </AnalysisProvider>
       </BrowserRouter>
     </AuthGate>

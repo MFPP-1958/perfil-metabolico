@@ -228,6 +228,59 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .confirmation-success { padding: 12px 14px; border-left: 5px solid var(--validated); background: #eaf6f3; color: var(--ink) !important; font-weight: 700; }
 .confirmation-error { padding: 12px 14px; border-left: 5px solid var(--danger); background: #fff0f0; }
 
+.durability-workspace { padding-bottom: clamp(32px, 5vw, 70px); }
+.durability-loading h1 { margin: 0; font: 700 clamp(42px, 6vw, 72px)/.9 'Barlow Condensed', sans-serif; }
+.durability-loading p { color: var(--muted); }
+.durability-context-warning { margin: 18px clamp(24px, 4vw, 58px) 0; padding: 13px 16px; border-left: 5px solid var(--uncertain); background: #fff5e7; color: #6b4308; font-weight: 700; }
+.durability-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 18px; }
+.durability-view { padding-bottom: 0; }
+.durability-context-line { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 10px 0 0; }
+.durability-context-line span { display: block; }
+.durability-context-strip { display: grid; grid-template-columns: 1.2fr repeat(3, minmax(145px, 1fr)); margin: 28px 0 0; border-block: 1px solid var(--line); background: var(--surface); }
+.durability-context-strip p { min-width: 0; margin: 0; padding: 16px 18px; border-right: 1px solid var(--line); }
+.durability-context-strip p:last-child { border-right: 0; }
+.durability-context-strip span, .durability-context-strip strong { display: block; }
+.durability-context-strip span { color: var(--muted); }
+.durability-context-strip strong { margin-top: 4px; font-size: 1.04rem; font-variant-numeric: tabular-nums; }
+.coverage-value--high, .coverage-value--moderate { color: var(--validated); }
+.coverage-value--low { color: var(--uncertain); }
+.coverage-value--insufficient { color: var(--danger); }
+.durability-notice { margin: 20px 0 0; padding: 15px 17px; border-left: 5px solid var(--uncertain); background: #fff5e7; }
+.durability-notice p { margin: 4px 0 0; color: var(--muted); }
+.durability-profile { margin-top: 32px; }
+.durability-profile__heading { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 12px; }
+.durability-profile__heading h2 { margin: 0; font: 600 clamp(29px, 3.6vw, 42px)/1 'Barlow Condensed', sans-serif; }
+.durability-profile__heading p { max-width: 60ch; margin: 7px 0 0; color: var(--muted); }
+.durability-zero-key { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .88rem; }
+.durability-zero-key span { width: 34px; height: 2px; background: var(--ink); }
+.durability-profile__canvas { height: min(420px, 48vw); min-height: 300px; padding: 18px 14px 8px; border-top: 5px solid var(--data); background: var(--surface); }
+.durability-table-scroll { margin-top: 16px; overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+.durability-table-scroll:focus-visible { outline-offset: 1px; }
+.durability-table-scroll table { min-width: 980px; font-variant-numeric: tabular-nums; }
+.durability-table-scroll th, .durability-table-scroll td { vertical-align: top; }
+.durability-table-scroll tbody > tr > th { color: var(--ink); font: 600 24px/1 'Barlow Condensed', sans-serif; white-space: nowrap; }
+.durability-table-scroll tbody > tr:hover { background: #f7fafb; }
+.durability-cell { min-width: 185px; display: grid; gap: 3px; }
+.durability-cell strong { color: var(--data-dark); font-size: 1.06rem; }
+.durability-cell span, .durability-cell small { display: block; }
+.durability-cell small { color: var(--muted); }
+.durability-change { color: var(--danger); font-weight: 700; }
+.durability-change--gain { color: var(--validated); }
+.durability-unavailable { color: var(--muted); }
+.durability-evidence-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, .7fr); gap: 20px; margin-top: 24px; }
+.durability-evidence-layout h2 { margin: 0 0 10px; font: 600 27px/1 'Barlow Condensed', sans-serif; }
+.durability-limitations { padding: 20px; border-top: 4px solid var(--uncertain); background: #fff5e7; }
+.durability-limitations p, .durability-limitations ul { margin-bottom: 0; }
+.durability-limitations ul { padding-left: 20px; }
+.durability-provenance { padding: 20px; border-top: 4px solid var(--nav); background: #e8f0f1; }
+.durability-provenance dl { margin: 0; }
+.durability-provenance dl div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.durability-provenance dt { color: var(--muted); font-weight: 700; }
+.durability-provenance dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.durability-confirmation { display: grid; grid-template-columns: 1fr auto; gap: 10px 24px; align-items: center; margin: 28px clamp(24px, 4vw, 58px) 0; padding: 20px; border-block: 1px solid var(--line); background: var(--surface); }
+.durability-confirmation p { margin: 4px 0 0; color: var(--muted); }
+.durability-confirmation .confirmation-success, .durability-confirmation .confirmation-error { grid-column: 1 / -1; }
+
 @media (max-width: 760px) {
   .login-shell { background: var(--nav); }
   .account-bar { justify-content: space-between; }
@@ -260,6 +313,14 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .ftp-evidence { border-left: 0; border-top: 5px solid var(--uncertain); }
   .power-confirmation { grid-template-columns: 1fr; }
   .power-confirmation .primary-action { width: 100%; }
+  .durability-context-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .durability-context-strip p:nth-child(2) { border-right: 0; }
+  .durability-context-strip p:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .durability-profile__heading { align-items: start; flex-direction: column; }
+  .durability-profile__canvas { height: 340px; min-height: 280px; }
+  .durability-evidence-layout { grid-template-columns: 1fr; }
+  .durability-confirmation { grid-template-columns: 1fr; }
+  .durability-confirmation .primary-action { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

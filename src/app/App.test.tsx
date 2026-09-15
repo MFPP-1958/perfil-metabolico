@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthAdapter } from '../auth/AuthGate';
 import type { AthleteApi } from '../features/athletes/athleteApi';
+import type { DurabilityApi, DurabilityRow } from '../features/durability/durabilityApi';
 import type { PowerApi } from '../features/power/powerApi';
 import { App } from './App';
 
@@ -32,6 +33,7 @@ describe('application analysis context', () => {
     const api: AthleteApi = {
       list: vi.fn().mockResolvedValue([{ id: athleteId, intervalsId: 'i202', name: 'Jaume Santamaria' }]),
       load: vi.fn().mockResolvedValue({ id: athleteId, intervalsId: 'i202', name: 'Jaume Santamaria', observations: [] }),
+      sync: vi.fn(),
     };
     const newest = new Date().toISOString().slice(0, 10);
     const oldestDate = new Date(`${newest}T00:00:00.000Z`);
@@ -50,8 +52,46 @@ describe('application analysis context', () => {
       }),
       confirm: vi.fn(),
     };
+    const durabilityRows: DurabilityRow[] = ([10, 60, 300, 1_200] as const).map((seconds) => ({
+      seconds,
+      freshWatts: 400,
+      levels: {
+        kj0: {
+          afterKj: 700,
+          afterKjPerKg: 10,
+          fatiguedWatts: 360,
+          declinePercent: 10,
+          quality: 'observed',
+          supportingActivityCount: 2,
+          supportingEffortCount: 3,
+          powerSource: 'measured',
+        },
+      },
+      onsetAfterKj: 700,
+      onsetAfterKjPerKg: 10,
+    }));
+    const durabilityApi: DurabilityApi = {
+      load: vi.fn().mockResolvedValue({
+        id: '31000000-0000-4000-8000-000000000001',
+        athleteId,
+        oldest: oldestDate.toISOString().slice(0, 10),
+        newest,
+        environment: 'all',
+        weightKg: 70,
+        weightObservedAt: '2026-09-14T09:00:00.000Z',
+        synchronizedAt: '2026-09-14T10:00:00.000Z',
+        sourceVersion: 'intervals-openapi-v1',
+        result: {
+          algorithmVersion: 'durability-record-profile@2.0.0',
+          rows: durabilityRows,
+          coverage: 'moderate',
+          warnings: [],
+        },
+      }),
+      confirm: vi.fn(),
+    };
 
-    render(<App auth={auth} athleteApi={api} powerApi={powerApi} />);
+    render(<App auth={auth} athleteApi={api} powerApi={powerApi} durabilityApi={durabilityApi} />);
     await screen.findByRole('option', { name: 'Jaume Santamaria' });
     const selector = screen.getByLabelText('Ciclista activo');
     await userEvent.selectOptions(selector, athleteId);
@@ -62,5 +102,14 @@ describe('application analysis context', () => {
     expect(screen.getByRole('heading', { name: 'Potencia y duración' })).toBeVisible();
     expect(await screen.findByText('CP modelada')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Abrir demostración' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Durabilidad' }));
+    expect(await screen.findByRole('table', { name: 'Potencia fresca y tras trabajo acumulado' })).toBeVisible();
+    expect(durabilityApi.load).toHaveBeenCalledWith(expect.objectContaining({
+      athleteId,
+      environment: 'all',
+    }), expect.any(AbortSignal));
+    expect(api.sync).not.toHaveBeenCalled();
+    expect(screen.queryByText(/demostración sintética/i)).not.toBeInTheDocument();
   });
 });
