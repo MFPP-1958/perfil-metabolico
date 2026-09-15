@@ -262,6 +262,37 @@ describe('DurabilityWorkspace', () => {
     expect(await screen.findByText(/confirmado de forma inmutable/i)).toBeVisible();
   });
 
+  it('reloads the latest snapshot after a 409 conflict before allowing confirmation again', async () => {
+    const latest = snapshot(snapshotBId, athleteA, 'Datos B', {
+      result: {
+        ...snapshot().result,
+        rows: comparisonRows(14),
+        warnings: ['Datos B'],
+      },
+    });
+    const api: DurabilityApi = {
+      load: vi.fn().mockResolvedValueOnce(snapshot()).mockResolvedValueOnce(latest),
+      confirm: vi.fn().mockRejectedValueOnce(new Error('El análisis ha quedado desactualizado. Vuelve a cargarlo antes de confirmar.')).mockResolvedValueOnce(confirmed(comparisonRows(14))),
+    };
+    const analysis = context();
+    renderWorkspace(api, analysis);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirmar análisis' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Vuelve a cargarlo antes de confirmar.');
+    expect(screen.getByRole('button', { name: 'Recargar análisis' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Reintentar confirmación' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Recargar análisis' }));
+    expect(await screen.findByText('Datos B')).toBeVisible();
+    expect(api.load).toHaveBeenCalledTimes(2);
+    expect(analysis.synchronize).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Confirmar análisis' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar análisis' }));
+    expect(api.confirm).toHaveBeenLastCalledWith({ snapshotId: snapshotBId });
+    expect(await screen.findByText(/confirmado de forma inmutable/i)).toBeVisible();
+  });
+
   it('aborts and ignores a late response after the analysis context changes', async () => {
     let resolveA!: (value: DurabilitySnapshotResponse) => void;
     let resolveB!: (value: DurabilitySnapshotResponse) => void;

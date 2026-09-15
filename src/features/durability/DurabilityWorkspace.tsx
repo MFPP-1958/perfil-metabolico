@@ -133,6 +133,8 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
   }, [api, athleteId, demoOpen, environment, hasValidAthlete, requestKey, resolved.period]);
 
   const retryLoad = useCallback(() => setRetryVersion((current) => current + 1), []);
+  const confirmationNeedsReload = confirmation.status === 'error'
+    && /desactualizado|vuelve a cargarlo/i.test(confirmation.message);
   const confirm = useCallback(async () => {
     if (!compatibleSnapshot || confirmation.status === 'saving' || confirmation.status === 'saved') return;
     const generation = ++confirmationGeneration.current;
@@ -258,7 +260,11 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
         {confirmation.status === 'error' && (
           <div className="confirmation-error" role="alert">
             <p>{confirmation.message}</p>
-            <button type="button" className="secondary-action" onClick={() => void confirm()}>Reintentar confirmación</button>
+            {confirmationNeedsReload ? (
+              <button type="button" className="secondary-action" onClick={retryLoad}>Recargar análisis</button>
+            ) : (
+              <button type="button" className="secondary-action" onClick={() => void confirm()}>Reintentar confirmación</button>
+            )}
           </div>
         )}
       </footer>
