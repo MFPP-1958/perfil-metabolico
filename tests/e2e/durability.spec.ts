@@ -179,6 +179,7 @@ test('one global sync feeds Power and Durability after navigation and reload', a
 });
 
 test('partial Durability data remains understandable and usable from the keyboard', async ({ page }) => {
+  let confirmationPosts = 0;
   await page.addInitScript(({ selectedAthleteId }) => {
     window.localStorage.setItem('mfpp.analysis.preferences.v1', JSON.stringify({
       athleteId: selectedAthleteId,
@@ -193,6 +194,11 @@ test('partial Durability data remains understandable and usable from the keyboar
       : url.searchParams.has('athleteId') ? athlete() : [athlete()] });
   });
   await page.route('**/.netlify/functions/durability-analysis**', async (route) => {
+    if (route.request().method() === 'POST') {
+      confirmationPosts += 1;
+      await route.fulfill({ status: 500, json: { error: 'Unexpected confirmation request' } });
+      return;
+    }
     const url = new URL(route.request().url());
     const snapshot = durabilitySnapshot(
       url.searchParams.get('oldest') ?? '',
@@ -205,7 +211,7 @@ test('partial Durability data remains understandable and usable from the keyboar
       weightObservedAt: null,
       result: {
         ...snapshot.result,
-        coverage: 'low',
+        coverage: 'insufficient',
         warnings: ['No hay datos suficientes para kJ1.'],
         rows: snapshot.result.rows.map((row) => ({ ...row, levels: { kj0: row.levels.kj0 } })),
       },
@@ -216,6 +222,14 @@ test('partial Durability data remains understandable and usable from the keyboar
   await expect(page.getByRole('status').filter({ hasText: 'Sincronización parcial' }).first()).toBeVisible();
   await expect(page.getByText('Peso no disponible')).toBeVisible();
   await expect(page.getByText('No hay datos suficientes para kJ1.')).toBeVisible();
+  await expect(page.getByText('La cobertura es insuficiente para confirmar este análisis.')).toBeVisible();
+  const confirmButton = page.getByRole('button', { name: 'Confirmar análisis' });
+  await expect(confirmButton).toBeDisabled();
+  await confirmButton.dispatchEvent('click');
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  expect(confirmationPosts).toBe(0);
   const scrollRegion = page.getByLabel('Tabla desplazable de Durabilidad');
   await scrollRegion.focus();
   await expect(scrollRegion).toBeFocused();

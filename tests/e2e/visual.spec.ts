@@ -115,12 +115,27 @@ test('populated Durability remains usable at 360px and real Chromium 200% page s
   await expect.poll(() => page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(2);
   await expect(page.getByRole('heading', { name: 'Durabilidad' })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Potencia fresca y tras trabajo acumulado' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const documentScroller = document.scrollingElement ?? document.documentElement;
+    return documentScroller.scrollWidth <= documentScroller.clientWidth + 2;
+  })).toBe(true);
+  const zoomTableRegion = page.getByLabel('Tabla desplazable de Durabilidad');
+  await page.locator('a').first().focus();
+  for (let step = 0; step < 40; step += 1) {
+    if (await zoomTableRegion.evaluate((element) => document.activeElement === element)) break;
+    await page.keyboard.press('Tab');
+  }
+  await expect(zoomTableRegion).toBeFocused();
   await page.screenshot({ path: 'test-results/artifacts/durabilidad-zoom-200.png', fullPage: true });
 
   await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 1 });
+  await expect.poll(() => page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
   await page.setViewportSize({ width: 360, height: 800 });
   await expect(page.getByRole('heading', { name: 'Durabilidad' })).toBeVisible();
-  expect(await page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 2)).toBe(true);
+  await expect.poll(() => page.evaluate(() => {
+    const documentScroller = document.scrollingElement ?? document.documentElement;
+    return documentScroller.scrollWidth <= documentScroller.clientWidth + 2;
+  })).toBe(true);
   const tableRegion = page.getByLabel('Tabla desplazable de Durabilidad');
   await tableRegion.focus();
   for (let step = 0; step < 6; step += 1) await page.keyboard.press('ArrowRight');
