@@ -11,6 +11,7 @@ button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.main-area :focus-visible { outline-color: var(--data-dark); }
 
 .auth-status, .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .auth-status { color: var(--muted); }
@@ -31,23 +32,23 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .session-root { min-height: 100vh; }
 .account-bar { min-height: 42px; display: flex; justify-content: flex-end; align-items: center; gap: 20px; padding: 6px 24px; background: #0b222a; color: #dce9ec; font-size: .9rem; }
-.text-button { border: 0; background: transparent; color: white; text-decoration: underline; text-underline-offset: 3px; }
+.text-button { min-width: 44px; min-height: 44px; padding: 8px; border: 0; background: transparent; color: white; text-decoration: underline; text-underline-offset: 3px; }
 .app-layout { min-height: calc(100vh - 42px); display: grid; grid-template-columns: 210px minmax(0, 1fr); }
 .navigation-shell { display: flex; flex-direction: column; padding: 28px 20px; background: var(--nav); color: white; }
-.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 42px; color: white; text-decoration: none; }
+.brand { min-height: 44px; display: flex; align-items: center; gap: 12px; margin-bottom: 42px; color: white; text-decoration: none; }
 .brand-symbol { width: 40px; height: 40px; display: grid; place-items: center; background: var(--focus); color: var(--nav); font: 700 28px/1 'Barlow Condensed', sans-serif; clip-path: polygon(0 0, 100% 0, 78% 100%, 0 100%); }
 .brand strong, .brand small { display: block; }
 .brand strong { font: 700 22px/1 'Barlow Condensed', sans-serif; letter-spacing: .03em; }
 .brand small { color: #bcd0d5; }
 .navigation-shell nav { display: grid; gap: 6px; }
-.navigation-shell nav a { min-height: 42px; display: flex; align-items: center; padding: 8px 10px; border-left: 3px solid transparent; color: #cfe0e4; text-decoration: none; }
+.navigation-shell nav a { min-height: 44px; display: flex; align-items: center; padding: 8px 10px; border-left: 3px solid transparent; color: #cfe0e4; text-decoration: none; }
 .navigation-shell nav a.active { border-left-color: var(--focus); background: rgb(255 255 255 / 8%); color: white; }
 .nav-note { margin-top: auto; padding-top: 24px; border-top: 1px solid rgb(255 255 255 / 18%); color: #aec5ca; font-size: .85rem; }
 .main-area { min-width: 0; }
 .analysis-context { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 20px; padding: 16px clamp(24px, 4vw, 58px); border-bottom: 1px solid var(--line); background: #e8f0f1; }
 .analysis-context__fields { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; }
 .analysis-context label { display: grid; gap: 5px; color: var(--muted); font-size: .88rem; font-weight: 700; }
-.analysis-context select, .analysis-context input { min-width: 132px; min-height: 42px; border: 1px solid var(--line); border-radius: var(--radius-small); padding: 7px 10px; background: white; color: var(--ink); font: inherit; }
+.analysis-context select, .analysis-context input { min-width: 132px; min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-small); padding: 7px 10px; background: white; color: var(--ink); font: inherit; }
 .analysis-context label:first-child select { min-width: min(290px, 48vw); }
 .analysis-context__dates { display: flex; gap: 10px; }
 .analysis-context__action { display: grid; justify-items: end; align-content: end; gap: 5px; }

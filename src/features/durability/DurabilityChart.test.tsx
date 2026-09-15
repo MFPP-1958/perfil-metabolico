@@ -81,7 +81,9 @@ describe('DurabilityChart', () => {
       label: '10 s',
       data: [{ x: 0, y: 0 }, { x: 700, y: -5 }, { x: 1_400, y: 10 }],
     });
-    expect(screen.getByRole('img', { name: /descenso de potencia.*trabajo acumulado/i })).toBeVisible();
+    expect(screen.getByRole('img', {
+      name: /10 s: fresca 900 W; tras 700 kJ, mejora 5,0 %; tras 1400 kJ, descenso 10,0 %.*20 min: sin valor fresco/i,
+    })).toBeVisible();
   });
 
   it('provides exact table values, signs and missing-level language', () => {

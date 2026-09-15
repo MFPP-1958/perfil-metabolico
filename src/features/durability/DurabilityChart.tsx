@@ -36,6 +36,31 @@ function percentage(value: number | null) {
   return `${value < 0 ? '−' : ''}${formatted} %`;
 }
 
+function alternativeChange(value: number | null) {
+  if (value === null) return 'cambio no calculado';
+  const formatted = Math.abs(value).toLocaleString('es-ES', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  if (value < 0) return `mejora ${formatted} %`;
+  if (value > 0) return `descenso ${formatted} %`;
+  return 'sin cambio';
+}
+
+function chartAlternative(rows: readonly DurabilityRow[]) {
+  const series = rows.map((row) => {
+    const levels = (['kj0', 'kj1'] as const).map((key) => {
+      const level = row.levels[key];
+      return level
+        ? `tras ${level.afterKj.toLocaleString('es-ES', { maximumFractionDigits: 0 })} kJ, ${alternativeChange(level.declinePercent)}`
+        : `${key} no disponible`;
+    });
+    const fresh = row.freshWatts === null ? 'sin valor fresco' : `fresca ${watts(row.freshWatts)}`;
+    return `${durationLabel(row.seconds)}: ${fresh}; ${levels.join('; ')}`;
+  });
+  return `Gráfico del descenso de potencia según trabajo acumulado. ${series.join('. ')}.`;
+}
+
 function work(afterKj: number, afterKjPerKg: number | null) {
   const absolute = `${afterKj.toLocaleString('es-ES', { maximumFractionDigits: 0 })} kJ`;
   if (afterKjPerKg === null) return absolute;
@@ -168,7 +193,7 @@ export function DurabilityChart({ rows }: { rows: readonly DurabilityRow[] }) {
         <canvas
           ref={canvasRef}
           role="img"
-          aria-label="Gráfico del descenso de potencia según trabajo acumulado; los valores positivos son pérdida y los negativos mejora"
+          aria-label={chartAlternative(rows)}
         />
       </div>
       <div className="durability-table-scroll" tabIndex={0} aria-label="Tabla desplazable de Durabilidad">

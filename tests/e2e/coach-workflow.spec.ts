@@ -40,6 +40,9 @@ test('coach reviews real athlete data and opens unfinished module demos explicit
   await page.route('**/.netlify/functions/observations', async (route) => {
     await route.fulfill({ json: route.request().postDataJSON() });
   });
+  await page.route('**/.netlify/functions/durability-analysis**', async (route) => {
+    await route.fulfill({ status: 404, json: { error: 'missing_snapshot' } });
+  });
   await page.goto('/');
   await expect(page.getByText('entrenador@prueba.local')).toBeVisible();
   await page.getByLabel('Ciclista activo').selectOption(firstAthleteId);
@@ -52,6 +55,11 @@ test('coach reviews real athlete data and opens unfinished module demos explicit
   await page.getByRole('button', { name: 'Abrir demostración' }).click();
   await expect(page.getByRole('heading', { name: 'VLa máx estimada' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Mader experimental' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Durabilidad' }).click();
+  await expect(page.getByRole('heading', { name: 'No hay datos de Durabilidad' })).toBeVisible();
+  await page.getByRole('button', { name: 'Abrir demostración sintética' }).click();
+  await expect(page.getByRole('status')).toHaveText(/Demostración sintética/);
 
   await page.getByRole('link', { name: 'Sesiones' }).click();
   await page.getByRole('button', { name: 'Abrir demostración' }).click();

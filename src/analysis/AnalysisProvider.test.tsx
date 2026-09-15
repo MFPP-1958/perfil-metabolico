@@ -246,7 +246,7 @@ describe('AnalysisProvider', () => {
     };
 
     renderProvider(api);
-    expect(await screen.findByLabelText('Ciclista activo')).toHaveValue(jaumeId);
+    await waitFor(() => expect(screen.getByLabelText('Ciclista activo')).toHaveValue(jaumeId));
     await userEvent.click(screen.getByRole('button', { name: 'Recargar roster' }));
     await waitFor(() => expect(screen.getByLabelText('Ciclista activo')).toHaveValue(''));
 
