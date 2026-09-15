@@ -201,7 +201,7 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
   }
 
   const visibleSnapshot = confirmedSnapshot(compatibleSnapshot, confirmation.result);
-  const cannotConfirm = compatibleSnapshot.result.coverage === 'insufficient';
+  const cannotConfirm = compatibleSnapshot.result.coverage === 'insufficient' || confirmationNeedsReload;
 
   return (
     <section className="durability-workspace">

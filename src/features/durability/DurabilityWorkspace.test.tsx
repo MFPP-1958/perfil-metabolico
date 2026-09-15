@@ -281,6 +281,10 @@ describe('DurabilityWorkspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Vuelve a cargarlo antes de confirmar.');
     expect(screen.getByRole('button', { name: 'Recargar análisis' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Reintentar confirmación' })).not.toBeInTheDocument();
+    const staleConfirmButton = screen.getByRole('button', { name: 'Confirmar análisis' });
+    expect(staleConfirmButton).toBeDisabled();
+    await userEvent.click(staleConfirmButton);
+    expect(api.confirm).toHaveBeenCalledTimes(1);
 
     await userEvent.click(screen.getByRole('button', { name: 'Recargar análisis' }));
     expect(await screen.findByText('Datos B')).toBeVisible();
