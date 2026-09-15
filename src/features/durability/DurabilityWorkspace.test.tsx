@@ -281,6 +281,7 @@ describe('DurabilityWorkspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Vuelve a cargarlo antes de confirmar.');
     expect(screen.getByRole('button', { name: 'Recargar análisis' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Reintentar confirmación' })).not.toBeInTheDocument();
+    expect(screen.queryByText('La cobertura es insuficiente para confirmar este análisis.')).not.toBeInTheDocument();
     const staleConfirmButton = screen.getByRole('button', { name: 'Confirmar análisis' });
     expect(staleConfirmButton).toBeDisabled();
     await userEvent.click(staleConfirmButton);
@@ -295,6 +296,20 @@ describe('DurabilityWorkspace', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Confirmar análisis' }));
     expect(api.confirm).toHaveBeenLastCalledWith({ snapshotId: snapshotBId });
     expect(await screen.findByText(/confirmado de forma inmutable/i)).toBeVisible();
+  });
+
+  it('explains insufficient coverage and keeps confirmation disabled', async () => {
+    const insufficient = snapshot(snapshotAId, athleteA, 'Cobertura insuficiente.', {
+      result: { ...snapshot().result, coverage: 'insufficient' },
+    });
+    const api: DurabilityApi = {
+      load: vi.fn().mockResolvedValue(insufficient),
+      confirm: vi.fn(),
+    };
+    renderWorkspace(api);
+
+    expect(await screen.findByText('La cobertura es insuficiente para confirmar este análisis.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Confirmar análisis' })).toBeDisabled();
   });
 
   it('aborts and ignores a late response after the analysis context changes', async () => {

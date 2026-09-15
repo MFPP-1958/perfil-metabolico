@@ -201,7 +201,8 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
   }
 
   const visibleSnapshot = confirmedSnapshot(compatibleSnapshot, confirmation.result);
-  const cannotConfirm = compatibleSnapshot.result.coverage === 'insufficient' || confirmationNeedsReload;
+  const coverageInsufficient = compatibleSnapshot.result.coverage === 'insufficient';
+  const cannotConfirm = coverageInsufficient || confirmationNeedsReload;
 
   return (
     <section className="durability-workspace">
@@ -230,7 +231,7 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
         <div>
           <strong>Decisión profesional</strong>
           <p>Confirmar guarda el cálculo del servidor como registro inmutable. No modifica zonas ni prescripciones.</p>
-          {cannotConfirm && <p>La cobertura es insuficiente para confirmar este análisis.</p>}
+          {coverageInsufficient && <p>La cobertura es insuficiente para confirmar este análisis.</p>}
         </div>
         <button
           type="button"
