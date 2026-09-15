@@ -54,13 +54,17 @@ function mapSupportingActivityIds(
 
 function mapDurabilityCurve(curve: z.infer<typeof powerCurveSchema>, level: DurabilityCurveLevel): NormalizedDurabilityCurve {
   const values = curve.values ?? curve.watts ?? [];
+  const durationCounts = new Map<number, number>();
+  for (const seconds of curve.secs) {
+    durationCounts.set(seconds, (durationCounts.get(seconds) ?? 0) + 1);
+  }
   return {
     level,
     afterKj: curve.after_kj ?? null,
     weightKg: curve.weight ?? null,
     points: curve.secs.flatMap((seconds, index) => {
       const watts = values[index];
-      if (seconds <= 0 || watts <= 0) return [];
+      if (seconds <= 0 || watts <= 0 || durationCounts.get(seconds) !== 1) return [];
       const supporting = mapSupportingActivityIds(
         curve.activity_id?.[index],
         curve.submax_values,
@@ -76,20 +80,30 @@ function mapDurabilityCurve(curve: z.infer<typeof powerCurveSchema>, level: Dura
         startIndex: curve.start_index?.[index] ?? null,
         endIndex: curve.end_index?.[index] ?? null,
       }];
-    }),
+    }).sort((left, right) => left.seconds - right.seconds),
   };
 }
 
 export function mapDurabilityCurves(input: unknown): NormalizedDurabilityCurves {
   const response = durabilityCurveResponseSchema.parse(input);
+  const candidates: Record<DurabilityCurveLevel, unknown[]> = { fresh: [], kj0: [], kj1: [] };
+  for (const rawCurve of response.list) {
+    const id = z.object({ id: z.string() }).safeParse(rawCurve);
+    if (id.success) candidates[durabilityCurveLevel(id.data.id)].push(rawCurve);
+  }
+
   let fresh: NormalizedDurabilityCurve | null = null;
   const fatigued: NormalizedDurabilityCurve[] = [];
   const rejected: DurabilityCurveLevel[] = [];
 
-  for (const rawCurve of response.list) {
-    const id = z.object({ id: z.string() }).safeParse(rawCurve);
-    if (!id.success) continue;
-    const level = durabilityCurveLevel(id.data.id);
+  for (const level of ['fresh', 'kj0', 'kj1'] as const) {
+    const members = candidates[level];
+    if (members.length > 1) {
+      rejected.push(...members.map(() => level));
+      continue;
+    }
+    const rawCurve = members[0];
+    if (rawCurve === undefined) continue;
     const curve = powerCurveSchema.safeParse(rawCurve);
     if (!curve.success) {
       rejected.push(level);
@@ -130,21 +144,27 @@ export function mapSportSettings(input: unknown) {
 
 export function mapPowerCurve(input: unknown) {
   const response = durabilityCurveResponseSchema.parse(input);
-  const freshIndex = response.list.findIndex((candidate) => {
+  const freshIndexes = response.list.flatMap((candidate, index) => {
     const id = z.object({ id: z.string() }).safeParse(candidate);
-    return id.success && durabilityCurveLevel(id.data.id) === 'fresh';
+    return id.success && durabilityCurveLevel(id.data.id) === 'fresh' ? [index] : [];
   });
+  if (freshIndexes.length !== 1) throw new Error('La curva fresca es ausente o ambigua.');
+  const [freshIndex] = freshIndexes;
   const curve = powerCurveSchema.parse(response.list[freshIndex]);
   const values = curve.values ?? curve.watts ?? [];
-  const bestWattsByDuration = new Map<number, number>();
+  const durationCounts = new Map<number, number>();
+  for (const seconds of curve.secs) {
+    durationCounts.set(seconds, (durationCounts.get(seconds) ?? 0) + 1);
+  }
+  const wattsByDuration = new Map<number, number>();
   curve.secs.forEach((seconds, index) => {
     const watts = values[index];
-    if (seconds <= 0 || watts <= 0) return;
-    bestWattsByDuration.set(seconds, Math.max(watts, bestWattsByDuration.get(seconds) ?? 0));
+    if (seconds <= 0 || watts <= 0 || durationCounts.get(seconds) !== 1) return;
+    wattsByDuration.set(seconds, watts);
   });
   return {
     period: { start: curve.start_date_local ?? null, end: curve.end_date_local ?? null },
-    points: [...bestWattsByDuration.entries()].sort(([left], [right]) => left - right).map(([seconds, watts], index) => ({
+    points: [...wattsByDuration.entries()].sort(([left], [right]) => left - right).map(([seconds, watts], index) => ({
       seconds,
       watts,
       metricCode: seconds === 5 ? 'power_5s' as const : 'power_duration_point' as const,

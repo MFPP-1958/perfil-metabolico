@@ -24,6 +24,7 @@ function inputWith(config: {
   kj0?: { afterKj: number; points: readonly PointTuple[] };
   kj1?: { afterKj: number; points: readonly PointTuple[] };
   weightKg?: number | null;
+  weightObservedAt?: string | null;
 }): DurabilityInput {
   const weightKg = config.weightKg === undefined ? 70 : config.weightKg;
   const fatigued: Array<DurabilityInput['fatigued'][number]> = [];
@@ -38,6 +39,7 @@ function inputWith(config: {
     environment: 'all',
     oldest: '2026-06-16',
     newest: '2026-09-14',
+    weightObservedAt: config.weightObservedAt === undefined ? '2026-09-01T08:00:00.000Z' : config.weightObservedAt,
     fresh: { weightKg, points: points(config.fresh) },
     fatigued,
   };
@@ -195,6 +197,56 @@ describe('versioned physiological durability', () => {
     expect(result.rows[0].levels.kj0?.afterKjPerKg).toBe(10);
     expect(result.rows[0].levels.kj1?.afterKjPerKg).toBeNull();
     expect(result.warnings).toContain('No hay un peso válido para expresar el trabajo en kJ/kg.');
+  });
+
+  it.each([null, '2026-06-15T23:59:59.000Z', '2026-09-15T00:00:00.000Z', 'not-a-date'])(
+    'keeps kJ/kg calculable but limits coverage when weight provenance is not contemporary: %s',
+    (weightObservedAt) => {
+      const result = calculateDurability({ ...twoLevelInput(), weightObservedAt });
+
+      expect(result.coverage).toBe('low');
+      expect(result.rows[0].levels.kj0?.afterKjPerKg).toBe(10);
+      expect(result.warnings).toContain(
+        'El peso no tiene una fecha observada válida dentro del periodo; la cobertura se limita a baja.',
+      );
+    },
+  );
+
+  it('treats repeated point durations as incompatible and remains invariant under permutation', () => {
+    const base = twoLevelInput();
+    const duplicateFresh = { ...base.fresh.points[0], watts: 990 };
+    const duplicateKj0 = { ...base.fatigued[0].points[1], watts: 370 };
+    const input: DurabilityInput = {
+      ...base,
+      fresh: { ...base.fresh, points: [duplicateFresh, ...base.fresh.points] },
+      fatigued: base.fatigued.map((curve) => curve.level === 'kj0'
+        ? { ...curve, points: [...curve.points, duplicateKj0] }
+        : curve),
+    };
+    const permuted: DurabilityInput = {
+      ...input,
+      fresh: { ...input.fresh, points: [...input.fresh.points].reverse() },
+      fatigued: [...input.fatigued].reverse().map((curve) => ({ ...curve, points: [...curve.points].reverse() })),
+    };
+
+    const result = calculateDurability(input);
+    expect(result).toEqual(calculateDurability(permuted));
+    expect(result.rows.find((row) => row.seconds === 10)?.levels.kj0?.quality).toBe('incompatible');
+    expect(result.rows.find((row) => row.seconds === 60)?.levels.kj0?.quality).toBe('incompatible');
+    expect(result.rows.find((row) => row.seconds === 300)?.levels.kj0?.quality).toBe('observed');
+  });
+
+  it('does not overwrite a duplicated fatigued level and preserves an unambiguous level', () => {
+    const base = twoLevelInput();
+    const duplicateKj0 = { ...base.fatigued[0], afterKj: 800, points: points([[10, 700], [60, 350]]) };
+    const input = { ...base, fatigued: [base.fatigued[0], base.fatigued[1], duplicateKj0] };
+    const permuted = { ...input, fatigued: [...input.fatigued].reverse() };
+
+    const result = calculateDurability(input);
+    expect(result).toEqual(calculateDurability(permuted));
+    expect(result.rows[0].levels.kj0).toMatchObject({ quality: 'incompatible', fatiguedWatts: null });
+    expect(result.rows[0].levels.kj1?.quality).toBe('observed');
+    expect(result.warnings).toContain('El nivel kj0 aparece más de una vez y no se ha utilizado como observación.');
   });
 
   it('lowers coverage when a valid cell has one supporting activity', () => {

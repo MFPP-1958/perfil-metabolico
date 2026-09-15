@@ -213,7 +213,7 @@ create table public.durability_curve_snapshots (
 );
 
 create index durability_curve_snapshots_context_time_idx
-on public.durability_curve_snapshots (athlete_id, sport, environment, oldest, newest, synchronized_at desc);
+on public.durability_curve_snapshots (athlete_id, sport, environment, oldest, newest, synchronized_at desc, id desc);
 create index durability_curve_snapshots_created_by_idx
 on public.durability_curve_snapshots (created_by);
 
@@ -453,6 +453,113 @@ $$;
 
 revoke all on function public.persist_athlete_sync(uuid, text, uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.persist_athlete_sync(uuid, text, uuid, jsonb) to service_role;
+
+create or replace function public.confirm_durability_analysis(
+  target_snapshot_id uuid,
+  target_created_by uuid,
+  target_algorithm_version text,
+  target_comparisons jsonb,
+  target_quality jsonb
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  snapshot_record record;
+  existing_analysis public.durability_analysis_runs%rowtype;
+  inserted_analysis public.durability_analysis_runs%rowtype;
+  latest_snapshot_id uuid;
+begin
+  select athlete_id, sport, environment, oldest, newest
+  into snapshot_record
+  from public.durability_curve_snapshots
+  where id = target_snapshot_id;
+
+  if not found then
+    return jsonb_build_object('status', 'not_found');
+  end if;
+
+  if not exists (
+    select 1
+    from public.coach_athletes
+    where coach_id = target_created_by
+      and athlete_id = snapshot_record.athlete_id
+      and role = 'coach'
+  ) then
+    raise exception 'Coach cannot confirm durability analysis' using errcode = '42501';
+  end if;
+
+  select *
+  into existing_analysis
+  from public.durability_analysis_runs
+  where snapshot_id = target_snapshot_id
+    and algorithm_version = target_algorithm_version
+    and created_by = target_created_by;
+
+  if found then
+    return jsonb_build_object('status', 'existing', 'analysis', to_jsonb(existing_analysis));
+  end if;
+
+  perform 1
+  from public.athletes
+  where id = snapshot_record.athlete_id
+  for update;
+
+  select *
+  into existing_analysis
+  from public.durability_analysis_runs
+  where snapshot_id = target_snapshot_id
+    and algorithm_version = target_algorithm_version
+    and created_by = target_created_by;
+
+  if found then
+    return jsonb_build_object('status', 'existing', 'analysis', to_jsonb(existing_analysis));
+  end if;
+
+  select id
+  into latest_snapshot_id
+  from public.durability_curve_snapshots
+  where athlete_id = snapshot_record.athlete_id
+    and sport = snapshot_record.sport
+    and environment = snapshot_record.environment
+    and oldest = snapshot_record.oldest
+    and newest = snapshot_record.newest
+  order by synchronized_at desc, id desc
+  limit 1;
+
+  if latest_snapshot_id is distinct from target_snapshot_id then
+    return jsonb_build_object('status', 'stale');
+  end if;
+
+  if target_algorithm_version is null or length(target_algorithm_version) = 0
+    or jsonb_typeof(target_comparisons) <> 'array'
+    or jsonb_typeof(target_quality) <> 'object'
+  then
+    raise exception 'Invalid durability confirmation payload' using errcode = '22023';
+  end if;
+
+  insert into public.durability_analysis_runs (
+    athlete_id, snapshot_id, created_by, algorithm_version, comparisons, quality
+  ) values (
+    snapshot_record.athlete_id,
+    target_snapshot_id,
+    target_created_by,
+    target_algorithm_version,
+    target_comparisons,
+    target_quality
+  )
+  returning * into inserted_analysis;
+
+  return jsonb_build_object('status', 'created', 'analysis', to_jsonb(inserted_analysis));
+end;
+$$;
+
+revoke all on function public.confirm_durability_analysis(uuid, uuid, text, jsonb, jsonb)
+from public, anon, authenticated;
+grant execute on function public.confirm_durability_analysis(uuid, uuid, text, jsonb, jsonb)
+to service_role;
 
 create table public.prescriptions (
   id uuid primary key default extensions.gen_random_uuid(),

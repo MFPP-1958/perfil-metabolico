@@ -20,6 +20,18 @@ function validWeight(weightKg: number | null): weightKg is number {
   return weightKg !== null && Number.isFinite(weightKg) && weightKg > 0;
 }
 
+function contemporaryWeight(input: DurabilityInput): boolean {
+  if (input.weightObservedAt === null) return false;
+  const observedAt = Date.parse(input.weightObservedAt);
+  const periodStart = Date.parse(`${input.oldest}T00:00:00.000Z`);
+  const periodEnd = Date.parse(`${input.newest}T23:59:59.999Z`);
+  return Number.isFinite(observedAt)
+    && Number.isFinite(periodStart)
+    && Number.isFinite(periodEnd)
+    && observedAt >= periodStart
+    && observedAt <= periodEnd;
+}
+
 function assertFiniteInput(input: DurabilityInput): void {
   const points = [input.fresh.points, ...input.fatigued.map((curve) => curve.points)].flat();
   if (points.some((point) => !Number.isFinite(point.seconds) || !Number.isFinite(point.watts))) {
@@ -83,6 +95,16 @@ function comparison(
   };
 }
 
+function pointsByDuration(points: readonly DurabilityPoint[]) {
+  const grouped = new Map<number, DurabilityPoint[]>();
+  for (const point of points) {
+    const matches = grouped.get(point.seconds) ?? [];
+    matches.push(point);
+    grouped.set(point.seconds, matches);
+  }
+  return grouped;
+}
+
 function coverageQuality(input: DurabilityInput, rows: readonly DurabilityRow[]): CoverageQuality {
   const observedByLevel: Record<DurabilityLevel, DurabilityLevelResult[]> = { kj0: [], kj1: [] };
   for (const row of rows) {
@@ -100,7 +122,7 @@ function coverageQuality(input: DurabilityInput, rows: readonly DurabilityRow[])
   const hasLimitedProvenance = observed.some(
     (cell) => cell.powerSource === 'unknown' || cell.supportingActivityCount < 2,
   );
-  if (!hasValidWeight || hasLimitedProvenance) return 'low';
+  if (!hasValidWeight || !contemporaryWeight(input) || hasLimitedProvenance) return 'low';
 
   const kj0Count = observedByLevel.kj0.length;
   const kj1Count = observedByLevel.kj1.length;
@@ -115,19 +137,34 @@ function coverageQuality(input: DurabilityInput, rows: readonly DurabilityRow[])
 export function calculateDurability(input: DurabilityInput): DurabilityResult {
   assertFiniteInput(input);
   const contextIsCompatible = compatibleContext(input);
+  const freshPoints = pointsByDuration(input.fresh.points);
+  const curvesByLevel = new Map<DurabilityLevel, DurabilityInput['fatigued'][number][]>();
+  for (const curve of input.fatigued) {
+    const matches = curvesByLevel.get(curve.level) ?? [];
+    matches.push(curve);
+    curvesByLevel.set(curve.level, matches);
+  }
+  const ambiguousLevels = (['kj0', 'kj1'] as const).filter((level) => (curvesByLevel.get(level)?.length ?? 0) > 1);
   const rows: DurabilityRow[] = CANONICAL_DURATIONS.map((seconds) => {
-    const freshPoint = input.fresh.points.find((point) => point.seconds === seconds);
+    const freshMatches = freshPoints.get(seconds) ?? [];
+    const freshPoint = freshMatches.length === 1 ? freshMatches[0] : undefined;
+    const freshIsAmbiguous = freshMatches.length > 1;
     const levels: DurabilityRow['levels'] = {};
 
-    for (const curve of input.fatigued) {
-      levels[curve.level] = contextIsCompatible
-        ? comparison(
-          freshPoint,
-          curve.points.find((point) => point.seconds === seconds),
-          curve.afterKj,
-          curve.weightKg,
-        )
-        : unavailableComparison(curve.afterKj, curve.weightKg, 'incompatible');
+    for (const level of ['kj0', 'kj1'] as const) {
+      const curves = curvesByLevel.get(level) ?? [];
+      if (curves.length === 0) continue;
+      if (curves.length > 1) {
+        const afterKj = Math.min(...curves.map((curve) => curve.afterKj));
+        levels[level] = unavailableComparison(afterKj, null, 'incompatible');
+        continue;
+      }
+      const curve = curves[0];
+      const fatiguedMatches = pointsByDuration(curve.points).get(seconds) ?? [];
+      const durationIsAmbiguous = freshIsAmbiguous || fatiguedMatches.length > 1;
+      levels[level] = !contextIsCompatible || durationIsAmbiguous
+        ? unavailableComparison(curve.afterKj, curve.weightKg, 'incompatible')
+        : comparison(freshPoint, fatiguedMatches[0], curve.afterKj, curve.weightKg);
     }
 
     const onset = Object.values(levels)
@@ -136,7 +173,7 @@ export function calculateDurability(input: DurabilityInput): DurabilityResult {
 
     return {
       seconds,
-      freshWatts: freshPoint?.watts ?? null,
+      freshWatts: freshIsAmbiguous ? null : freshPoint?.watts ?? null,
       levels,
       onsetAfterKj: onset?.afterKj ?? null,
       onsetAfterKjPerKg: onset?.afterKjPerKg ?? null,
@@ -154,8 +191,15 @@ export function calculateDurability(input: DurabilityInput): DurabilityResult {
 
   const coverage = coverageQuality(input, rows);
   const warnings: string[] = [];
-  if (input.fatigued.some((curve) => !validWeight(curve.weightKg)) || !validWeight(input.fresh.weightKg)) {
+  const hasValidWeight = input.fatigued.every((curve) => validWeight(curve.weightKg))
+    && validWeight(input.fresh.weightKg);
+  if (!hasValidWeight) {
     warnings.push('No hay un peso válido para expresar el trabajo en kJ/kg.');
+  } else if (!contemporaryWeight(input)) {
+    warnings.push('El peso no tiene una fecha observada válida dentro del periodo; la cobertura se limita a baja.');
+  }
+  for (const level of ambiguousLevels) {
+    warnings.push(`El nivel ${level} aparece más de una vez y no se ha utilizado como observación.`);
   }
   if (coverage === 'insufficient') {
     warnings.push('No existen duraciones canónicas coincidentes entre las curvas.');

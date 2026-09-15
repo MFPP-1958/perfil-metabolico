@@ -15,6 +15,14 @@ select function_privs_are('public', 'persist_athlete_sync', array['uuid','text',
 select function_privs_are('public', 'persist_athlete_sync', array['uuid','text','uuid','jsonb'], 'anon', array[]::text[]);
 select function_privs_are('public', 'persist_athlete_sync', array['uuid','text','uuid','jsonb'], 'service_role', array['EXECUTE']);
 select ok(not (select prosecdef from pg_proc where oid = 'public.persist_athlete_sync(uuid,text,uuid,jsonb)'::regprocedure), 'atomic persistence uses invoker permissions');
+select has_function('public', 'confirm_durability_analysis', array['uuid','uuid','text','jsonb','jsonb'],
+  'atomic durability confirmation exists');
+select function_privs_are('public', 'confirm_durability_analysis', array['uuid','uuid','text','jsonb','jsonb'], 'public', array[]::text[]);
+select function_privs_are('public', 'confirm_durability_analysis', array['uuid','uuid','text','jsonb','jsonb'], 'anon', array[]::text[]);
+select function_privs_are('public', 'confirm_durability_analysis', array['uuid','uuid','text','jsonb','jsonb'], 'authenticated', array[]::text[]);
+select function_privs_are('public', 'confirm_durability_analysis', array['uuid','uuid','text','jsonb','jsonb'], 'service_role', array['EXECUTE']);
+select ok(not (select prosecdef from pg_proc where oid = 'public.confirm_durability_analysis(uuid,uuid,text,jsonb,jsonb)'::regprocedure),
+  'atomic durability confirmation uses invoker permissions');
 select is((select count(*) from pg_class where relnamespace = 'public'::regnamespace
   and relname in ('durability_curve_snapshots', 'durability_analysis_runs') and relrowsecurity),
   2::bigint, 'both durability tables enable RLS');
@@ -88,6 +96,9 @@ select throws_ok($$update public.durability_analysis_runs set quality = '{}'$$, 
 select throws_ok($$delete from public.durability_analysis_runs$$, '42501', null, 'authenticated cannot delete analyses');
 select throws_ok($$select public.persist_athlete_sync('21000000-0000-4000-8000-000000000001', 'sync-current',
   '11000000-0000-4000-8000-000000000001', '{}')$$, '42501', null, 'authenticated cannot invoke server persistence');
+select throws_ok($$select public.confirm_durability_analysis('31000000-0000-4000-8000-000000000001',
+  '11000000-0000-4000-8000-000000000001', 'test-v2', '[]', '{}')$$,
+  '42501', null, 'authenticated cannot invoke atomic durability confirmation');
 set local request.jwt.claim.sub = '11000000-0000-4000-8000-000000000002';
 select results_eq($$select athlete_id::text from public.durability_curve_snapshots$$,
   array['21000000-0000-4000-8000-000000000002'], 'coach B sees only athlete B snapshots');
@@ -144,6 +155,83 @@ select ok(public.persist_athlete_sync('21000000-0000-4000-8000-000000000001', 's
   '11000000-0000-4000-8000-000000000001', pg_temp.durability_payload('e')), 'changed content creates a new historical snapshot');
 select results_eq($$select count(*) from public.durability_curve_snapshots where athlete_id = '21000000-0000-4000-8000-000000000001'$$,
   array[2::bigint], 'history retains both distinct fingerprints');
+
+-- Represent sync B committing between API recalculation and confirmation of snapshot A.
+reset role;
+insert into public.durability_curve_snapshots (
+  id, athlete_id, created_by, sport, environment, oldest, newest, fresh_curve,
+  fatigued_curves, weight_kg, weight_observed_at, source_version, content_hash, synchronized_at
+) values (
+  '31000000-0000-4000-8000-000000000001',
+  '21000000-0000-4000-8000-000000000001',
+  '11000000-0000-4000-8000-000000000001',
+  'Ride', 'indoor', '2026-06-14', '2026-09-14', '{"points":[]}', '[]', 70, null,
+  'test-v1', repeat('1', 64), '2026-09-14T10:00:00Z'
+), (
+  '31000000-0000-4000-8000-000000000002',
+  '21000000-0000-4000-8000-000000000001',
+  '11000000-0000-4000-8000-000000000001',
+  'Ride', 'indoor', '2026-06-14', '2026-09-14', '{"points":[]}', '[]', 70, null,
+  'test-v1', repeat('2', 64), '2026-09-14T11:00:00Z'
+);
+set local role service_role;
+select is(
+  public.confirm_durability_analysis(
+    '31000000-0000-4000-8000-000000000001',
+    '11000000-0000-4000-8000-000000000001',
+    'durability-record-profile@2.0.0', '[]', '{"coverage":"high","warnings":[]}'
+  )->>'status',
+  'stale',
+  'confirmation rejects A after synchronized snapshot B becomes latest'
+);
+select results_eq($$select count(*) from public.durability_analysis_runs
+  where snapshot_id = '31000000-0000-4000-8000-000000000001'$$,
+  array[0::bigint], 'stale confirmation inserts no run');
+select is(
+  public.confirm_durability_analysis(
+    '31000000-0000-4000-8000-000000000002',
+    '11000000-0000-4000-8000-000000000001',
+    'durability-record-profile@2.0.0', '[]', '{"coverage":"high","warnings":[]}'
+  )->>'status',
+  'created',
+  'latest snapshot can be confirmed atomically'
+);
+select throws_ok($$select public.confirm_durability_analysis(
+  '31000000-0000-4000-8000-000000000002',
+  '11000000-0000-4000-8000-000000000003',
+  'durability-record-profile@2.0.0', '[]', '{"coverage":"high","warnings":[]}'
+)$$, '42501', 'Coach cannot confirm durability analysis',
+  'atomic confirmation enforces coach ownership even through service role');
+reset role;
+insert into public.durability_curve_snapshots (
+  id, athlete_id, created_by, sport, environment, oldest, newest, fresh_curve,
+  fatigued_curves, weight_kg, weight_observed_at, source_version, content_hash, synchronized_at
+) values (
+  '31000000-0000-4000-8000-000000000003',
+  '21000000-0000-4000-8000-000000000001',
+  '11000000-0000-4000-8000-000000000001',
+  'Ride', 'indoor', '2026-06-14', '2026-09-14', '{"points":[]}', '[]', 70, null,
+  'test-v1', repeat('3', 64), '2026-09-14T12:00:00Z'
+);
+set local role service_role;
+select is(
+  public.confirm_durability_analysis(
+    '31000000-0000-4000-8000-000000000002',
+    '11000000-0000-4000-8000-000000000001',
+    'durability-record-profile@2.0.0', '[]', '{"coverage":"different","warnings":[]}'
+  )->>'status',
+  'existing',
+  'idempotent confirmation wins after the confirmed snapshot becomes stale'
+);
+select is(
+  public.confirm_durability_analysis(
+    '31000000-0000-4000-8000-000000000099',
+    '11000000-0000-4000-8000-000000000001',
+    'durability-record-profile@2.0.0', '[]', '{}'
+  )->>'status',
+  'not_found',
+  'atomic confirmation reports a snapshot removed after API recalculation'
+);
 
 reset role;
 select * from finish();

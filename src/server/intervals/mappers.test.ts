@@ -41,17 +41,26 @@ describe('Intervals.icu explicit mappers', () => {
     expect(mapped.models[0].sourceField).toBe('list[1].powerModels');
   });
 
-  it('normalizes curve points to positive, sorted, unique best powers', () => {
-    const mapped = mapPowerCurve({
+  it('removes every repeated power duration and is invariant under point permutation', () => {
+    const forward = {
       list: [{
         id: '90d',
         secs: [300, 5, 60, 5, 0, 1200],
         values: [320, 900, 510, 925, 1000, -1],
         powerModels: [],
       }],
-    });
+    };
+    const reverse = {
+      list: [{
+        ...forward.list[0],
+        secs: [...forward.list[0].secs].reverse(),
+        values: [...forward.list[0].values].reverse(),
+      }],
+    };
+    const mapped = mapPowerCurve(forward);
+
+    expect(mapped).toEqual(mapPowerCurve(reverse));
     expect(mapped.points.map(({ seconds, watts }) => ({ seconds, watts }))).toEqual([
-      { seconds: 5, watts: 925 },
       { seconds: 60, watts: 510 },
       { seconds: 300, watts: 320 },
     ]);
@@ -84,6 +93,72 @@ describe('Intervals.icu explicit mappers', () => {
     expect(mapped.fresh?.points).toHaveLength(4);
     expect(mapped.fatigued).toHaveLength(0);
     expect(mapped.rejected).toEqual(['kj0']);
+  });
+
+  it('removes every point for a repeated duration while preserving unique durations', () => {
+    const forward = {
+      list: [{
+        id: '90d',
+        secs: [10, 60, 10, 300],
+        values: [900, 400, 910, 300],
+        activity_id: ['a', 'b', 'c', 'd'],
+        powerModels: [],
+      }],
+    };
+    const reverse = {
+      list: [{
+        ...forward.list[0],
+        secs: [...forward.list[0].secs].reverse(),
+        values: [...forward.list[0].values].reverse(),
+        activity_id: [...forward.list[0].activity_id].reverse(),
+      }],
+    };
+    const mapped = mapDurabilityCurves(forward);
+
+    expect(mapped).toEqual(mapDurabilityCurves(reverse));
+    expect(mapped.fresh?.points.map(({ seconds, watts }) => ({ seconds, watts }))).toEqual([
+      { seconds: 60, watts: 400 },
+      { seconds: 300, watts: 300 },
+    ]);
+  });
+
+  it('rejects every fresh curve when the fresh level is duplicated regardless of order', () => {
+    const firstFresh = { id: '90d', secs: [10], values: [900], powerModels: [] };
+    const secondFresh = { id: '42d', secs: [10], values: [950], powerModels: [] };
+    const kj0 = { id: '90d-kj0', after_kj: 700, secs: [10], values: [850], powerModels: [] };
+    const forward = mapDurabilityCurves({ list: [firstFresh, kj0, secondFresh] });
+    const reverse = mapDurabilityCurves({ list: [secondFresh, kj0, firstFresh] });
+
+    expect(forward).toEqual(reverse);
+    expect(forward.fresh).toBeNull();
+    expect(forward.fatigued.map((curve) => curve.level)).toEqual(['kj0']);
+    expect(forward.rejected).toEqual(['fresh', 'fresh']);
+  });
+
+  it('rejects every duplicated kj0 and kj1 member without discarding an unambiguous fresh curve', () => {
+    const fresh = { id: '90d', secs: [10], values: [900], powerModels: [] };
+    const duplicated = [
+      { id: '90d-kj0', after_kj: 700, secs: [10], values: [850], powerModels: [] },
+      { id: '42d-kj0', after_kj: 600, secs: [10], values: [840], powerModels: [] },
+      { id: '90d-kj1', after_kj: 1400, secs: [10], values: [800], powerModels: [] },
+      { id: '42d-kj1', after_kj: 1200, secs: [10], values: [790], powerModels: [] },
+    ];
+    const forward = mapDurabilityCurves({ list: [fresh, ...duplicated] });
+    const reverse = mapDurabilityCurves({ list: [fresh, ...[...duplicated].reverse()] });
+
+    expect(forward).toEqual(reverse);
+    expect(forward.fresh?.points[0].watts).toBe(900);
+    expect(forward.fatigued).toEqual([]);
+    expect(forward.rejected).toEqual(['kj0', 'kj0', 'kj1', 'kj1']);
+  });
+
+  it('rejects an ambiguous fresh member for the power snapshot', () => {
+    expect(() => mapPowerCurve({
+      list: [
+        { id: '90d', secs: [10], values: [900], powerModels: [] },
+        { id: '42d', secs: [10], values: [950], powerModels: [] },
+      ],
+    })).toThrow(/fresh|fresca|ambigua/i);
   });
 
   it('keeps best-power points when one submax support fragment is malformed', () => {

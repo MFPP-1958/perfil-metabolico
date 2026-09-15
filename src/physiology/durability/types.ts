@@ -16,6 +16,7 @@ export interface DurabilityInput {
   environment: 'all' | 'outdoor' | 'indoor';
   oldest: string;
   newest: string;
+  weightObservedAt: string | null;
   fresh: { weightKg: number | null; points: readonly DurabilityPoint[] };
   fatigued: readonly {
     level: DurabilityLevel;

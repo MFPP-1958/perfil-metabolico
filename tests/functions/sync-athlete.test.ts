@@ -357,22 +357,25 @@ describe('athlete synchronization', () => {
       athleteId: internalAthleteId,
       oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'indoor' as const, syncKey: 'sync-2',
     };
-    const payload = createPowerCurveSnapshotPayload({
-      list: [{
-        id: 'raw-secret-id', secs: [60, 5, 5], values: [510, 900, 925], rawSecret: 'never-store-this',
-        powerModels: [{ type: 'ECP', criticalPower: 265, wPrime: 17000, pMax: 980, ftp: 255 }],
-      }],
+    const rawCurve = {
+      id: 'raw-secret-id', secs: [60, 5, 5], values: [510, 900, 925], rawSecret: 'never-store-this',
+      powerModels: [{ type: 'ECP' as const, criticalPower: 265, wPrime: 17000, pMax: 980, ftp: 255 }],
+    };
+    const payload = createPowerCurveSnapshotPayload({ list: [rawCurve] }, request);
+    const permuted = createPowerCurveSnapshotPayload({
+      list: [{ ...rawCurve, secs: [...rawCurve.secs].reverse(), values: [...rawCurve.values].reverse() }],
     }, request);
 
+    expect(payload).toEqual(permuted);
     expect(payload).toEqual({
       sport: 'Ride',
       environment: 'indoor',
       oldest: '2026-06-08',
       newest: '2026-09-05',
-      points: [{ seconds: 5, watts: 925 }, { seconds: 60, watts: 510 }],
+      points: [{ seconds: 60, watts: 510 }],
       source_models: [{ type: 'ECP', cpWatts: 265, wPrimeKj: 17, pmaxWatts: 980, ftpWatts: 255, r2: null }],
       source_version: 'intervals-openapi-v1',
-      content_hash: '8e6fe6e7fee445c8e086b2fcbbac00bf448f25c7c0c6bcc1cb0676e80eeb4f9e',
+      content_hash: '6078f3961a4c8e1d5b8955b46b9c542766805d78da36fca4f817b5b506633f83',
     });
     expect(JSON.stringify(payload)).not.toContain('raw-secret-id');
     expect(JSON.stringify(payload)).not.toContain('never-store-this');
@@ -440,7 +443,7 @@ describe('athlete synchronization', () => {
     };
     const payload = createDurabilitySnapshotPayload({
       list: [{ id: '90d', weight: 0, secs: [10], values: [900], powerModels: [] }],
-    }, [], request, '2026-09-05T12:00:00.000Z');
+    }, [], request);
 
     expect(payload.weight_kg).toBeNull();
     expect(payload.weight_observed_at).toBeNull();
@@ -457,9 +460,9 @@ describe('athlete synchronization', () => {
       { intervals_activity_id: 'i2', normalized_data: { name: 'Private two', deviceWatts: true } },
       { intervals_activity_id: 'i3', normalized_data: { name: 'Private three', deviceWatts: false } },
     ];
-    const payload = createDurabilitySnapshotPayload(durabilityCurves, activities, request, '2026-09-05T12:00:00.000Z');
+    const payload = createDurabilitySnapshotPayload(durabilityCurves, activities, request);
     const reordered = createDurabilitySnapshotPayload(
-      { list: [...durabilityCurves.list].reverse() }, activities, request, '2026-09-05T12:00:00.000Z',
+      { list: [...durabilityCurves.list].reverse() }, activities, request,
     );
 
     expect(payload.fresh_curve.points[0]).toMatchObject({
@@ -476,7 +479,7 @@ describe('athlete synchronization', () => {
     expect(payload.fatigued_curves[1].points[0]).toMatchObject({
       supportingActivityIds: ['i3', 'i5', 'i6'], supportingActivityCount: 3, supportingEffortCount: 3, powerSource: 'unknown',
     });
-    expect(payload).toMatchObject({ weight_kg: 70, weight_observed_at: '2026-09-05T12:00:00.000Z' });
+    expect(payload).toMatchObject({ weight_kg: 70, weight_observed_at: null });
     expect(payload.content_hash).toBe(reordered.content_hash);
     expect(JSON.stringify(payload)).not.toContain('Private');
   });
@@ -496,7 +499,7 @@ describe('athlete synchronization', () => {
         submax_activity_id: [['i2']],
         powerModels: [],
       }],
-    }, [{ intervals_activity_id: 'i2', normalized_data: { deviceWatts: true } }], request, '2026-09-05T12:00:00.000Z');
+    }, [{ intervals_activity_id: 'i2', normalized_data: { deviceWatts: true } }], request);
 
     expect(payload.fresh_curve.points[0]).toMatchObject({
       activityId: null,

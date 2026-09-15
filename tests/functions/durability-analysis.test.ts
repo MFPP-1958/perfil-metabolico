@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createDurabilityAnalysisHandler,
+  confirmDurabilityAnalysisAtomically,
   loadLatestDurabilitySnapshot,
-  persistConfirmedDurabilityAnalysis,
 } from '../../netlify/functions/durability-analysis';
 import type { DurabilityRow } from '../../src/physiology/durability/types';
 
@@ -139,8 +139,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     authorize: vi.fn().mockResolvedValue('coach'),
     loadLatestSnapshot: vi.fn().mockResolvedValue(snapshotRow),
     loadSnapshot: vi.fn().mockResolvedValue(snapshotRow),
-    loadConfirmedAnalysis: vi.fn().mockResolvedValue(null),
-    persistAnalysis: vi.fn().mockResolvedValue({ row: confirmedRow, created: true }),
+    confirmAnalysis: vi.fn().mockResolvedValue({ status: 'created', analysis: confirmedRow }),
     now: vi.fn().mockReturnValue(new Date('2026-09-14T12:00:00.000Z')),
     ...overrides,
   };
@@ -301,8 +300,8 @@ describe('authorized durability analysis API', () => {
     expect(response.statusCode).toBe(201);
     expect(deps.loadSnapshot).toHaveBeenCalledWith(snapshotId);
     expect(deps.authorize).toHaveBeenCalledWith(coachId, athleteId);
-    expect(deps.loadLatestSnapshot).toHaveBeenCalledWith(exactQuery);
-    expect(deps.persistAnalysis).toHaveBeenCalledWith({
+    expect(deps.loadLatestSnapshot).not.toHaveBeenCalled();
+    expect(deps.confirmAnalysis).toHaveBeenCalledWith({
       athleteId,
       snapshotId,
       createdBy: coachId,
@@ -330,6 +329,26 @@ describe('authorized durability analysis API', () => {
     expect(response.body).not.toContain(coachId);
   });
 
+  it('delegates the authoritative latest check and insert to one atomic database operation', async () => {
+    const confirmAnalysis = vi.fn().mockResolvedValue({ status: 'stale' });
+    const deps = dependencies({
+      confirmAnalysis,
+      loadConfirmedAnalysis: vi.fn(),
+      loadLatestSnapshot: vi.fn(),
+      persistAnalysis: vi.fn(),
+    });
+    const response = await createDurabilityAnalysisHandler(deps)(postEvent({ snapshotId }));
+
+    expect(response.statusCode).toBe(409);
+    expect(confirmAnalysis).toHaveBeenCalledWith(expect.objectContaining({
+      athleteId,
+      snapshotId,
+      createdBy: coachId,
+      algorithmVersion: 'durability-record-profile@2.0.0',
+    }));
+    expect(deps.loadLatestSnapshot).not.toHaveBeenCalled();
+  });
+
   it.each([
     { snapshotId, result: { rows: [] } },
     { snapshotId, comparisons: [{ watts: 99_999 }] },
@@ -337,12 +356,12 @@ describe('authorized durability analysis API', () => {
     { snapshotId, athleteId: otherAthleteId },
     { snapshotId, weightKg: 40 },
   ])('rejects forged client fields without loading or persisting a snapshot', async (body) => {
-    const deps = dependencies({ loadSnapshot: vi.fn(), persistAnalysis: vi.fn() });
+    const deps = dependencies({ loadSnapshot: vi.fn(), confirmAnalysis: vi.fn() });
     const response = await createDurabilityAnalysisHandler(deps)(postEvent(body));
 
     expect(response.statusCode).toBe(400);
     expect(deps.loadSnapshot).not.toHaveBeenCalled();
-    expect(deps.persistAnalysis).not.toHaveBeenCalled();
+    expect(deps.confirmAnalysis).not.toHaveBeenCalled();
   });
 
   it('distinguishes a missing POST snapshot from a forbidden owned snapshot', async () => {
@@ -357,31 +376,28 @@ describe('authorized durability analysis API', () => {
   });
 
   it('returns 403 when a viewer tries to confirm', async () => {
-    const deps = dependencies({ authorize: vi.fn().mockResolvedValue('viewer'), loadLatestSnapshot: vi.fn(), persistAnalysis: vi.fn() });
+    const deps = dependencies({ authorize: vi.fn().mockResolvedValue('viewer'), loadLatestSnapshot: vi.fn(), confirmAnalysis: vi.fn() });
     const response = await createDurabilityAnalysisHandler(deps)(postEvent({ snapshotId }));
 
     expect(response.statusCode).toBe(403);
     expect(deps.loadLatestSnapshot).not.toHaveBeenCalled();
-    expect(deps.persistAnalysis).not.toHaveBeenCalled();
+    expect(deps.confirmAnalysis).not.toHaveBeenCalled();
   });
 
   it('returns 409 when the requested snapshot is no longer the latest exact-context snapshot', async () => {
     const deps = dependencies({
-      loadLatestSnapshot: vi.fn().mockResolvedValue({ ...snapshotRow, id: newerSnapshotId }),
-      persistAnalysis: vi.fn(),
+      confirmAnalysis: vi.fn().mockResolvedValue({ status: 'stale' }),
     });
     const response = await createDurabilityAnalysisHandler(deps)(postEvent({ snapshotId }));
 
     expect(response.statusCode).toBe(409);
     expect(JSON.parse(response.body)).toEqual({ error: 'La instantánea ha quedado obsoleta. Vuelve a cargar el análisis.' });
-    expect(deps.persistAnalysis).not.toHaveBeenCalled();
+    expect(deps.confirmAnalysis).toHaveBeenCalledOnce();
   });
 
   it('returns an earlier immutable confirmation before checking whether its snapshot became stale', async () => {
     const deps = dependencies({
-      loadConfirmedAnalysis: vi.fn().mockResolvedValue(confirmedRow),
-      loadLatestSnapshot: vi.fn().mockResolvedValue({ ...snapshotRow, id: newerSnapshotId }),
-      persistAnalysis: vi.fn(),
+      confirmAnalysis: vi.fn().mockResolvedValue({ status: 'existing', analysis: confirmedRow }),
     });
     const response = await createDurabilityAnalysisHandler(deps)(postEvent({ snapshotId }));
 
@@ -394,13 +410,8 @@ describe('authorized durability analysis API', () => {
       quality: { coverage: 'high', warnings: [] },
       confirmedAt: '2026-09-14T10:30:00.000Z',
     });
-    expect(deps.loadConfirmedAnalysis).toHaveBeenCalledWith({
-      snapshotId,
-      algorithmVersion: 'durability-record-profile@2.0.0',
-      createdBy: coachId,
-    });
     expect(deps.loadLatestSnapshot).not.toHaveBeenCalled();
-    expect(deps.persistAnalysis).not.toHaveBeenCalled();
+    expect(deps.confirmAnalysis).toHaveBeenCalledOnce();
   });
 
   it('returns 409 when server recalculation has insufficient coverage', async () => {
@@ -415,28 +426,28 @@ describe('authorized durability analysis API', () => {
     const deps = dependencies({
       loadSnapshot: vi.fn().mockResolvedValue(insufficientSnapshot),
       loadLatestSnapshot: vi.fn().mockResolvedValue(insufficientSnapshot),
-      persistAnalysis: vi.fn(),
+      confirmAnalysis: vi.fn(),
     });
     const response = await createDurabilityAnalysisHandler(deps)(postEvent({ snapshotId }));
 
     expect(response.statusCode).toBe(409);
-    expect(deps.persistAnalysis).not.toHaveBeenCalled();
+    expect(deps.confirmAnalysis).not.toHaveBeenCalled();
   });
 
   it('returns the existing immutable analysis for an identical confirmation', async () => {
-    const deps = dependencies({ persistAnalysis: vi.fn().mockResolvedValue({ row: confirmedRow, created: false }) });
+    const deps = dependencies({ confirmAnalysis: vi.fn().mockResolvedValue({ status: 'existing', analysis: confirmedRow }) });
     const response = await createDurabilityAnalysisHandler(deps)(postEvent({ snapshotId }));
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body).id).toBe(analysisId);
   });
 
-  it('inserts idempotently and reloads an existing confirmation without updating it', async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 201 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([confirmedRow]), { status: 200 }));
+  it('sends one RPC request for the atomic confirmation boundary', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 'existing', analysis: confirmedRow }), { status: 200 }),
+    );
 
-    const result = await persistConfirmedDurabilityAnalysis(fetchImpl, {
+    const result = await confirmDurabilityAnalysisAtomically(fetchImpl, {
       url: 'https://supabase.test',
       headers: { apikey: 'server-secret', Authorization: 'Bearer server-secret', 'Content-Type': 'application/json' },
     }, {
@@ -448,23 +459,17 @@ describe('authorized durability analysis API', () => {
       quality: { coverage: 'high', warnings: [] },
     });
 
-    expect(result).toEqual({ row: confirmedRow, created: false });
+    expect(result).toEqual({ status: 'existing', analysis: confirmedRow });
+    expect(fetchImpl).toHaveBeenCalledOnce();
     const [insertUrl, insertInit] = fetchImpl.mock.calls[0];
-    expect(insertUrl).toContain('on_conflict=snapshot_id%2Calgorithm_version%2Ccreated_by');
+    expect(insertUrl).toBe('https://supabase.test/rest/v1/rpc/confirm_durability_analysis');
     expect(insertInit?.method).toBe('POST');
-    expect(insertInit?.headers?.Prefer).toBe('resolution=ignore-duplicates,return=representation');
     expect(JSON.parse(String(insertInit?.body))).toEqual({
-      athlete_id: athleteId,
-      snapshot_id: snapshotId,
-      created_by: coachId,
-      algorithm_version: 'durability-record-profile@2.0.0',
-      comparisons: comparisonRows,
-      quality: { coverage: 'high', warnings: [] },
+      target_snapshot_id: snapshotId,
+      target_created_by: coachId,
+      target_algorithm_version: 'durability-record-profile@2.0.0',
+      target_comparisons: comparisonRows,
+      target_quality: { coverage: 'high', warnings: [] },
     });
-    const [existingUrl, existingInit] = fetchImpl.mock.calls[1];
-    expect(existingUrl).toContain(`snapshot_id=eq.${snapshotId}`);
-    expect(existingUrl).toContain('algorithm_version=eq.durability-record-profile%402.0.0');
-    expect(existingUrl).toContain(`created_by=eq.${coachId}`);
-    expect(existingInit?.method).toBeUndefined();
   });
 });

@@ -35,21 +35,20 @@ export interface PersistedDurabilityAnalysis {
   quality: { coverage: CoverageQuality; warnings: string[] };
 }
 
-interface DurabilityAnalysisKey {
-  snapshotId: string;
-  algorithmVersion: typeof DURABILITY_ALGORITHM_VERSION;
-  createdBy: string;
-}
-
 export interface DurabilityAnalysisDependencies {
   authenticate(event: DurabilityAnalysisEvent): Promise<{ id: string } | null>;
   authorize(coachId: string, athleteId: string): Promise<AnalysisRole | null>;
   loadLatestSnapshot(query: DurabilityQuery): Promise<unknown | null>;
   loadSnapshot(snapshotId: string): Promise<unknown | null>;
-  loadConfirmedAnalysis(input: DurabilityAnalysisKey): Promise<unknown | null>;
-  persistAnalysis(input: PersistedDurabilityAnalysis): Promise<{ row: unknown; created: boolean }>;
+  confirmAnalysis(input: PersistedDurabilityAnalysis): Promise<AtomicDurabilityConfirmation>;
   now(): Date;
 }
+
+export type AtomicDurabilityConfirmation =
+  | { status: 'created'; analysis: unknown }
+  | { status: 'existing'; analysis: unknown }
+  | { status: 'stale' }
+  | { status: 'not_found' };
 
 interface SupabaseService {
   url: string;
@@ -145,6 +144,13 @@ const rawAnalysisRunSchema = z.object({
   quality: qualitySchema,
   confirmed_at: z.iso.datetime({ offset: true }),
 });
+
+const atomicConfirmationSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('created'), analysis: z.unknown() }),
+  z.strictObject({ status: z.literal('existing'), analysis: z.unknown() }),
+  z.strictObject({ status: z.literal('stale') }),
+  z.strictObject({ status: z.literal('not_found') }),
+]);
 
 const querySchema = z.strictObject({
   athleteId: z.uuid(),
@@ -253,62 +259,29 @@ async function loadSnapshotDefault(snapshotId: string) {
   return ((await response.json()) as unknown[])[0] ?? null;
 }
 
-async function loadConfirmedDurabilityAnalysis(
-  fetchImpl: typeof fetch,
-  service: SupabaseService,
-  input: DurabilityAnalysisKey,
-) {
-  const query = new URLSearchParams({
-    select: 'id,snapshot_id,created_by,algorithm_version,comparisons,quality,confirmed_at',
-    snapshot_id: `eq.${input.snapshotId}`,
-    algorithm_version: `eq.${input.algorithmVersion}`,
-    created_by: `eq.${input.createdBy}`,
-    limit: '1',
-  });
-  const response = await fetchImpl(`${service.url}/rest/v1/durability_analysis_runs?${query}`, {
-    headers: service.headers,
-    signal: AbortSignal.timeout(8_000),
-  });
-  if (!response.ok) throw new Error('Unable to load confirmed durability analysis');
-  return ((await response.json()) as unknown[])[0] ?? null;
-}
-
-async function loadConfirmedAnalysisDefault(input: DurabilityAnalysisKey) {
-  return loadConfirmedDurabilityAnalysis(fetch, configuration(), input);
-}
-
-export async function persistConfirmedDurabilityAnalysis(
+export async function confirmDurabilityAnalysisAtomically(
   fetchImpl: typeof fetch,
   service: SupabaseService,
   input: PersistedDurabilityAnalysis,
 ) {
-  const conflict = new URLSearchParams({
-    on_conflict: 'snapshot_id,algorithm_version,created_by',
-  });
-  const insertResponse = await fetchImpl(`${service.url}/rest/v1/durability_analysis_runs?${conflict}`, {
+  const response = await fetchImpl(`${service.url}/rest/v1/rpc/confirm_durability_analysis`, {
     method: 'POST',
-    headers: { ...service.headers, Prefer: 'resolution=ignore-duplicates,return=representation' },
+    headers: service.headers,
     body: JSON.stringify({
-      athlete_id: input.athleteId,
-      snapshot_id: input.snapshotId,
-      created_by: input.createdBy,
-      algorithm_version: input.algorithmVersion,
-      comparisons: input.comparisons,
-      quality: input.quality,
+      target_snapshot_id: input.snapshotId,
+      target_created_by: input.createdBy,
+      target_algorithm_version: input.algorithmVersion,
+      target_comparisons: input.comparisons,
+      target_quality: input.quality,
     }),
     signal: AbortSignal.timeout(8_000),
   });
-  if (!insertResponse.ok) throw new Error('Unable to persist confirmed durability analysis');
-  const inserted = await insertResponse.json() as unknown[];
-  if (inserted[0]) return { row: inserted[0], created: true };
-
-  const existing = await loadConfirmedDurabilityAnalysis(fetchImpl, service, input);
-  if (!existing) throw new Error('Confirmed durability analysis was not returned');
-  return { row: existing, created: false };
+  if (!response.ok) throw new Error('Unable to confirm durability analysis atomically');
+  return atomicConfirmationSchema.parse(await response.json());
 }
 
-async function persistAnalysisDefault(input: PersistedDurabilityAnalysis) {
-  return persistConfirmedDurabilityAnalysis(fetch, configuration(), input);
+async function confirmAnalysisDefault(input: PersistedDurabilityAnalysis) {
+  return confirmDurabilityAnalysisAtomically(fetch, configuration(), input);
 }
 
 const defaults: DurabilityAnalysisDependencies = {
@@ -316,8 +289,7 @@ const defaults: DurabilityAnalysisDependencies = {
   authorize: authorizeDefault,
   loadLatestSnapshot: loadLatestSnapshotDefault,
   loadSnapshot: loadSnapshotDefault,
-  loadConfirmedAnalysis: loadConfirmedAnalysisDefault,
-  persistAnalysis: persistAnalysisDefault,
+  confirmAnalysis: confirmAnalysisDefault,
   now: () => new Date(),
 };
 
@@ -338,6 +310,7 @@ function durabilityInput(snapshot: z.infer<typeof rawSnapshotSchema>): Durabilit
     environment: snapshot.environment,
     oldest: snapshot.oldest,
     newest: snapshot.newest,
+    weightObservedAt: snapshot.weight_observed_at,
     fresh: {
       weightKg: snapshot.fresh_curve.weightKg,
       points: snapshot.fresh_curve.points.map(toDurabilityPoint),
@@ -348,15 +321,6 @@ function durabilityInput(snapshot: z.infer<typeof rawSnapshotSchema>): Durabilit
       weightKg: curve.weightKg,
       points: curve.points.map(toDurabilityPoint),
     })),
-  };
-}
-
-function snapshotQuery(snapshot: z.infer<typeof rawSnapshotSchema>): DurabilityQuery {
-  return {
-    athleteId: snapshot.athlete_id,
-    oldest: snapshot.oldest,
-    newest: snapshot.newest,
-    environment: snapshot.environment,
   };
 }
 
@@ -377,7 +341,7 @@ function snapshotResponse(raw: unknown) {
   };
 }
 
-function analysisResponse(raw: unknown, expected?: DurabilityAnalysisKey) {
+function analysisResponse(raw: unknown, expected?: Pick<PersistedDurabilityAnalysis, 'snapshotId' | 'algorithmVersion' | 'createdBy'>) {
   const row = rawAnalysisRunSchema.parse(raw);
   if (expected && (
     row.snapshot_id !== expected.snapshotId
@@ -445,33 +409,30 @@ export function createDurabilityAnalysisHandler(
         return jsonResponse(403, { error: 'No tienes permiso para confirmar este análisis.' });
       }
 
-      const analysisKey = {
-        snapshotId: snapshot.id,
-        algorithmVersion: DURABILITY_ALGORITHM_VERSION,
-        createdBy: user.id,
-      } as const;
-      const existing = await deps.loadConfirmedAnalysis(analysisKey);
-      if (existing) return jsonResponse(200, analysisResponse(existing, analysisKey));
-
-      const rawLatest = await deps.loadLatestSnapshot(snapshotQuery(snapshot));
-      if (!rawLatest || rawSnapshotSchema.parse(rawLatest).id !== snapshot.id) {
-        return jsonResponse(409, { error: 'La instantánea ha quedado obsoleta. Vuelve a cargar el análisis.' });
-      }
-
       const result = resultSchema.parse(calculateDurability(durabilityInput(snapshot)));
       if (result.coverage === 'insufficient') {
         return jsonResponse(409, { error: 'La instantánea no tiene cobertura suficiente para confirmarla.' });
       }
 
-      const persisted = await deps.persistAnalysis({
+      const confirmationInput = {
         athleteId: snapshot.athlete_id,
         snapshotId: snapshot.id,
         createdBy: user.id,
         algorithmVersion: result.algorithmVersion,
         comparisons: result.rows,
         quality: { coverage: result.coverage, warnings: result.warnings },
-      });
-      return jsonResponse(persisted.created ? 201 : 200, analysisResponse(persisted.row));
+      };
+      const persisted = await deps.confirmAnalysis(confirmationInput);
+      if (persisted.status === 'not_found') {
+        return jsonResponse(404, { error: 'La instantánea de Durabilidad ya no está disponible.' });
+      }
+      if (persisted.status === 'stale') {
+        return jsonResponse(409, { error: 'La instantánea ha quedado obsoleta. Vuelve a cargar el análisis.' });
+      }
+      return jsonResponse(
+        persisted.status === 'created' ? 201 : 200,
+        analysisResponse(persisted.analysis, confirmationInput),
+      );
     } catch {
       return jsonResponse(500, {
         error: event.httpMethod === 'GET'

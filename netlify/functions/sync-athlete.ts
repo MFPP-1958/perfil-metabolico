@@ -137,7 +137,6 @@ export function createDurabilitySnapshotPayload(
   raw: unknown,
   activities: readonly PersistedActivity[],
   request: ResolvedSyncRequest,
-  synchronizedAt: string,
 ) {
   const normalized = mapDurabilityCurves(raw);
   if (!normalized.fresh?.points.length) throw new Error('Durability curves do not contain a usable fresh curve');
@@ -165,7 +164,7 @@ export function createDurabilitySnapshotPayload(
     fresh_curve: freshCurve,
     fatigued_curves: fatiguedCurves,
     weight_kg: weightKg,
-    weight_observed_at: weightKg === null ? null : synchronizedAt,
+    weight_observed_at: null,
     source_version: 'intervals-openapi-v1' as const,
     content_hash: createHash('sha256').update(canonical).digest('hex'),
   };
@@ -415,7 +414,6 @@ export function normalizeAthleteData(
         data.durabilityCurves,
         activities,
         request,
-        now.toISOString(),
       );
       durabilityAccepted = 1 + mapped.fatigued.length;
       if (mapped.fatigued.length < 2 && mapped.rejected.length === 0) {

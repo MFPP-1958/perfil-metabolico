@@ -91,10 +91,10 @@ export function DurabilityView({ snapshot }: { snapshot: DurabilitySnapshotRespo
               <dd><time dateTime={snapshot.synchronizedAt}>{new Date(snapshot.synchronizedAt).toLocaleString('es-ES')}</time></dd>
             </div>
             <div>
-              <dt>Peso observado</dt>
+              <dt>Fecha del peso</dt>
               <dd>{snapshot.weightObservedAt
                 ? <time dateTime={snapshot.weightObservedAt}>{new Date(snapshot.weightObservedAt).toLocaleDateString('es-ES')}</time>
-                : 'Fecha no disponible'}</dd>
+                : 'No aportada por la fuente'}</dd>
             </div>
           </dl>
         </aside>

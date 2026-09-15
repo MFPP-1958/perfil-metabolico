@@ -90,4 +90,20 @@ describe('DurabilityView', () => {
     expect(screen.getByText(/sin curvas tras trabajo acumulado/i)).toBeVisible();
     expect(screen.getAllByText('Nivel no disponible')).toHaveLength(8);
   });
+
+  it('shows a numerical reference weight without inventing an observation date', () => {
+    render(<DurabilityView snapshot={snapshot({
+      weightObservedAt: null,
+      result: {
+        ...snapshot().result,
+        coverage: 'low',
+        warnings: ['El peso no tiene una fecha observada válida dentro del periodo; la cobertura se limita a baja.'],
+      },
+    })} />);
+
+    expect(screen.getByText('70 kg')).toBeVisible();
+    expect(screen.getByText('Fecha del peso')).toBeVisible();
+    expect(screen.getByText('No aportada por la fuente')).toBeVisible();
+    expect(screen.queryByText(/15\/9\/2026/)).not.toBeInTheDocument();
+  });
 });
