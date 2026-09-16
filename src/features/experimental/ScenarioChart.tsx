@@ -32,12 +32,20 @@ type PluginsWithAnnotations = NonNullable<ChartOptions<'line'>['plugins']> & {
 // Complemento propio: no se instala chartjs-plugin-annotation. Dibuja la
 // referencia vertical de FTP y los marcadores de FATmax sobre el lienzo ya
 // trazado por Chart.js, leyendo el eje `fat` que declaran los dos conjuntos.
+//
+// Se registra únicamente en la instancia de este gráfico (ver `plugins: [annotationPlugin]`
+// más abajo), nunca con `Chart.register`: registrarlo globalmente lo añade a la lista de
+// complementos de TODOS los gráficos del bundle, y cualquier otro gráfico que no configure
+// `escenario-anotaciones` bajo sus propias opciones haría fallar este hook al no tener
+// `markers`. El chequeo de abajo es además una segunda defensa por si esta instancia se
+// invocara alguna vez sin sus propias opciones.
 const annotationPlugin = {
   id: 'escenario-anotaciones',
-  afterDatasetsDraw(chart: Chart, _args: unknown, options: AnnotationOptions) {
+  afterDatasetsDraw(chart: Chart, _args: unknown, options: Partial<AnnotationOptions>) {
+    if (!options.markers?.length) return;
     const { ctx, scales } = chart;
     ctx.save();
-    if (options.ftp != null) {
+    if (options.ftp != null && options.colours) {
       const x = scales.x.getPixelForValue(options.ftp);
       ctx.setLineDash([2, 3]);
       ctx.strokeStyle = options.colours.muted;
@@ -59,7 +67,7 @@ const annotationPlugin = {
   },
 };
 
-Chart.register(LineController, LineElement, PointElement, LinearScale, Tooltip, Legend, annotationPlugin);
+Chart.register(LineController, LineElement, PointElement, LinearScale, Tooltip, Legend);
 
 function format(value: number, decimals = 0) {
   return value.toLocaleString('es-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -150,6 +158,7 @@ export function ScenarioChart({ scenario, ftpWatts }: { scenario: CalculatedScen
 
     const chart = new Chart(canvas, {
       type: 'line',
+      plugins: [annotationPlugin],
       data: {
         datasets: [
           {

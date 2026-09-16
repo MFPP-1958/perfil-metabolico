@@ -7,7 +7,10 @@ import type { MaderInputs } from '../../physiology/mader/model';
 // patrón de SubstrateProfile.test.tsx. Lo que se prueba es el texto alrededor
 // del gráfico, no los píxeles.
 const chartState = vi.hoisted(() => ({
-  configurations: [] as Array<{ data: { datasets: Array<{ label: string }> } }>,
+  configurations: [] as Array<{
+    data: { datasets: Array<{ label: string }> };
+    plugins?: Array<{ id: string }>;
+  }>,
   destroy: vi.fn(),
 }));
 
@@ -30,6 +33,7 @@ vi.mock('chart.js', () => ({
   Legend: class Legend {},
 }));
 
+import { Chart } from 'chart.js';
 import { ScenarioChart } from './ScenarioChart';
 
 const inputs: MaderInputs = {
@@ -78,5 +82,23 @@ describe('ScenarioChart', () => {
   it('avisa de que no hay FTP medido cuando no se pasa', () => {
     render(<ScenarioChart scenario={scenario()} />);
     expect(screen.getByText(/sin FTP medido/i)).toBeInTheDocument();
+  });
+
+  it('adjunta el complemento de anotaciones solo a esta instancia, nunca al registro global', () => {
+    render(<ScenarioChart scenario={scenario()} ftpWatts={295} />);
+
+    // El complemento debe viajar en el array `plugins` de ESTA configuración de
+    // gráfico: así solo se ejecuta en este lienzo. Si en cambio se registrara
+    // globalmente con Chart.register, correría en cualquier otro gráfico de la
+    // aplicación que no le pase sus propias opciones (markers, ftp, colours) y
+    // reventaría con "options.markers is not iterable".
+    const configuration = chartState.configurations.at(-1);
+    const instancePlugins = configuration?.plugins ?? [];
+    expect(instancePlugins.some((plugin) => plugin.id === 'escenario-anotaciones')).toBe(true);
+
+    const registeredIds = vi.mocked(Chart.register).mock.calls
+      .flat()
+      .map((registered) => (registered as { id?: string })?.id);
+    expect(registeredIds).not.toContain('escenario-anotaciones');
   });
 });
