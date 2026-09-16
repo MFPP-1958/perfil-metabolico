@@ -10,6 +10,8 @@
 | `substrate-metabolism@1.0.0` | Barrido de Mader, masa corporal y P@VO₂max | Déficit de piruvato, acumulación neta de lactato, FatOx g/min, CHO g/h, kcal/h y % de VO₂max por vatio | Experimental | Reparto derivado de la propia glucólisis del modelo, no de calorimetría indirecta. Infravalora el CHO por debajo de FATmax y agota la grasa en el MLSS. No publica concentración de lactato. |
 | `meaningful-change@1.0.0` | Dos resultados y error típico | Compatibilidad y clase de cambio | Analítico | No compara métricas, unidades o protocolos distintos; no atribuye causalidad. |
 | `aerobic-power-intervals@1.0.0` | Objetivo, fase, disponibilidad y P@VO₂max | Borrador de sesión | Regla | Requiere ajuste y aprobación del entrenador; no es consejo médico. |
+| `metabolic-scenario@1.0.0` | Perfil real que supera la guarda de Mader y valores objetivo de VLa máx y VO₂max | Dos proyecciones de sustratos, desplazamiento de FATmax y MLSS, y cambio de grasa y carbohidrato en una potencia de referencia | Experimental | Hipótesis del entrenador, no predicción. Trata VLa máx y VO₂max como independientes. Hereda todos los límites del modelo de Mader y del reparto de sustratos. |
+| `vlamax-reference-bands@1.0.0` | Perfil de prueba | Intervalo orientativo de VLa máx con su población y su cita | Referencia | Orientación bibliográfica, no objetivo. Un perfil sin intervalo publicado se queda sin banda. Una población distinta a la del ciclista invalida la lectura. |
 
 ## Entradas producidas por software de terceros
 
