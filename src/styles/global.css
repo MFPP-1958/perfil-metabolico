@@ -335,3 +335,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .substrate-profile__canvas { position: relative; height: clamp(260px, 40vw, 380px); margin: 16px 0; padding: 12px; border: 1px solid var(--line); background: white; }
 .substrate-profile__limits { margin: 16px 0; padding-left: 20px; color: var(--muted); }
 .substrate-profile__limits li + li { margin-top: 6px; }
+
+.scenario-chart { margin: 32px 0; }
+.scenario-chart h3 { margin: 0 0 8px; }
+.scenario-chart__legend { margin: 0 0 12px; color: var(--muted); }
