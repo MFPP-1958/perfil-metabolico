@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
 import { AnalysisContextBar } from '../../analysis/AnalysisContextBar';
 import { AnalysisProvider } from '../../analysis/AnalysisProvider';
+import { ObservationForm } from './ObservationForm';
 import { AthleteWorkspace, type AthleteApi } from '../athletes/AthleteWorkspace';
 
 const athletes = [
@@ -87,5 +88,17 @@ describe('athlete workspace and observations', () => {
     await screen.findByText('No hay ciclistas vinculados');
     const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(result.violations).toEqual([]);
+  });
+
+  it('ofrece las métricas que el modelo de Mader necesita', () => {
+    render(<ObservationForm athleteId={crypto.randomUUID()} onAdd={() => undefined} />);
+    const metric = screen.getByLabelText('Métrica');
+    const options = within(metric).getAllByRole('option').map((option) => option.textContent);
+    expect(options).toEqual(expect.arrayContaining([
+      'VO₂max (ml·kg⁻¹·min⁻¹)',
+      'VLa máx (mmol·l⁻¹·s⁻¹)',
+      'Masa corporal (kg)',
+      'P@VO₂max (W)',
+    ]));
   });
 });

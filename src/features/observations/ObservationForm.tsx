@@ -2,7 +2,9 @@ import { type FormEvent, useState } from 'react';
 import { metricCatalog, type MetricCode } from '../../domain/metrics';
 import { observationSchema, type Observation } from '../../domain/observation';
 
-const selectableMetrics: readonly MetricCode[] = ['ftp', 'cp', 'lt1', 'vt1', 'vo2max', 'vlamax', 'lactate', 'body_mass', 'rpe'];
+const selectableMetrics: readonly MetricCode[] = [
+  'ftp', 'cp', 'lt1', 'vt1', 'p_vo2max', 'pmax', 'vo2max', 'vlamax', 'lactate', 'body_mass', 'tte', 'rpe',
+];
 
 export function ObservationForm({ athleteId, onAdd }: { athleteId: string; onAdd: (observation: Observation) => void }) {
   const [metric, setMetric] = useState<MetricCode>('ftp');
