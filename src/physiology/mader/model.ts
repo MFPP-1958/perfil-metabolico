@@ -1,4 +1,5 @@
-import { MADER_CONSTANTS, MADER_MODEL_VERSION } from './references';
+import { MADER_MODEL_VERSION } from './references';
+import { sweepMetabolicStates } from './sweep';
 
 type InputQuality = 'measured' | 'calculated' | 'imported_estimate' | 'incomplete' | 'rejected';
 
@@ -50,37 +51,11 @@ export type ExperimentalMaderResult = {
 };
 
 function calculate(vo2max: number, vlamax: number, bodyMass: number, pVo2max: number, restingVo2: number) {
-  const { oxidativeAffinity, glycolyticAffinity, oxygenLactateEquivalent, lactateDistributionVolume, adpStart, adpEnd, adpStep } = MADER_CONSTANTS;
-  let previousDifference: number | undefined;
-  let previousVo2 = 0;
-  let mlssVo2: number | undefined;
-  let fatmaxVo2 = 0;
-  let largestDifference = -Infinity;
-
-  for (let adp = adpStart; adp <= adpEnd; adp += adpStep) {
-    const vo2Steady = vo2max / (1 + oxidativeAffinity / adp ** 2);
-    const vlaSteady = vlamax / (1 + glycolyticAffinity / adp ** 3);
-    const oxidativeLactate = oxygenLactateEquivalent * (vo2Steady / 60) / lactateDistributionVolume;
-    const difference = oxidativeLactate - vlaSteady;
-
-    if (difference > largestDifference) {
-      largestDifference = difference;
-      fatmaxVo2 = vo2Steady;
-    }
-    if (previousDifference != null && previousDifference > 0 && difference <= 0) {
-      const fraction = previousDifference / (previousDifference - difference);
-      mlssVo2 = previousVo2 + fraction * (vo2Steady - previousVo2);
-      break;
-    }
-    previousDifference = difference;
-    previousVo2 = vo2Steady;
-  }
-
-  if (mlssVo2 == null) throw new Error('No se encontró un equilibrio metabólico dentro del dominio del modelo.');
+  const { mlss, fatmax } = sweepMetabolicStates(vo2max, vlamax);
   const oxygenCostPerWatt = ((vo2max - restingVo2) * bodyMass) / pVo2max;
   if (oxygenCostPerWatt <= 0) throw new Error('La relación entre VO₂ y P@VO₂max no permite convertir el resultado a vatios.');
   const toWatts = (relativeVo2: number) => (relativeVo2 * bodyMass - restingVo2 * bodyMass) / oxygenCostPerWatt;
-  return { mlssWatts: toWatts(mlssVo2), fatmaxWatts: toWatts(fatmaxVo2) };
+  return { mlssWatts: toWatts(mlss.vo2Relative), fatmaxWatts: toWatts(fatmax.vo2Relative) };
 }
 
 export function runMaderModel(inputs: MaderInputs, config: MaderConfig): ExperimentalMaderResult {

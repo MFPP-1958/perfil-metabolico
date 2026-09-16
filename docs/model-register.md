@@ -7,6 +7,7 @@
 | `durability-record-profile@2.0.0` | Curvas récord de campo fresca, `kJ0` y `kJ1`; peso con fecha observada; procedencia y recuentos de soporte | Descenso firmado por duración exacta, carga de inicio en kJ y kJ/kg, calidad de cobertura | Analítico | Compara solo 10, 60, 300 y 1.200 s, sin interpolar; su alcance se limita a esas curvas, cargas y descensos. |
 | `lactate-sprint@1.0.0` | Lactato basal, esprint, tiempo aláctico y muestras minutadas | Tasa pico o VLa máx estimada | Condicionado | VLa máx solo se etiqueta si existe pico seguido de meseta o descenso. |
 | `mader-reproduction@1.0.0` | VO₂max, VLa máx, masa, P@VO₂max y VO₂ basal | MLSS y FATmax modelados, sensibilidad | Experimental | Coste de O₂ deducido, cadencia no modelada, validez discutida. Nunca actualiza LT1 o zonas. |
+| `substrate-metabolism@1.0.0` | Barrido de Mader, masa corporal y P@VO₂max | Déficit de piruvato, acumulación neta de lactato, FatOx g/min, CHO g/h, kcal/h y % de VO₂max por vatio | Experimental | Reparto derivado de la propia glucólisis del modelo, no de calorimetría indirecta. Infravalora el CHO por debajo de FATmax y agota la grasa en el MLSS. No publica concentración de lactato. |
 | `meaningful-change@1.0.0` | Dos resultados y error típico | Compatibilidad y clase de cambio | Analítico | No compara métricas, unidades o protocolos distintos; no atribuye causalidad. |
 | `aerobic-power-intervals@1.0.0` | Objetivo, fase, disponibilidad y P@VO₂max | Borrador de sesión | Regla | Requiere ajuste y aprobación del entrenador; no es consejo médico. |
 
@@ -19,6 +20,8 @@
 - Sablain M et al. Evaluating maximal lactate accumulation rate and estimated MLSS in cycling. *European Journal of Applied Physiology* (2025). DOI: 10.1007/s00421-025-05751-z.
 - Dunst AK, Hesse C, Ueberschär O. Movement velocity in metabolic simulations and cycling cadence. *European Journal of Applied Physiology* (2025). DOI: 10.1007/s00421-024-05663-4.
 - Poffé C et al. Validity of a physiological performance model to determine MLSS in cyclists. *Frontiers in Sports and Active Living* (2024). DOI: 10.3389/fspor.2024.1376876.
+- Frayn KN. Calculation of substrate oxidation rates in vivo from gaseous exchange. *Journal of Applied Physiology* (1983). DOI: 10.1152/jappl.1983.55.2.628.
+- Jeukendrup AE, Wallis GA. Measurement of substrate oxidation during exercise by means of gas exchange measurements. *International Journal of Sports Medicine* (2005). DOI: 10.1055/s-2004-830512.
 
 Cada cambio de ecuación, constante, filtro o etiqueta requiere una versión nueva, caso numérico de referencia, revisión de limitaciones y registro de migración. Las versiones previas se conservan para reproducir informes existentes.
 
