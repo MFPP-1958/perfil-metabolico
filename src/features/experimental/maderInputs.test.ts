@@ -29,9 +29,11 @@ const completo: Observation[] = [
 
 describe('maderInputsFromObservations', () => {
   it('construye las entradas con la observación más reciente de cada métrica', () => {
+    // La VLa máx más nueva se coloca ANTES que la de `completo` (más antigua) en el array,
+    // para que una implementación que confundiera "más reciente" con "última en aparecer" falle.
     const result = maderInputsFromObservations([
-      ...completo,
       observation({ metricCode: 'vlamax', value: 0.6, unit: 'mmol·l⁻¹·s⁻¹', observedAt: '2026-09-10T08:00:00.000Z', origin: 'external_model', quality: 'calculated', sourceReference: { software: 'WKO5', version: '5.0.16' } }),
+      ...completo,
     ]);
     if (result.status !== 'ready') throw new Error('Las entradas deben estar completas.');
     expect(result.inputs.vlamax.value).toBe(0.6);
@@ -74,5 +76,21 @@ describe('maderInputsFromObservations', () => {
     const result = maderInputsFromObservations(completo.filter((item) => item.metricCode !== 'ftp'));
     if (result.status !== 'ready') throw new Error('Las entradas deben estar completas.');
     expect(result.inputs.comparison?.ftpWatts).toBeUndefined();
+  });
+
+  it('sin ninguna observación, faltan las cuatro métricas requeridas', () => {
+    const result = maderInputsFromObservations([]);
+    if (result.status !== 'incomplete') throw new Error('Debe faltar todo el perfil.');
+    expect(result.missing.map((item) => item.metricCode).sort()).toEqual(['body_mass', 'p_vo2max', 'vlamax', 'vo2max']);
+  });
+
+  it('con dos observaciones utilizables en la misma fecha, resuelve de forma determinista', () => {
+    const primera = observation({ value: 61 });
+    const segunda = observation({ value: 77 });
+    const result = maderInputsFromObservations([primera, segunda, ...completo.filter((item) => item.metricCode !== 'vo2max')]);
+    if (result.status !== 'ready') throw new Error('Las entradas deben estar completas.');
+    // El empate de fecha no se resuelve al azar: se fija el criterio (orden estable de aparición)
+    // para que la elección no cambie de una ejecución a otra.
+    expect(result.inputs.vo2max.value).toBe(primera.value);
   });
 });
