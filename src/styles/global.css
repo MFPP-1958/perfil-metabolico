@@ -327,3 +327,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+.substrate-profile { margin: 32px 0; }
+.substrate-profile__heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px; }
+.substrate-profile__heading h2 { margin: 0; }
+.substrate-profile > p { color: var(--muted); }
+.substrate-profile__canvas { position: relative; height: clamp(260px, 40vw, 380px); margin: 16px 0; padding: 12px; border: 1px solid var(--line); background: white; }
+.substrate-profile__limits { margin: 16px 0; padding-left: 20px; color: var(--muted); }
+.substrate-profile__limits li + li { margin-top: 6px; }

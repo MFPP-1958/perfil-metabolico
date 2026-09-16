@@ -1,6 +1,17 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('chart.js', () => ({
+  Chart: class Chart { static register = vi.fn(); destroy() {} },
+  LineController: class LineController {},
+  LineElement: class LineElement {},
+  PointElement: class PointElement {},
+  LinearScale: class LinearScale {},
+  Tooltip: class Tooltip {},
+  Legend: class Legend {},
+}));
+
 import { MaderView } from './MaderView';
 
 const inputs = {
