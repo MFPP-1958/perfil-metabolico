@@ -38,7 +38,9 @@ las limitaciones a la vista.
 
 Incluido:
 
+- Ruta de Tests real: ciclista activo, sin demostración, con estados de perfil incompleto.
 - Lectura de las observaciones reales del ciclista activo para alimentar el modelo de Mader.
+- Entrada manual de las métricas que Intervals.icu no devuelve, incluida `p_vo2max`.
 - Escenario con VLa máx objetivo obligatoria y VO₂max objetivo opcional.
 - Perfil de prueba y banda orientativa de VLa máx tomada de la literatura y citada.
 - Curvas de oxidación de grasa actual y objetivo en un mismo gráfico, con FATmax de cada
@@ -53,6 +55,7 @@ Fuera de este bloque:
 - Sesiones o prescripciones para alcanzar el objetivo. El escenario termina en la lectura.
 - Plazos, probabilidades o juicios de alcanzabilidad del objetivo.
 - Porcentaje de grasa corporal, masa magra, reservas de glucógeno y nutrición.
+- Las rutas de Sesiones, Prescripción, Evolución e Informes, que siguen en demostración.
 - Masa corporal como palanca del escenario.
 - Escritura de cualquier valor del escenario en Intervals.icu.
 - Cualquier escritura de un valor objetivo en `observations`.
@@ -235,6 +238,46 @@ En el escenario:
 
 En el catálogo de métricas no se añade nada: VO₂max, VLa máx, masa corporal, P@VO₂max y FTP
 ya existen con sus unidades y rangos.
+
+## La ruta de Tests deja de ser una demostración
+
+Cinco rutas de la aplicación siguen sirviendo datos sintéticos desde `src/app/DemoViews.tsx`:
+Tests, Sesiones, Prescripción, Evolución e Informes. Solo Potencia y Durabilidad trabajan
+con el ciclista real.
+
+Este bloque convierte **Tests** en una ruta real, porque es donde vive el modelo de Mader y
+sin ella el escenario no existe. Las otras cuatro quedan fuera de esta spec y se abordarán
+después, cada una con su propio diseño: Evolución, Sesiones, Prescripción e Informes, en ese
+orden, porque Informes depende de las tres anteriores.
+
+Al terminar este bloque, la ruta de Tests mostrará el ciclista activo del contexto común, sin
+botón de demostración y sin datos sintéticos.
+
+### Entradas que Intervals.icu no devuelve
+
+La API entrega FTP, peso, curva de potencia y actividades, pero **no devuelve VO₂max,
+VLa máx, P@VO₂max, TTE ni Stamina**. El modelo de Mader necesita tres de esos valores, así
+que el entrenador los introducirá a mano por el formulario de observaciones que ya existe,
+con su origen, su protocolo y su fecha.
+
+El formulario ofrece hoy nueve métricas y **P@VO₂max no está entre ellas**, de modo que el
+modelo no puede alimentarse por completo desde la interfaz. Se añadirán a la lista
+seleccionable `p_vo2max`, `pmax` y `tte`, que ya existen en el catálogo con su unidad y su
+rango. La VLa máx procedente de WKO5 seguirá entrando con origen `external_model` y el
+programa nombrado, como exige la guarda de procedencia.
+
+### El test de esprint con lactato
+
+El asistente de esprint con lactato dejará de trabajar sobre valores fijos: operará sobre el
+ciclista activo y su resultado confirmado se guardará como observación suya, con el origen y
+el protocolo del test. Un resultado que no supere las condiciones del protocolo seguirá sin
+etiquetarse como VLa máx, tal y como hace hoy `lactate-sprint@1.0.0`.
+
+### Perfil incompleto
+
+Ningún ciclista de la base tiene hoy VO₂max, VLa máx ni P@VO₂max. La ruta de Tests lo dirá
+con precisión: qué métrica falta, qué protocolo la produce y qué queda bloqueado mientras
+falte. Un perfil incompleto es un estado legítimo y frecuente, no un error de la aplicación.
 
 ## Arquitectura de cliente
 
