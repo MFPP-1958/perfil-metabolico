@@ -20,6 +20,19 @@ export interface SubstrateConfig extends MaderConfig {
   curvePoints?: number;
 }
 
+export interface SubstrateValues {
+  vo2max: number;
+  vlamax: number;
+  bodyMass: number;
+  pVo2max: number;
+}
+
+export interface SubstrateProjection {
+  curve: SubstratePoint[];
+  fatmax: SubstratePoint;
+  mlss: SubstratePoint;
+}
+
 export type SubstrateProfileResult =
   | { status: 'blocked'; reasons: string[]; version: typeof SUBSTRATE_MODEL_VERSION }
   | {
@@ -63,17 +76,13 @@ function describe(state: MetabolicState, vo2max: number, bodyMass: number, toWat
   };
 }
 
-export function buildSubstrateProfile(inputs: MaderInputs, config: SubstrateConfig): SubstrateProfileResult {
-  // El motor de Mader es la única puerta de entrada: reutiliza sus guardas de procedencia.
-  const gate = runMaderModel(inputs, config);
-  if (gate.status === 'blocked') {
-    return { status: 'blocked', reasons: gate.reasons, version: SUBSTRATE_MODEL_VERSION };
-  }
-
-  const vo2max = inputs.vo2max.value;
-  const vlamax = inputs.vlamax.value;
-  const bodyMass = inputs.bodyMass.value;
-  const oxygenCostPerWatt = ((vo2max - config.restingVo2) * bodyMass) / inputs.pVo2max.value;
+/**
+ * Aritmética pura del reparto de sustratos. No comprueba procedencia: quien la use
+ * con valores que no son mediciones debe declararlo por su cuenta.
+ */
+export function projectSubstrateCurve(values: SubstrateValues, config: SubstrateConfig): SubstrateProjection {
+  const { vo2max, vlamax, bodyMass, pVo2max } = values;
+  const oxygenCostPerWatt = ((vo2max - config.restingVo2) * bodyMass) / pVo2max;
   const toWatts = (relative: number) => (relative * bodyMass - config.restingVo2 * bodyMass) / oxygenCostPerWatt;
 
   const { states, fatmax, mlss } = sweepMetabolicStates(vo2max, vlamax);
@@ -88,11 +97,30 @@ export function buildSubstrateProfile(inputs: MaderInputs, config: SubstrateConf
   }
 
   return {
-    status: 'calculated',
-    version: SUBSTRATE_MODEL_VERSION,
     curve,
     fatmax: describe(fatmax, vo2max, bodyMass, toWatts),
     mlss: describe(mlss, vo2max, bodyMass, toWatts),
+  };
+}
+
+export function buildSubstrateProfile(inputs: MaderInputs, config: SubstrateConfig): SubstrateProfileResult {
+  // El motor de Mader es la única puerta de entrada: reutiliza sus guardas de procedencia.
+  const gate = runMaderModel(inputs, config);
+  if (gate.status === 'blocked') {
+    return { status: 'blocked', reasons: gate.reasons, version: SUBSTRATE_MODEL_VERSION };
+  }
+
+  const projection = projectSubstrateCurve({
+    vo2max: inputs.vo2max.value,
+    vlamax: inputs.vlamax.value,
+    bodyMass: inputs.bodyMass.value,
+    pVo2max: inputs.pVo2max.value,
+  }, config);
+
+  return {
+    status: 'calculated',
+    version: SUBSTRATE_MODEL_VERSION,
+    ...projection,
     inputLineage: gate.inputLineage,
     cadenceWarning: gate.cadenceWarning,
     provenanceNotices: gate.provenanceNotices,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSubstrateProfile } from './metabolism';
+import { buildSubstrateProfile, projectSubstrateCurve } from './metabolism';
 import { runMaderModel } from '../mader/model';
 import type { MaderInputs } from '../mader/model';
 
@@ -90,5 +90,33 @@ describe('substrate metabolism profile', () => {
     if (result.status !== 'calculated') return;
     expect(result.provenanceNotices.join(' ')).toMatch(/WKO5 5\.0\.16/);
     expect(result.curve.length).toBeGreaterThan(20);
+  });
+});
+
+describe('projectSubstrateCurve', () => {
+  const values = { vo2max: 68, vlamax: 0.8, bodyMass: 70, pVo2max: 400 };
+  const config = { restingVo2: 5 };
+
+  it('reproduce exactamente la curva que publica buildSubstrateProfile', () => {
+    const gated = buildSubstrateProfile({
+      vo2max: { value: 68, unit: 'ml·kg⁻¹·min⁻¹', quality: 'measured', observationId: 'o-vo2' },
+      vlamax: { value: 0.8, unit: 'mmol·l⁻¹·s⁻¹', quality: 'measured', observationId: 'o-vla' },
+      bodyMass: { value: 70, unit: 'kg', quality: 'measured', observationId: 'o-masa' },
+      pVo2max: { value: 400, unit: 'W', quality: 'measured', observationId: 'o-pvo2' },
+    }, config);
+    const projected = projectSubstrateCurve(values, config);
+
+    if (gated.status !== 'calculated') throw new Error('El perfil de referencia debe calcularse.');
+    expect(projected.curve).toEqual(gated.curve);
+    expect(projected.fatmax).toEqual(gated.fatmax);
+    expect(projected.mlss).toEqual(gated.mlss);
+  });
+
+  it('desplaza el MLSS a menos vatios cuando sube la VLa máx', () => {
+    const baja = projectSubstrateCurve({ ...values, vlamax: 0.4 }, config);
+    const alta = projectSubstrateCurve({ ...values, vlamax: 0.9 }, config);
+    expect(alta.mlss.powerWatts).toBeLessThan(baja.mlss.powerWatts);
+    expect(alta.fatmax.powerWatts).toBeLessThan(baja.fatmax.powerWatts);
+    expect(alta.fatmax.fatOxidationGramsPerMin).toBeLessThan(baja.fatmax.fatOxidationGramsPerMin);
   });
 });
