@@ -1,4 +1,5 @@
 import { observationSchema, type Observation } from '../../src/domain/observation.js';
+import { toObservationRow } from './lib/observation-rows.js';
 import { authenticateRequest } from './lib/authorization.js';
 import { bearerToken, jsonResponse } from './lib/http.js';
 
@@ -28,12 +29,7 @@ async function persistDefault(coachId: string, observation: Observation) {
   const { url, headers } = configuration();
   const response = await fetch(`${url}/rest/v1/observations`, {
     method: 'POST', headers: { ...headers, Prefer: 'return=minimal' }, signal: AbortSignal.timeout(8_000),
-    body: JSON.stringify({
-      id: observation.id, athlete_id: observation.athleteId, created_by: coachId, metric_code: observation.metricCode,
-      value: observation.value, unit: observation.unit, observed_at: observation.observedAt, origin: observation.origin,
-      quality: observation.quality, protocol_name: observation.protocol.name, protocol_version: observation.protocol.version,
-      notes: observation.notes,
-    }),
+    body: JSON.stringify(toObservationRow(coachId, observation)),
   });
   if (!response.ok) throw new Error('Unable to persist observation');
   return observation;

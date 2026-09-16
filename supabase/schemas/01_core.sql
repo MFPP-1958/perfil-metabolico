@@ -52,8 +52,13 @@ create table public.observations (
   value numeric not null check (value >= 0),
   unit text not null,
   observed_at timestamptz not null,
-  origin text not null check (origin in ('manual', 'intervals_icu', 'laboratory', 'field_test', 'device', 'calculated')),
+  origin text not null check (origin in ('manual', 'intervals_icu', 'laboratory', 'field_test', 'device', 'calculated', 'external_model')),
   quality text not null check (quality in ('measured', 'imported_estimate', 'calculated', 'incomplete', 'rejected')),
+  -- Programa de terceros que produjo el valor. Obligatorio si el origen es external_model.
+  source_reference jsonb check (source_reference is null or source_reference ? 'software'),
+  constraint observations_external_model_source check (
+    (origin = 'external_model') = (source_reference is not null)
+  ),
   protocol_name text not null,
   protocol_version text not null,
   notes text check (notes is null or char_length(notes) <= 2000),

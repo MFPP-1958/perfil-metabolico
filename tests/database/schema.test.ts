@@ -41,6 +41,12 @@ describe('database schema', () => {
     expect(core).toContain('algorithm_version');
   });
 
+  it('records third-party modelling software as a distinct origin with its own column', () => {
+    const core = sql('01_core.sql');
+    expect(core).toContain("'external_model'");
+    expect(core).toContain('source_reference');
+  });
+
   it('indexes foreign keys and athlete date filters', () => {
     const core = sql('01_core.sql');
     expect(core).toContain('observations_athlete_observed_idx');

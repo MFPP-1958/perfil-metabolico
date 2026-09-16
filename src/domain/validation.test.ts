@@ -43,4 +43,20 @@ describe('physiological validation', () => {
   it('accepts a traceable observation with the exact unit', () => {
     expect(observationSchema.parse(baseObservation)).toMatchObject(baseObservation);
   });
+
+  it('demands a named source when the value comes from third-party modelling software', () => {
+    const withoutSource = { ...baseObservation, metricCode: 'vlamax', value: 0.8, unit: 'mmol·l⁻¹·s⁻¹', origin: 'external_model', quality: 'calculated' };
+    expect(observationSchema.safeParse(withoutSource).success).toBe(false);
+
+    const withSource = { ...withoutSource, sourceReference: { software: 'WKO5', version: '5.0.16' } };
+    const result = observationSchema.safeParse(withSource);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.sourceReference?.software).toBe('WKO5');
+  });
+
+  it('refuses a named source on an origin that is not a third-party model', () => {
+    const result = observationSchema.safeParse({ ...baseObservation, sourceReference: { software: 'WKO5' } });
+    expect(result.success).toBe(false);
+  });
 });

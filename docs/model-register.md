@@ -11,6 +11,18 @@
 | `meaningful-change@1.0.0` | Dos resultados y error típico | Compatibilidad y clase de cambio | Analítico | No compara métricas, unidades o protocolos distintos; no atribuye causalidad. |
 | `aerobic-power-intervals@1.0.0` | Objetivo, fase, disponibilidad y P@VO₂max | Borrador de sesión | Regla | Requiere ajuste y aprobación del entrenador; no es consejo médico. |
 
+## Entradas producidas por software de terceros
+
+Un valor calculado por otro programa (WKO5, INSCYD) se registra con origen `external_model`
+y el programa nombrado en `source_reference`. La base de datos exige la correspondencia en
+los dos sentidos: ese origen obliga a nombrar el programa, y ningún otro origen puede
+atribuirse uno.
+
+Estos valores entran con calidad `calculated`, nunca `measured`: no son una medición propia.
+Todo modelo que los consuma emite un aviso de procedencia que viaja hasta el informe, porque
+el resultado hereda los supuestos del programa de origen. La VLa máx del entrenador MFPP
+llega por esta vía desde WKO5.
+
 ## Base científica inicial
 
 - Leo P et al. Power profiling and the power-duration relationship in cycling. *European Journal of Applied Physiology* (2022). DOI: 10.1007/s00421-021-04833-y.

@@ -30,6 +30,7 @@ export type SubstrateProfileResult =
       mlss: SubstratePoint;
       inputLineage: string[];
       cadenceWarning: string;
+      provenanceNotices: string[];
       limitations: string[];
       reportEligible: boolean;
     };
@@ -94,6 +95,7 @@ export function buildSubstrateProfile(inputs: MaderInputs, config: SubstrateConf
     mlss: describe(mlss, vo2max, bodyMass, toWatts),
     inputLineage: gate.inputLineage,
     cadenceWarning: gate.cadenceWarning,
+    provenanceNotices: gate.provenanceNotices,
     limitations: [...SUBSTRATE_LIMITATIONS],
     reportEligible: gate.reportEligible,
   };

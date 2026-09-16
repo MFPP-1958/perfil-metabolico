@@ -80,4 +80,15 @@ describe('substrate metabolism profile', () => {
     expect(substrates.mlss.powerWatts).toBeCloseTo(mader.mlssWatts, 6);
     expect(substrates.fatmax.powerWatts).toBeCloseTo(mader.fatmaxWatts, 6);
   });
+
+  it('carries the third-party provenance notice through to the substrate curve', () => {
+    const result = buildSubstrateProfile({
+      ...measuredInputs,
+      vlamax: { ...measuredInputs.vlamax, quality: 'calculated', sourceReference: { software: 'WKO5', version: '5.0.16' } },
+    }, config);
+    expect(result.status).toBe('calculated');
+    if (result.status !== 'calculated') return;
+    expect(result.provenanceNotices.join(' ')).toMatch(/WKO5 5\.0\.16/);
+    expect(result.curve.length).toBeGreaterThan(20);
+  });
 });

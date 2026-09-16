@@ -7,8 +7,8 @@ Fecha de revisión: 15 de septiembre de 2026.
 | 1 | Autenticación y atletas autorizados | Acceso por enlace local, autorización previa en funciones y pruebas 401/403 | Verificado con el propietario local y un ciclista real |
 | 2 | Secretos fuera de navegador, URL e informes | Gateway servidor, CSP, escáner de secretos y prueba del bundle | Verificado localmente |
 | 3 | Sin mezcla al cambiar de atleta | Cancelación, clave de solicitud y pruebas de respuesta obsoleta | Verificado localmente |
-| 4 | Fuente, fecha, calidad y protocolo | Contrato `Observation` y componentes de historial | Verificado localmente |
-| 5 | Estados de calidad visibles y persistibles | Catálogo, chips, PostgreSQL local y una estimación importada trazable | Verificado localmente con datos reales |
+| 4 | Fuente, fecha, calidad y protocolo | Contrato `Observation`, origen `external_model` con programa nombrado y avisos de procedencia en los modelos | Verificado localmente |
+| 5 | Estados de calidad visibles y persistibles | Catálogo, chips, PostgreSQL local y una estimación importada trazable | Verificado localmente con datos reales; pendiente aplicar la migración de `external_model` |
 | 6 | Métricas fisiológicas separadas | Catálogo tipado y pruebas de no sustitución | Verificado localmente |
 | 7 | Modelos versionados y probados | Casos numéricos y `docs/model-register.md` | Verificado localmente |
 | 8 | Mader experimental sin actualizar zonas | Resultado sin LT1/zonas, aviso y confirmación | Verificado localmente |

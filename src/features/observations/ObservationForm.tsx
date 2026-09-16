@@ -6,15 +6,24 @@ const selectableMetrics: readonly MetricCode[] = ['ftp', 'cp', 'lt1', 'vt1', 'vo
 
 export function ObservationForm({ athleteId, onAdd }: { athleteId: string; onAdd: (observation: Observation) => void }) {
   const [metric, setMetric] = useState<MetricCode>('ftp');
+  const [origin, setOrigin] = useState('field_test');
   const [error, setError] = useState('');
+  const modelled = origin === 'external_model';
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const software = String(data.get('sourceSoftware') ?? '').trim();
+    const softwareVersion = String(data.get('sourceVersion') ?? '').trim();
     const parsed = observationSchema.safeParse({
       id: crypto.randomUUID(), athleteId, metricCode: metric,
       value: Number(data.get('value')), unit: metricCatalog[metric].unit,
-      observedAt: new Date().toISOString(), origin: data.get('origin'), quality: 'measured',
+      observedAt: new Date().toISOString(), origin,
+      // Un valor que calculó otro programa no es una medición nuestra.
+      quality: modelled ? 'calculated' : 'measured',
       protocol: { name: String(data.get('protocolName') ?? ''), version: String(data.get('protocolVersion') ?? '') },
+      ...(modelled && software ? { sourceReference: { software, ...(softwareVersion ? { version: softwareVersion } : {}) } } : {}),
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'La observación no es válida.');
@@ -22,8 +31,10 @@ export function ObservationForm({ athleteId, onAdd }: { athleteId: string; onAdd
     }
     setError('');
     onAdd(parsed.data);
-    event.currentTarget.reset();
+    form.reset();
+    setOrigin('field_test');
   }
+
   return (
     <form className="observation-form" onSubmit={submit}>
       <h3>Añadir observación</h3>
@@ -34,9 +45,22 @@ export function ObservationForm({ athleteId, onAdd }: { athleteId: string; onAdd
       <label htmlFor="observation-value">Valor</label>
       <input id="observation-value" name="value" type="number" step="any" required />
       <label htmlFor="observation-origin">Origen</label>
-      <select id="observation-origin" name="origin" defaultValue="field_test">
-        <option value="field_test">Test de campo</option><option value="laboratory">Laboratorio</option><option value="manual">Registro manual</option><option value="device">Dispositivo</option>
+      <select id="observation-origin" name="origin" value={origin} onChange={(event) => setOrigin(event.target.value)}>
+        <option value="field_test">Test de campo</option>
+        <option value="laboratory">Laboratorio</option>
+        <option value="manual">Registro manual</option>
+        <option value="device">Dispositivo</option>
+        <option value="external_model">Calculado por otro programa</option>
       </select>
+      {modelled && (
+        <>
+          <label htmlFor="source-software">Programa</label>
+          <input id="source-software" name="sourceSoftware" placeholder="WKO5" />
+          <label htmlFor="source-version">Versión del programa</label>
+          <input id="source-version" name="sourceVersion" placeholder="5.0.16" />
+          <p className="field-hint">El valor se guardará como calculado, no como medido, y los informes dirán de dónde viene.</p>
+        </>
+      )}
       <label htmlFor="protocol-name">Protocolo</label>
       <input id="protocol-name" name="protocolName" required defaultValue="Entrada manual" />
       <label htmlFor="protocol-version">Versión</label>

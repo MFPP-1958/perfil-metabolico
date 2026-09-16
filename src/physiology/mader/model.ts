@@ -8,6 +8,8 @@ type ModelInput<Unit extends string> = {
   unit: Unit;
   quality: InputQuality;
   observationId: string;
+  /** Presente cuando el valor lo calculó un programa de terceros, p. ej. WKO5. */
+  sourceReference?: { software: string; version?: string };
 };
 
 export interface MaderInputs {
@@ -42,6 +44,7 @@ export type ExperimentalMaderResult = {
   fatmaxWatts: number;
   inputLineage: string[];
   cadenceWarning: string;
+  provenanceNotices: string[];
   sensitivity: {
     vlamaxDelta: number;
     mlssWatts: { lower: number; upper: number };
@@ -56,6 +59,22 @@ function calculate(vo2max: number, vlamax: number, bodyMass: number, pVo2max: nu
   if (oxygenCostPerWatt <= 0) throw new Error('La relación entre VO₂ y P@VO₂max no permite convertir el resultado a vatios.');
   const toWatts = (relativeVo2: number) => (relativeVo2 * bodyMass - restingVo2 * bodyMass) / oxygenCostPerWatt;
   return { mlssWatts: toWatts(mlss.vo2Relative), fatmaxWatts: toWatts(fatmax.vo2Relative) };
+}
+
+/** Deja constancia de cada entrada que no procede de una medición propia. */
+function provenanceNotices(inputs: MaderInputs): string[] {
+  const labelled: Array<[string, ModelInput<string>]> = [
+    ['VO₂max', inputs.vo2max],
+    ['VLa máx', inputs.vlamax],
+    ['masa corporal', inputs.bodyMass],
+    ['P@VO₂max', inputs.pVo2max],
+  ];
+  return labelled.flatMap(([label, input]) => {
+    const source = input.sourceReference;
+    if (!source) return [];
+    const named = source.version ? `${source.software} ${source.version}` : source.software;
+    return [`La ${label} procede de ${named}, software de modelado de terceros, no de una medición propia. El resultado hereda sus supuestos.`];
+  });
 }
 
 export function runMaderModel(inputs: MaderInputs, config: MaderConfig): ExperimentalMaderResult {
@@ -78,6 +97,7 @@ export function runMaderModel(inputs: MaderInputs, config: MaderConfig): Experim
       status: 'calculated', reasons: [], version: MADER_MODEL_VERSION,
       ...central,
       inputLineage: required.map((input) => input.observationId),
+      provenanceNotices: provenanceNotices(inputs),
       cadenceWarning: inputs.cadenceRpm == null
         ? 'La cadencia no está documentada y el modelo no incorpora su posible efecto.'
         : `Cadencia documentada: ${inputs.cadenceRpm} rpm. El modelo no incorpora su posible efecto.`,
