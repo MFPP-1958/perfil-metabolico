@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
 import { useAnalysis } from '../../analysis/AnalysisContext';
-import { LactateSprintWizard } from '../tests/LactateSprintWizard';
 import { maderInputsFromObservations } from './maderInputs';
 import { MaderView } from './MaderView';
 
 export function TestsWorkspace() {
-  const { athlete, loadingAthlete, addObservation } = useAnalysis();
+  const { athlete, loadingAthlete } = useAnalysis();
   const observations = useMemo(() => athlete?.observations ?? [], [athlete]);
   const inputs = useMemo(() => maderInputsFromObservations(observations), [observations]);
 
@@ -28,16 +27,11 @@ export function TestsWorkspace() {
 
       {loadingAthlete && <p role="status">Cargando las observaciones del ciclista.</p>}
 
-      <LactateSprintWizard
-        initial={{ baselineLactate: 0, sprintDurationSeconds: 0, alacticTimeSeconds: 0, samples: [] }}
-        onConfirm={(vlamax) => {
-          void addObservation({
-            id: crypto.randomUUID(), athleteId: athlete.id, metricCode: 'vlamax', value: vlamax,
-            unit: 'mmol·l⁻¹·s⁻¹', observedAt: new Date().toISOString(), origin: 'field_test',
-            quality: 'measured', protocol: { name: 'esprint con lactato', version: 'lactate-sprint@1.0.0' },
-          });
-        }}
-      />
+      <div className="protocol-result protocol-result--warning" role="note" aria-labelledby="lactate-pending-title">
+        <h2 id="lactate-pending-title">Test de esprint con lactato pendiente de captura</h2>
+        <p>El asistente guiado todavía no admite introducir una sesión de esprint: eso es una función con diseño propio, pendiente de construir.</p>
+        <p>Mientras tanto, registra la VLa máx en el formulario de observaciones de la mesa de análisis, con origen <code>external_model</code>: la misma vía que ya usas para valores calculados con software de modelado de terceros.</p>
+      </div>
 
       {inputs.status === 'incomplete' ? (
         <div role="alert" className="protocol-result protocol-result--warning">

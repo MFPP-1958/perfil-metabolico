@@ -75,6 +75,13 @@ describe('TestsWorkspace', () => {
     expect(screen.queryByText('MLSS modelado')).not.toBeInTheDocument();
   });
 
+  it('avisa que el test de lactato aún no admite datos de sesión y dónde registrar la VLa máx mientras tanto', () => {
+    renderWith(perfilCompleto);
+    expect(screen.getByText(/todavía no admite introducir una sesión de esprint/i)).toBeInTheDocument();
+    expect(screen.getByRole('note', { name: /pendiente de captura/i })).toHaveTextContent(/external_model/);
+    expect(screen.getByRole('note', { name: /pendiente de captura/i })).toHaveTextContent(/mesa de análisis/i);
+  });
+
   it('pide seleccionar ciclista cuando no hay ninguno', () => {
     const value = {
       athletes: [], athleteId: '', athlete: null, period: '90 días', environment: 'all',
