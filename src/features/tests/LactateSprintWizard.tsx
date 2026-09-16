@@ -1,6 +1,6 @@
 import { evaluateLactateSprint, type LactateSprintSession } from '../../physiology/lactate/protocol';
 
-export function LactateSprintWizard({ initial }: { initial: LactateSprintSession }) {
+export function LactateSprintWizard({ initial, onConfirm }: { initial: LactateSprintSession; onConfirm?: (vlamax: number) => void }) {
   const assessment = evaluateLactateSprint(initial);
   const complete = assessment.kind === 'vlamax_estimate';
   return (
@@ -19,7 +19,7 @@ export function LactateSprintWizard({ initial }: { initial: LactateSprintSession
         {assessment.sensitivity && <small>Sensibilidad por tiempo aláctico: {assessment.sensitivity.lower.toFixed(3)}–{assessment.sensitivity.upper.toFixed(3)} {assessment.unit}</small>}
       </div>
       <table aria-label="Muestras de lactato"><thead><tr><th>Extracción</th><th>Lactato</th></tr></thead><tbody>{initial.samples.map((sample, index) => <tr key={`${sample.minute}-${index}`}><td>{sample.minute == null ? 'Sin minuto' : `${sample.minute} min`}</td><td>{sample.lactate} mmol·l⁻¹</td></tr>)}</tbody></table>
-      <button type="button" disabled={!complete}>Confirmar y guardar resultado</button>
+      <button type="button" disabled={!complete} onClick={() => { if (complete && assessment.value != null) onConfirm?.(assessment.value); }}>Confirmar y guardar resultado</button>
     </section>
   );
 }

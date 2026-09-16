@@ -8,10 +8,11 @@ import { athleteApi as defaultAthleteApi, type AthleteApi } from '../features/at
 import { AthleteWorkspace } from '../features/athletes/AthleteWorkspace';
 import { DurabilityWorkspace } from '../features/durability/DurabilityWorkspace';
 import type { DurabilityApi } from '../features/durability/durabilityApi';
+import { TestsWorkspace } from '../features/experimental/TestsWorkspace';
 import { PowerWorkspace } from '../features/power/PowerWorkspace';
 import type { PowerApi } from '../features/power/powerApi';
 import { appRoutes, type AppRoute } from './routes';
-import { EvolutionDemo, PrescriptionDemo, ReportsDemo, SessionsDemo, TestsDemo } from './DemoViews';
+import { EvolutionDemo, PrescriptionDemo, ReportsDemo, SessionsDemo } from './DemoViews';
 
 function EmptyWorkspace({ route }: { route: AppRoute }) {
   return (
@@ -55,7 +56,7 @@ function Application({
   powerAnalysisApi?: PowerApi;
 }) {
   const routeContent: Record<string, ReactNode> = {
-    '/potencia': <PowerWorkspace api={powerAnalysisApi} />, '/durabilidad': <DurabilityWorkspace api={durabilityAnalysisApi} />, '/tests': <TestsDemo />, '/sesiones': <SessionsDemo />,
+    '/potencia': <PowerWorkspace api={powerAnalysisApi} />, '/durabilidad': <DurabilityWorkspace api={durabilityAnalysisApi} />, '/tests': <TestsWorkspace />, '/sesiones': <SessionsDemo />,
     '/prescripcion': <PrescriptionDemo />, '/evolucion': <EvolutionDemo />, '/informes': <ReportsDemo />,
   };
   return (
