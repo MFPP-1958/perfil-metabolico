@@ -90,6 +90,14 @@ describe('buildMetabolicScenario', () => {
     if (result.status !== 'calculated') throw new Error('El escenario debe calcularse.');
     expect(result.referencePowerWatts).toBeCloseTo(result.current.mlss.powerWatts, 6);
   });
+
+  it('no avisa de sensibilidad cuando solo el VO₂max cambia, no la VLa máx', () => {
+    const result = buildMetabolicScenario(inputs, config, { vlamax: 0.4, vo2max: 72 });
+    if (result.status !== 'calculated') throw new Error('El escenario debe calcularse.');
+    expect(result.comparable).toBe(true);
+    expect(result.withinSensitivity).toBe(false);
+    expect(result.notices.join(' ')).not.toMatch(/sensibilidad/i);
+  });
 });
 
 describe('sampleAtPower', () => {

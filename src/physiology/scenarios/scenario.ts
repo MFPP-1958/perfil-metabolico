@@ -109,7 +109,7 @@ export function buildMetabolicScenario(
 
   const vlamaxDistance = Math.abs(appliedTargets.vlamax - realValues.vlamax);
   const comparable = vlamaxDistance > 0.005 || appliedTargets.vo2max !== realValues.vo2max;
-  const withinSensitivity = comparable && vlamaxDistance <= gate.sensitivity.vlamaxDelta;
+  const withinSensitivity = comparable && vlamaxDistance > 0 && vlamaxDistance <= gate.sensitivity.vlamaxDelta;
 
   const notices = [SCENARIO_HYPOTHESIS_NOTICE];
   if (!comparable) {
