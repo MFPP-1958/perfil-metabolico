@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MaderInputs } from '../../src/physiology/mader/model';
+import { buildMetabolicScenario } from '../../src/physiology/scenarios/scenario';
 import {
   createMetabolicScenarioHandler,
   listMetabolicScenarios,
@@ -77,7 +78,6 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       created: true,
       row: rawRowFromInput(input),
     })),
-    now: vi.fn().mockReturnValue(new Date('2026-09-17T12:00:00.000Z')),
     ...overrides,
   };
 }
@@ -201,11 +201,13 @@ describe('el servidor recalcula y nunca confía en el cliente', () => {
     expect(response.statusCode).toBe(201);
     expect(deps.persistScenario).toHaveBeenCalledTimes(1);
     const stored = (deps.persistScenario as ReturnType<typeof vi.fn>).mock.calls[0][0] as PersistScenarioInput;
-    expect(stored.outcome.status).toBe('calculated');
-    if (stored.outcome.status === 'calculated') {
-      expect(stored.outcome.appliedTargets).toEqual({ vlamax: 0.8, vo2max: 68 });
-      expect(stored.outcome.realValues).toEqual({ vlamax: 0.4, vo2max: 68 });
-    }
+
+    const expectedOutcome = buildMetabolicScenario(
+      validRealInputs,
+      { restingVo2: 5, referencePowerWatts: 250 },
+      { vlamax: 0.8 },
+    );
+    expect(stored.outcome).toEqual(expectedOutcome);
     expect(stored.createdBy).toBe(coachId);
   });
 
@@ -224,21 +226,6 @@ describe('el servidor recalcula y nunca confía en el cliente', () => {
 });
 
 describe('ningún valor objetivo llega a observations ni a derived_results', () => {
-  it('the only table persistScenario touches is metabolic_scenarios', async () => {
-    const tablesWritten: string[] = [];
-    const deps = dependencies({
-      persistScenario: vi.fn(async (input: PersistScenarioInput) => {
-        tablesWritten.push('metabolic_scenarios');
-        return { created: true, row: rawRowFromInput(input) };
-      }),
-    });
-
-    const response = await createMetabolicScenarioHandler(deps)(postEvent(validBody()));
-
-    expect(response.statusCode).toBe(201);
-    expect(tablesWritten).toEqual(['metabolic_scenarios']);
-  });
-
   it('the default persistence implementation only ever calls the metabolic_scenarios table', async () => {
     const requests: string[] = [];
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {

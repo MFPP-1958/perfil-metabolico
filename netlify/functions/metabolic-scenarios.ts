@@ -40,7 +40,6 @@ export interface ScenarioDependencies {
   authorize(coachId: string, athleteId: string): Promise<ScenarioRole | null>;
   listScenarios(athleteId: string): Promise<unknown[]>;
   persistScenario(input: PersistScenarioInput): Promise<{ row: unknown; created: boolean }>;
-  now(): Date;
 }
 
 interface SupabaseService {
@@ -232,7 +231,6 @@ const defaults: ScenarioDependencies = {
   authorize: authorizeDefault,
   listScenarios: listScenariosDefault,
   persistScenario: persistScenarioDefault,
-  now: () => new Date(),
 };
 
 /**
