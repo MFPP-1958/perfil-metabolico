@@ -306,7 +306,7 @@ describe('la respuesta nunca incluye claves ni correos', () => {
     const deps = dependencies({
       persistScenario: vi.fn(async (input: PersistScenarioInput) => ({
         created: true,
-        row: rawRowFromInput(input, { api_key: 'sk_live_should_never_leak', athlete_email: 'athlete@example.com' }),
+        row: rawRowFromInput(input, { api_key: 'LEAKED-NOT-A-REAL-KEY', athlete_email: 'athlete@example.com' }),
       })),
     });
     const response = await createMetabolicScenarioHandler(deps)(postEvent(validBody()));
@@ -334,7 +334,7 @@ describe('la respuesta nunca incluye claves ni correos', () => {
           modelVersions: { mader: 'mader-reproduction@1.0.0', scenario: 'metabolic-scenario@1.0.0' },
           outcome: { status: 'blocked', reasons: ['x'], version: 'metabolic-scenario@1.0.0' } as PersistScenarioInput['outcome'],
           contentHash: 'a'.repeat(64),
-        }, { api_key: 'sk_live_should_never_leak', athlete_email: 'athlete@example.com' }),
+        }, { api_key: 'LEAKED-NOT-A-REAL-KEY', athlete_email: 'athlete@example.com' }),
       ]),
     });
     const response = await createMetabolicScenarioHandler(deps)(getEvent());

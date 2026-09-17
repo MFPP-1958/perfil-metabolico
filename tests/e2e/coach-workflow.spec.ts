@@ -51,10 +51,20 @@ test('coach reviews real athlete data and opens unfinished module demos explicit
   await page.getByRole('button', { name: 'Añadir observación' }).click();
   await expect(page.getByText('285 W')).toBeVisible();
 
+  // La única observación de Ciclista Uno es el FTP añadido arriba, ninguna
+  // de las cuatro métricas que pide el modelo de Mader: la ruta de Tests ya
+  // no ofrece demostración (Task 6 la retiró de aquí) sino que dice qué
+  // métricas faltan y qué protocolo produce cada una.
   await page.getByRole('link', { name: 'Tests' }).click();
-  await page.getByRole('button', { name: 'Abrir demostración' }).click();
-  await expect(page.getByRole('heading', { name: 'VLa máx estimada' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Mader experimental' })).toBeVisible();
+  const perfilIncompleto = page.getByRole('alert').filter({ hasText: 'Perfil incompleto' });
+  await expect(perfilIncompleto).toContainText('VO₂max');
+  await expect(perfilIncompleto).toContainText('Prueba de laboratorio en rampa, o valor de laboratorio externo con su fecha.');
+  await expect(perfilIncompleto).toContainText('VLa máx');
+  await expect(perfilIncompleto).toContainText('Test de esprint con lactato, o valor calculado en WKO5 con origen external_model.');
+  await expect(perfilIncompleto).toContainText('Masa corporal');
+  await expect(perfilIncompleto).toContainText('Pesada fechada, registro manual o importación de Intervals.icu.');
+  await expect(perfilIncompleto).toContainText('P@VO₂max');
+  await expect(perfilIncompleto).toContainText('Potencia asociada al VO₂max, de la misma prueba que lo determinó.');
 
   await page.getByRole('link', { name: 'Durabilidad' }).click();
   await expect(page.getByRole('heading', { name: 'No hay datos de Durabilidad' })).toBeVisible();
