@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAnalysis } from '../../analysis/AnalysisContext';
 import { maderInputsFromObservations } from './maderInputs';
 import { MaderView } from './MaderView';
+import { ScenarioPanel } from './ScenarioPanel';
 
 export function TestsWorkspace() {
   const { athlete, loadingAthlete } = useAnalysis();
@@ -45,7 +46,20 @@ export function TestsWorkspace() {
           <p>Se añaden en la mesa de análisis, con su origen, su protocolo y su fecha.</p>
         </div>
       ) : (
-        <MaderView inputs={inputs.inputs} />
+        <>
+          <MaderView inputs={inputs.inputs} />
+          {/*
+            `AthleteDetail` no lleva fecha de nacimiento ni edad — solo añade
+            `observations` sobre `AthleteSummary` (id, intervalsId, nombre).
+            La aplicación no tiene de dónde derivar la minoría de edad
+            todavía, así que aquí se pasa `false` en vez de inventar un dato.
+            Queda anotado como hueco pendiente en el acta de aceptación de la
+            Tarea 8: el día que el perfil del ciclista incorpore una fecha de
+            nacimiento, este valor deja de ser fijo y la salvaguarda para
+            menores del panel de escenarios empieza a operar de verdad.
+          */}
+          <ScenarioPanel inputs={inputs.inputs} minor={false} />
+        </>
       )}
     </section>
   );
