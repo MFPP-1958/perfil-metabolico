@@ -372,6 +372,12 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .scenario-panel__cost li + li { margin-top: 6px; }
 .scenario-panel__limits { margin: 16px 0; padding-left: 20px; color: var(--muted); }
 .scenario-panel__limits li + li { margin-top: 6px; }
+.scenario-panel__save { display: grid; gap: 8px; max-width: 640px; margin: 24px 0; }
+.scenario-panel__save h3, .scenario-panel__save p { margin: 0; }
+.scenario-panel__save label { margin-top: 8px; font-weight: 700; }
+.scenario-panel__save input, .scenario-panel__save textarea { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius-small); padding: 8px 10px; background: white; color: var(--ink); font: inherit; }
+.scenario-panel__save textarea { min-height: 96px; resize: vertical; }
+.scenario-panel__save .primary-action { justify-self: start; margin-top: 8px; }
 
 @media (max-width: 640px) {
   .scenario-panel__form { grid-template-columns: 1fr; }
