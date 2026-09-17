@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalysis } from '../../analysis/AnalysisContext';
 import { metricCatalog } from '../../domain/metrics';
 import type { MaderInputs } from '../../physiology/mader/model';
 import { bandFor, EVENT_PROFILE_LABELS } from '../../physiology/scenarios/bands';
 import { SCENARIO_MINOR_NOTICE } from '../../physiology/scenarios/references';
 import { buildMetabolicScenario, type EventProfile } from '../../physiology/scenarios/scenario';
 import { ScenarioChart } from './ScenarioChart';
+import { scenarioApi as defaultScenarioApi, type SavedScenario, type ScenarioApi } from './scenarioApi';
 
 const EVENT_PROFILES: readonly EventProfile[] = ['explosiva', 'rodador', 'escalador', 'fondo'];
 
@@ -38,6 +40,16 @@ function parseOptionalNumber(text: string): number | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
+type SaveState =
+  | { status: 'idle' }
+  | { status: 'saving' }
+  | { status: 'saved' }
+  | { status: 'error'; message: string };
+
+function formatSavedDate(iso: string) {
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 type TargetValidation =
   | { status: 'empty' }
   | { status: 'invalid'; message: string }
@@ -66,11 +78,27 @@ function validateTarget(text: string, catalog: { min: number; max: number; unit:
   return { status: 'valid', value };
 }
 
-export function ScenarioPanel({ inputs, minor }: { inputs: MaderInputs; minor: boolean }) {
+export function ScenarioPanel({
+  inputs,
+  minor,
+  api = defaultScenarioApi,
+}: {
+  inputs: MaderInputs;
+  minor: boolean;
+  api?: ScenarioApi;
+}) {
+  const { athleteId } = useAnalysis();
   const [targetVlamaxText, setTargetVlamaxText] = useState('');
   const [targetVo2maxText, setTargetVo2maxText] = useState('');
   const [referencePowerText, setReferencePowerText] = useState('');
   const [eventProfile, setEventProfile] = useState<EventProfile>('rodador');
+  const [scenarioName, setScenarioName] = useState('');
+  const [rationale, setRationale] = useState('');
+  const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' });
+  const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>([]);
+  const [listError, setListError] = useState('');
+  const saveGeneration = useRef(0);
+  const listGeneration = useRef(0);
 
   const referencePowerWatts = parseOptionalNumber(referencePowerText);
 
@@ -97,16 +125,89 @@ export function ScenarioPanel({ inputs, minor }: { inputs: MaderInputs; minor: b
         ? vo2maxValidation.message
         : undefined;
 
+  // Se guarda aparte de `scenario` porque el guardado envía el mismo objeto
+  // de objetivos que alimentó el cálculo: recalcularlo en el momento de
+  // guardar podría desincronizarse si algún día cambia el orden de los
+  // memos.
+  const targets = useMemo(() => {
+    if (vlamaxValidation.status !== 'valid') return undefined;
+    return {
+      vlamax: vlamaxValidation.value,
+      ...(vo2maxValidation.status === 'valid' ? { vo2max: vo2maxValidation.value } : {}),
+    };
+  }, [vlamaxValidation, vo2maxValidation]);
+
   const scenario = useMemo(() => {
-    if (vlamaxValidation.status !== 'valid' || targetError) return undefined;
-    return buildMetabolicScenario(
-      inputs,
-      { restingVo2: 5, referencePowerWatts },
-      { vlamax: vlamaxValidation.value, ...(vo2maxValidation.status === 'valid' ? { vo2max: vo2maxValidation.value } : {}) },
-    );
-  }, [inputs, vlamaxValidation, vo2maxValidation, referencePowerWatts, targetError]);
+    if (!targets || targetError) return undefined;
+    return buildMetabolicScenario(inputs, { restingVo2: 5, referencePowerWatts }, targets);
+  }, [inputs, targets, referencePowerWatts, targetError]);
 
   const band = bandFor(eventProfile);
+
+  // Recupera los escenarios guardados de este ciclista al montar el panel y
+  // cada vez que cambia de ciclista: es la vía por la que "volver a la ruta"
+  // recupera lo guardado, sin depender de nada en el propio navegador.
+  useEffect(() => {
+    if (!athleteId) return;
+    const generation = ++listGeneration.current;
+    const controller = new AbortController();
+    void api.list(athleteId, controller.signal)
+      .then((scenarios) => {
+        if (generation !== listGeneration.current || controller.signal.aborted) return;
+        setSavedScenarios(scenarios);
+        setListError('');
+      })
+      .catch((reason: unknown) => {
+        if (generation !== listGeneration.current || controller.signal.aborted) return;
+        setListError(reason instanceof Error ? reason.message : 'No se pudieron cargar los escenarios guardados.');
+      });
+    return () => {
+      listGeneration.current += 1;
+      controller.abort();
+    };
+  }, [api, athleteId]);
+
+  const trimmedScenarioName = scenarioName.trim();
+  const trimmedRationale = rationale.trim();
+  const canSave = Boolean(
+    scenario
+    && scenario.status === 'calculated'
+    && scenario.comparable
+    && trimmedScenarioName !== ''
+    && trimmedRationale !== ''
+    && saveState.status !== 'saving',
+  );
+
+  const handleSave = useCallback(() => {
+    if (!scenario || scenario.status !== 'calculated' || !scenario.comparable || !targets) return;
+    if (trimmedScenarioName === '' || trimmedRationale === '') return;
+    const generation = ++saveGeneration.current;
+    setSaveState({ status: 'saving' });
+    void api.save({
+      athleteId,
+      scenarioName: trimmedScenarioName,
+      rationale: trimmedRationale,
+      eventProfile,
+      realInputs: inputs,
+      targets,
+      referencePowerWatts: scenario.referencePowerWatts,
+      config: { restingVo2: 5 },
+    })
+      .then((saved) => {
+        if (generation !== saveGeneration.current) return;
+        setSaveState({ status: 'saved' });
+        setScenarioName('');
+        setRationale('');
+        setSavedScenarios((current) => [saved, ...current]);
+      })
+      .catch((reason: unknown) => {
+        if (generation !== saveGeneration.current) return;
+        setSaveState({
+          status: 'error',
+          message: reason instanceof Error ? reason.message : 'No se pudo guardar el escenario.',
+        });
+      });
+  }, [api, athleteId, eventProfile, inputs, scenario, targets, trimmedRationale, trimmedScenarioName]);
 
   return (
     <section className="model-view experimental-view scenario-panel" aria-labelledby="scenario-title">
@@ -265,8 +366,59 @@ export function ScenarioPanel({ inputs, minor }: { inputs: MaderInputs; minor: b
           <ul className="scenario-panel__limits" aria-label="Limitaciones del escenario">
             {scenario.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
           </ul>
+
+          <section aria-labelledby="scenario-save-title" className="scenario-panel__save">
+            <h3 id="scenario-save-title">Guardar este escenario</h3>
+            <p>
+              Guardar deja constancia de por qué se propone este cambio, junto con las entradas reales, el objetivo
+              y la potencia de referencia: sigue siendo reproducible aunque el ciclista vuelva a medirse.
+            </p>
+
+            <label htmlFor="scenario-name">Nombre del escenario</label>
+            <input
+              id="scenario-name"
+              type="text"
+              value={scenarioName}
+              onChange={(event) => setScenarioName(event.target.value)}
+            />
+
+            <label htmlFor="scenario-rationale">Justificación</label>
+            <textarea
+              id="scenario-rationale"
+              value={rationale}
+              onChange={(event) => setRationale(event.target.value)}
+            />
+
+            <button type="button" className="primary-action" disabled={!canSave} onClick={handleSave}>
+              {saveState.status === 'saving' ? 'Guardando…' : 'Guardar escenario'}
+            </button>
+
+            {saveState.status === 'error' && (
+              <p role="alert" className="protocol-result protocol-result--warning">{saveState.message}</p>
+            )}
+            {saveState.status === 'saved' && <p role="status">Escenario guardado.</p>}
+          </section>
         </>
       )}
+
+      <section aria-labelledby="scenario-saved-title" className="scenario-panel__saved">
+        <h3 id="scenario-saved-title">Escenarios guardados</h3>
+        {listError && <p role="alert" className="protocol-result protocol-result--warning">{listError}</p>}
+        {!listError && savedScenarios.length === 0 && (
+          <p>Todavía no se ha guardado ningún escenario para este ciclista.</p>
+        )}
+        {savedScenarios.length > 0 && (
+          <ul aria-label="Escenarios guardados">
+            {savedScenarios.map((saved) => (
+              <li key={saved.id}>
+                <time dateTime={saved.createdAt}>{formatSavedDate(saved.createdAt)}</time>
+                {' — '}
+                {saved.scenarioName}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </section>
   );
 }

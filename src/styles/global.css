@@ -128,7 +128,17 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .workspace-empty h2 { margin: 0; color: var(--ink); font: 600 40px/1 'Barlow Condensed', sans-serif; }
 .field-error { color: var(--danger); font-weight: 700; }
 .model-view { padding: clamp(24px, 4vw, 58px); }
-.model-view > header { display: flex; justify-content: space-between; gap: 20px; align-items: end; }
+/*
+  `flex-wrap: wrap`: sin él, la cabecera de Tests (tres hijos sueltos:
+  eyebrow, h1 con el nombre del ciclista, párrafo) y la de Mader (título más
+  la etiqueta de versión del algoritmo) se ven forzadas a una sola fila y
+  desbordan el viewport a 360px de ancho. Potencia no lo necesitaba porque
+  agrupa título y párrafo en un único hijo, pero el selector es compartido
+  por las cinco vistas de `.model-view`, así que el arreglo se hace aquí una
+  vez. Encontrado al poblar por primera vez la ruta de Tests en un escaneo de
+  360px, en la Tarea 11.
+*/
+.model-view > header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 20px; align-items: end; }
 .model-view h1 { margin: 0; font: 700 clamp(42px, 6vw, 72px)/.9 'Barlow Condensed', sans-serif; }
 .model-view header p { color: var(--muted); }
 .model-version { padding: 5px 8px; border: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
@@ -162,7 +172,16 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .protocol-view table { width: 100%; border-collapse: collapse; background: white; }
 .protocol-view th, .protocol-view td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); }
 .protocol-view > button { margin-top: 16px; min-height: 46px; padding: 10px 16px; border: 0; background: var(--validated); color: white; font-weight: 700; }
-.eyebrow { margin: 0 0 8px; color: var(--uncertain) !important; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+/*
+  Un tono propio, no `--uncertain`: ese mismo naranja, a 16px en negrita,
+  solo da un contraste de 3,79:1 sobre el fondo de la cabecera y axe lo marca
+  como "serious" (WCAG 2 AA exige 4,5:1 para texto que no es grande). La
+  variable compartida se queda igual porque en sus otros usos —bordes,
+  textos de mayor tamaño— sí cumple; aquí basta con oscurecer solo el
+  eyebrow. Encontrado al poblar por primera vez un escaneo de axe sobre la
+  ruta de Tests, en la Tarea 11.
+*/
+.eyebrow { margin: 0 0 8px; color: #945406 !important; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .experimental-view { border-top: 8px solid var(--uncertain); }
 .experimental-view .acknowledgement { display: flex; align-items: center; gap: 10px; margin: 22px 0 14px; font-weight: 700; }
 .experimental-view .acknowledgement input { width: 20px; height: 20px; }
