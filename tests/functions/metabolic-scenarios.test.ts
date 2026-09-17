@@ -6,7 +6,7 @@ import {
   listMetabolicScenarios,
   persistMetabolicScenario,
   type PersistScenarioInput,
-} from './metabolic-scenarios';
+} from '../../netlify/functions/metabolic-scenarios';
 
 const athleteId = '8ca7cc82-02b0-47ca-84ca-253607a04b72';
 const coachId = '19e4a15f-64ed-4ee2-b1ed-57ab27e0660c';
