@@ -84,10 +84,10 @@ select throws_ok(
 
 reset role;
 set local role anon;
-select results_eq(
+select throws_ok(
   $$select count(*) from public.metabolic_scenarios$$,
-  array[0::bigint],
-  'anon reads no rows (no select policy targets anon)'
+  '42501', null,
+  'anon cannot read scenarios'
 );
 
 reset role;
