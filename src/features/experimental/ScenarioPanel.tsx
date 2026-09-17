@@ -20,9 +20,50 @@ function signed(value: number, decimals = 0) {
   return `±${formatted}`;
 }
 
+/**
+ * Convierte texto a número admitiendo tanto el punto como la coma decimal:
+ * un entrenador español escribe «0,8» de forma natural, no como caso límite,
+ * y esta misma pantalla se lo devuelve formateado con coma (`toLocaleString`
+ * con `es-ES`). Solo se normaliza la primera coma: un segundo separador deja
+ * el texto no numérico y cae, correctamente, en `NaN`.
+ */
+function parseDecimal(text: string): number {
+  return Number(text.trim().replace(',', '.'));
+}
+
 function parseOptionalNumber(text: string): number | undefined {
   const trimmed = text.trim();
-  return trimmed === '' ? undefined : Number(trimmed);
+  if (trimmed === '') return undefined;
+  const value = parseDecimal(trimmed);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+type TargetValidation =
+  | { status: 'empty' }
+  | { status: 'invalid'; message: string }
+  | { status: 'out-of-range'; message: string }
+  | { status: 'valid'; value: number };
+
+/**
+ * Valida un campo de objetivo contra el catálogo, distinguiendo un texto que
+ * no es un número de un número que sí lo es pero cae fuera del rango
+ * admisible: son dos afirmaciones distintas y el entrenador necesita saber
+ * cuál de las dos se le está haciendo.
+ */
+function validateTarget(text: string, catalog: { min: number; max: number; unit: string }, label: string): TargetValidation {
+  const trimmed = text.trim();
+  if (trimmed === '') return { status: 'empty' };
+  const value = parseDecimal(trimmed);
+  if (!Number.isFinite(value)) {
+    return { status: 'invalid', message: `${label} objetivo (${text}) no es un número válido.` };
+  }
+  if (value < catalog.min || value > catalog.max) {
+    return {
+      status: 'out-of-range',
+      message: `${label} objetivo (${text}) está fuera del rango admisible del catálogo: ${catalog.min}–${catalog.max} ${catalog.unit}.`,
+    };
+  }
+  return { status: 'valid', value };
 }
 
 export function ScenarioPanel({ inputs, minor }: { inputs: MaderInputs; minor: boolean }) {
@@ -31,33 +72,39 @@ export function ScenarioPanel({ inputs, minor }: { inputs: MaderInputs; minor: b
   const [referencePowerText, setReferencePowerText] = useState('');
   const [eventProfile, setEventProfile] = useState<EventProfile>('rodador');
 
-  const targetVlamax = parseOptionalNumber(targetVlamaxText);
-  const targetVo2max = parseOptionalNumber(targetVo2maxText);
   const referencePowerWatts = parseOptionalNumber(referencePowerText);
 
   const vlamaxCatalog = metricCatalog.vlamax;
   const vo2maxCatalog = metricCatalog.vo2max;
 
   // La guarda de rango se comprueba aquí, antes de tocar el motor: un valor
-  // fuera del catálogo nunca llega a `buildMetabolicScenario`.
-  const rangeError = useMemo(() => {
-    if (targetVlamax !== undefined && (!Number.isFinite(targetVlamax) || targetVlamax < vlamaxCatalog.min || targetVlamax > vlamaxCatalog.max)) {
-      return `La VLa máx objetivo (${targetVlamaxText}) está fuera del rango admisible del catálogo: ${vlamaxCatalog.min}–${vlamaxCatalog.max} ${vlamaxCatalog.unit}.`;
-    }
-    if (targetVo2max !== undefined && (!Number.isFinite(targetVo2max) || targetVo2max < vo2maxCatalog.min || targetVo2max > vo2maxCatalog.max)) {
-      return `El VO₂max objetivo (${targetVo2maxText}) está fuera del rango admisible del catálogo: ${vo2maxCatalog.min}–${vo2maxCatalog.max} ${vo2maxCatalog.unit}.`;
-    }
-    return undefined;
-  }, [targetVlamax, targetVo2max, targetVlamaxText, targetVo2maxText, vlamaxCatalog, vo2maxCatalog]);
+  // fuera del catálogo, o que directamente no es un número, nunca llega a
+  // `buildMetabolicScenario`. Las dos situaciones son afirmaciones distintas
+  // y llevan mensajes distintos.
+  const vlamaxValidation = useMemo(
+    () => validateTarget(targetVlamaxText, vlamaxCatalog, 'La VLa máx'),
+    [targetVlamaxText, vlamaxCatalog],
+  );
+  const vo2maxValidation = useMemo(
+    () => validateTarget(targetVo2maxText, vo2maxCatalog, 'El VO₂max'),
+    [targetVo2maxText, vo2maxCatalog],
+  );
+
+  const targetError =
+    vlamaxValidation.status === 'invalid' || vlamaxValidation.status === 'out-of-range'
+      ? vlamaxValidation.message
+      : vo2maxValidation.status === 'invalid' || vo2maxValidation.status === 'out-of-range'
+        ? vo2maxValidation.message
+        : undefined;
 
   const scenario = useMemo(() => {
-    if (targetVlamax === undefined || rangeError) return undefined;
+    if (vlamaxValidation.status !== 'valid' || targetError) return undefined;
     return buildMetabolicScenario(
       inputs,
       { restingVo2: 5, referencePowerWatts },
-      { vlamax: targetVlamax, ...(targetVo2max !== undefined ? { vo2max: targetVo2max } : {}) },
+      { vlamax: vlamaxValidation.value, ...(vo2maxValidation.status === 'valid' ? { vo2max: vo2maxValidation.value } : {}) },
     );
-  }, [inputs, targetVlamax, targetVo2max, referencePowerWatts, rangeError]);
+  }, [inputs, vlamaxValidation, vo2maxValidation, referencePowerWatts, targetError]);
 
   const band = bandFor(eventProfile);
 
@@ -129,13 +176,13 @@ export function ScenarioPanel({ inputs, minor }: { inputs: MaderInputs; minor: b
         </p>
       )}
 
-      {rangeError && <p role="alert" className="protocol-result protocol-result--warning">{rangeError}</p>}
+      {targetError && <p role="alert" className="protocol-result protocol-result--warning">{targetError}</p>}
 
-      {!rangeError && targetVlamax === undefined && (
+      {!targetError && vlamaxValidation.status === 'empty' && (
         <p className="scenario-panel__placeholder">Propón una VLa máx objetivo para comparar el perfil real con el hipotético.</p>
       )}
 
-      {!rangeError && scenario?.status === 'blocked' && (
+      {!targetError && scenario?.status === 'blocked' && (
         <div role="alert" className="protocol-result protocol-result--warning">
           <h3>Cálculo bloqueado</h3>
           {scenario.reasons.map((reason) => <p key={reason}>{reason}</p>)}
