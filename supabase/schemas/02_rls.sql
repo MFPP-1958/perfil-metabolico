@@ -48,6 +48,7 @@ alter table public.power_curve_snapshots enable row level security;
 alter table public.power_analysis_runs enable row level security;
 alter table public.durability_curve_snapshots enable row level security;
 alter table public.durability_analysis_runs enable row level security;
+alter table public.metabolic_scenarios enable row level security;
 alter table public.prescriptions enable row level security;
 alter table public.reports enable row level security;
 alter table public.audit_events enable row level security;
@@ -60,6 +61,9 @@ revoke all on table public.durability_curve_snapshots from public, anon, authent
 revoke all on table public.durability_analysis_runs from public, anon, authenticated, service_role;
 grant select on table public.durability_curve_snapshots, public.durability_analysis_runs to authenticated;
 grant select, insert on table public.durability_curve_snapshots, public.durability_analysis_runs to service_role;
+revoke all on table public.metabolic_scenarios from public, anon, authenticated, service_role;
+grant select on table public.metabolic_scenarios to authenticated;
+grant select, insert on table public.metabolic_scenarios to service_role;
 grant select on table public.power_curve_snapshots to authenticated;
 grant select on table public.power_analysis_runs to authenticated;
 grant select on table public.athlete_sync_states to authenticated;
@@ -158,6 +162,9 @@ create policy durability_curve_snapshots_select_authorized on public.durability_
 for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
 
 create policy durability_analysis_runs_select_authorized on public.durability_analysis_runs
+for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
+
+create policy metabolic_scenarios_select_authorized on public.metabolic_scenarios
 for select to authenticated using ((select public.coach_can_access_athlete(athlete_id)));
 
 create policy prescriptions_select_authorized on public.prescriptions

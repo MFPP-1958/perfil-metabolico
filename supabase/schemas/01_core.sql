@@ -259,6 +259,48 @@ for each row execute function public.prevent_durability_analysis_mutation();
 
 revoke all on function public.prevent_durability_analysis_mutation() from public, anon, authenticated;
 
+create table public.metabolic_scenarios (
+  id uuid primary key default extensions.gen_random_uuid(),
+  athlete_id uuid not null references public.athletes(id) on delete cascade,
+  created_by uuid not null references public.coach_profiles(id),
+  scenario_name text not null check (char_length(scenario_name) between 1 and 120),
+  rationale text not null check (char_length(rationale) between 1 and 2000),
+  event_profile text not null check (event_profile in ('explosiva', 'rodador', 'escalador', 'fondo')),
+  -- Entradas reales con su procedencia, copiadas para que el escenario sea reproducible.
+  real_inputs jsonb not null check (jsonb_typeof(real_inputs) = 'object'),
+  -- Valores propuestos por el entrenador. Nunca son mediciones.
+  targets jsonb not null check (jsonb_typeof(targets) = 'object' and targets ? 'vlamax'),
+  reference_power_watts numeric not null check (reference_power_watts > 0),
+  config jsonb not null check (jsonb_typeof(config) = 'object'),
+  model_versions jsonb not null check (jsonb_typeof(model_versions) = 'object'),
+  outcome jsonb not null check (jsonb_typeof(outcome) = 'object'),
+  content_hash text not null,
+  created_at timestamptz not null default now(),
+  unique (athlete_id, content_hash)
+);
+
+create index metabolic_scenarios_athlete_created_idx
+on public.metabolic_scenarios (athlete_id, created_at desc);
+create index metabolic_scenarios_created_by_idx
+on public.metabolic_scenarios (created_by);
+
+create or replace function public.prevent_metabolic_scenario_mutation()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  raise exception 'Saved metabolic scenarios are immutable';
+end;
+$$;
+
+create trigger metabolic_scenarios_immutable
+before update or delete on public.metabolic_scenarios
+for each row execute function public.prevent_metabolic_scenario_mutation();
+
+revoke all on function public.prevent_metabolic_scenario_mutation() from public, anon, authenticated;
+
 create or replace function public.persist_athlete_sync(
   target_athlete_id uuid,
   expected_sync_key text,
