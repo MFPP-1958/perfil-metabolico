@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { WindowKind } from '../../analysis/snapshotWindow';
 import type { AnalysisEnvironment } from '../../analysis/types';
 import { getAccessToken } from '../../auth/supabase';
 import type { PowerDurationModel } from '../../physiology/power-duration/types';
@@ -60,6 +61,7 @@ export interface PowerSnapshotQuery {
   oldest: string;
   newest: string;
   environment: AnalysisEnvironment;
+  window: WindowKind;
 }
 
 export interface ConfirmPowerAnalysisInput {
@@ -121,6 +123,7 @@ export function createPowerApi(dependencies: Partial<PowerApiDependencies> = {})
         oldest: query.oldest,
         newest: query.newest,
         environment: query.environment,
+        window: query.window,
       });
       const response = await fetchImpl(`/.netlify/functions/power-analysis?${search}`, {
         method: 'GET',

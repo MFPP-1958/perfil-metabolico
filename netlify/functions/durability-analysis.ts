@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import {
+  ROLLING_CANDIDATES,
+  snapshotFitsPeriod,
+  snapshotWindowOf,
+  windowSpanDays,
+  type WindowKind,
+} from '../../src/analysis/snapshotWindow.js';
 import { calculateDurability, DURABILITY_ALGORITHM_VERSION } from '../../src/physiology/durability/calculate.js';
 import type {
   CoverageQuality,
@@ -24,6 +31,7 @@ export interface DurabilityQuery {
   oldest: string;
   newest: string;
   environment: AnalysisEnvironment;
+  window: WindowKind;
 }
 
 export interface PersistedDurabilityAnalysis {
@@ -157,6 +165,8 @@ const querySchema = z.strictObject({
   oldest: z.iso.date(),
   newest: z.iso.date(),
   environment: environmentSchema,
+  // Sin declarar, la ventana se trata como fija: coincidencia exacta de siempre.
+  window: z.enum(['rolling', 'fixed']).default('fixed'),
 });
 
 const confirmationSchema = z.strictObject({ snapshotId: z.uuid() });
@@ -225,15 +235,21 @@ export async function loadLatestDurabilitySnapshot(
   service: SupabaseService,
   query: DurabilityQuery,
 ) {
+  const rolling = query.window === 'rolling';
+  const period = { oldest: query.oldest, newest: query.newest, days: windowSpanDays(query) };
   const search = new URLSearchParams({
     select: snapshotSelect,
     athlete_id: `eq.${query.athleteId}`,
     sport: 'eq.Ride',
     environment: `eq.${query.environment}`,
-    oldest: `eq.${query.oldest}`,
-    newest: `eq.${query.newest}`,
+    ...(rolling
+      // La ventana deslizante avanza cada día: un filtro de igualdad dejaría
+      // fuera la instantánea de ayer. Se piden las más recientes que no rebasen
+      // el final pedido y se elige la que representa el periodo.
+      ? { newest: `lte.${query.newest}` }
+      : { oldest: `eq.${query.oldest}`, newest: `eq.${query.newest}` }),
     order: 'synchronized_at.desc,id.desc',
-    limit: '1',
+    limit: String(rolling ? ROLLING_CANDIDATES : 1),
   });
   const response = await fetchImpl(`${service.url}/rest/v1/durability_curve_snapshots?${search}`, {
     headers: service.headers,
@@ -241,7 +257,11 @@ export async function loadLatestDurabilitySnapshot(
   });
   if (!response.ok) throw new Error('Unable to load durability snapshot');
   const rows = await response.json() as unknown[];
-  return rows[0] ?? null;
+  if (!rolling) return rows[0] ?? null;
+  return rows.find((row) => {
+    const window = snapshotWindowOf(row);
+    return window !== null && snapshotFitsPeriod(window, period, 'rolling');
+  }) ?? null;
 }
 
 async function loadLatestSnapshotDefault(query: DurabilityQuery) {

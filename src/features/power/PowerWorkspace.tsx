@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAnalysis } from '../../analysis/AnalysisContext';
 import { resolvePeriod } from '../../analysis/period';
+import { snapshotFitsPeriod, staleWindowNotice, type WindowKind } from '../../analysis/snapshotWindow';
+import type { ResolvedPeriod } from '../../analysis/types';
 import { fitPowerDuration } from '../../physiology/power-duration/fit';
 import { assessCurveCompleteness } from '../../physiology/power-duration/quality';
 import type { PowerDurationInput, PowerDurationModel } from '../../physiology/power-duration/types';
@@ -89,16 +91,15 @@ function fitSnapshot(snapshot: PowerSnapshot, model: PowerDurationModel) {
 function snapshotMatches(
   snapshot: PowerSnapshot | null,
   athleteId: string,
-  oldest: string,
-  newest: string,
+  period: ResolvedPeriod,
   environment: PowerSnapshot['environment'],
+  kind: WindowKind,
 ) {
   return Boolean(
     snapshot
     && snapshot.athleteId === athleteId
-    && snapshot.oldest === oldest
-    && snapshot.newest === newest
-    && snapshot.environment === environment,
+    && snapshot.environment === environment
+    && snapshotFitsPeriod(snapshot, period, kind),
   );
 }
 
@@ -148,6 +149,9 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
       };
     }
   }, [period, today]);
+  // Un preajuste («los últimos 90 días») termina hoy, así que su ventana se
+  // desplaza a diario; un periodo personalizado nombra dos fechas y no se mueve.
+  const windowKind: WindowKind = period.preset === 'custom' ? 'fixed' : 'rolling';
   const hasValidAthlete = INTERNAL_ID.test(athleteId);
   const scopeKey = hasValidAthlete && resolved.period
     ? [athleteId, resolved.period.oldest, resolved.period.newest, environment].join('|')
@@ -158,12 +162,16 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
   const compatibleSnapshot = resolved.period && snapshotMatches(
     loadState.snapshot,
     athleteId,
-    resolved.period.oldest,
-    resolved.period.newest,
+    resolved.period,
     environment,
+    windowKind,
   ) ? loadState.snapshot : null;
   const loading = Boolean(requestKey) && loadState.key !== requestKey;
   const snapshot = compatibleSnapshot;
+  // La instantánea puede ser de días antes, así que se dice qué cubre de verdad.
+  const windowNotice = snapshot && resolved.period
+    ? staleWindowNotice(snapshot, resolved.period)
+    : null;
   const error = loadState.key === requestKey ? loadState.error : '';
 
   useEffect(() => {
@@ -176,6 +184,7 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
       oldest: resolved.period.oldest,
       newest: resolved.period.newest,
       environment,
+      window: windowKind,
     }, controller.signal).then((next) => {
       if (generation !== requestGeneration.current || controller.signal.aborted) return;
       setSelectedModel(recommendedModel(next.points));
@@ -189,9 +198,9 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
         snapshot: snapshotMatches(
           current.snapshot,
           athleteId,
-          resolved.period!.oldest,
-          resolved.period!.newest,
+          resolved.period!,
           environment,
+          windowKind,
         ) ? current.snapshot : null,
       }));
       setConfirmation(emptyConfirmation);
@@ -202,7 +211,7 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
       confirmationGeneration.current += 1;
       controller.abort();
     };
-  }, [api, athleteId, demoOpen, environment, hasValidAthlete, requestKey, resolved.period]);
+  }, [api, athleteId, demoOpen, environment, hasValidAthlete, requestKey, resolved.period, windowKind]);
 
   const model = useMemo(() => (
     snapshot && selectedModel
@@ -311,6 +320,9 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
       )}
       {sync.status === 'partial' && (
         <div className="power-context-warning" role="status">{sync.message}</div>
+      )}
+      {windowNotice && (
+        <div className="power-context-warning" role="status">{windowNotice}</div>
       )}
       {loading && (
         <div className="power-context-warning" role="status">

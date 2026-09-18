@@ -45,12 +45,12 @@ describe('power analysis browser API', () => {
       athleteId,
       oldest: '2026-06-08',
       newest: '2026-09-05',
-      environment: 'indoor',
+      environment: 'indoor', window: 'rolling',
     }, controller.signal);
 
     expect(result).toEqual(snapshot);
     const [url, init] = fetchImpl.mock.calls[0];
-    expect(url).toBe(`/.netlify/functions/power-analysis?athleteId=${athleteId}&oldest=2026-06-08&newest=2026-09-05&environment=indoor`);
+    expect(url).toBe(`/.netlify/functions/power-analysis?athleteId=${athleteId}&oldest=2026-06-08&newest=2026-09-05&environment=indoor&window=rolling`);
     expect(init).toMatchObject({
       method: 'GET',
       headers: { Authorization: 'Bearer access-token' },
@@ -89,7 +89,7 @@ describe('power analysis browser API', () => {
       athleteId,
       oldest: '2026-06-08',
       newest: '2026-09-05',
-      environment: 'all',
+      environment: 'all', window: 'rolling',
     }, new AbortController().signal)).rejects.toThrow(message);
   });
 
@@ -101,7 +101,7 @@ describe('power analysis browser API', () => {
       athleteId,
       oldest: '2026-06-08',
       newest: '2026-09-05',
-      environment: 'all',
+      environment: 'all', window: 'rolling',
     }, new AbortController().signal)).rejects.toThrow('La respuesta de potencia no es válida.');
   });
 });

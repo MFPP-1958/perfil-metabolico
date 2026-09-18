@@ -58,7 +58,7 @@ describe('DurabilityApi', () => {
       athleteId,
       oldest: '2026-06-16',
       newest: '2026-09-14',
-      environment: 'all',
+      environment: 'all', window: 'rolling',
     }, signal);
 
     expect(fetchImpl).toHaveBeenCalledOnce();
@@ -69,7 +69,7 @@ describe('DurabilityApi', () => {
       athleteId,
       oldest: '2026-06-16',
       newest: '2026-09-14',
-      environment: 'all',
+      environment: 'all', window: 'rolling',
     });
     expect(init).toEqual({ method: 'GET', headers: { Authorization: 'Bearer token' }, signal });
   });
@@ -108,7 +108,7 @@ describe('DurabilityApi', () => {
       athleteId,
       oldest: '2026-06-16',
       newest: '2026-09-14',
-      environment: 'all',
+      environment: 'all', window: 'rolling',
     }, new AbortController().signal)).rejects.toThrow(message);
   });
 
@@ -121,7 +121,7 @@ describe('DurabilityApi', () => {
       athleteId,
       oldest: '2026-06-16',
       newest: '2026-09-14',
-      environment: 'all',
+      environment: 'all', window: 'rolling',
     }, new AbortController().signal);
 
     await expect(operation).rejects.toThrow('La respuesta de Durabilidad no es válida.');

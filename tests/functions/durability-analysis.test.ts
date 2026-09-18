@@ -119,6 +119,7 @@ const exactQuery = {
   oldest: '2026-06-16',
   newest: '2026-09-14',
   environment: 'all',
+  window: 'fixed',
 } as const;
 
 function getEvent(query: Record<string, string> = {}) {

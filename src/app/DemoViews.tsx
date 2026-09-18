@@ -10,7 +10,16 @@ import { SessionReview } from '../features/sessions/SessionReview';
 function ExplicitDemo({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   if (open) return <><div className="demo-banner" role="status">Demostración sintética. No corresponde a ningún ciclista.</div>{children}</>;
-  return <section className="workspace workspace-empty"><h1>{label}</h1><p>Selecciona un ciclista desde la mesa de análisis o abre datos sintéticos para revisar este módulo.</p><button type="button" className="primary-action" onClick={() => setOpen(true)}>Abrir demostración</button></section>;
+  // No pide elegir ciclista: estos módulos todavía no leen sus datos, y pedirlo
+  // mandaba al entrenador a repetir algo que ya había hecho en la barra superior.
+  return (
+    <section className="workspace workspace-empty">
+      <h1>{label}</h1>
+      <p>Este módulo está en construcción: todavía no usa los datos del ciclista activo.</p>
+      <p>La demostración funciona con datos inventados y solo sirve para ver la forma que tendrá.</p>
+      <button type="button" className="primary-action" onClick={() => setOpen(true)}>Abrir demostración</button>
+    </section>
+  );
 }
 
 const powerPoints = [{ seconds: 10, watts: 940 }, { seconds: 60, watts: 560 }, { seconds: 180, watts: 405 }, { seconds: 300, watts: 365 }, { seconds: 1200, watts: 315 }];

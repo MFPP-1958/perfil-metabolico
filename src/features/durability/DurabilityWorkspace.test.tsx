@@ -147,6 +147,7 @@ describe('DurabilityWorkspace', () => {
       oldest: '2026-06-17',
       newest: '2026-09-14',
       environment: 'all',
+      window: 'rolling',
     }, expect.any(AbortSignal));
     expect(analysis.synchronize).not.toHaveBeenCalled();
   });

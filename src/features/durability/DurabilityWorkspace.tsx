@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAnalysis } from '../../analysis/AnalysisContext';
 import { resolvePeriod } from '../../analysis/period';
+import { snapshotFitsPeriod, staleWindowNotice, type WindowKind } from '../../analysis/snapshotWindow';
+import type { ResolvedPeriod } from '../../analysis/types';
 import { DurabilityDemo } from '../../app/DemoViews';
 import { DurabilityView } from './DurabilityView';
 import {
@@ -29,16 +31,15 @@ const emptyConfirmation: ConfirmationState = { status: 'idle', result: null, mes
 function snapshotMatches(
   snapshot: DurabilitySnapshotResponse | null,
   athleteId: string,
-  oldest: string,
-  newest: string,
+  period: ResolvedPeriod,
   environment: DurabilitySnapshotResponse['environment'],
+  kind: WindowKind,
 ) {
   return Boolean(
     snapshot
     && snapshot.athleteId === athleteId
-    && snapshot.oldest === oldest
-    && snapshot.newest === newest
-    && snapshot.environment === environment,
+    && snapshot.environment === environment
+    && snapshotFitsPeriod(snapshot, period, kind),
   );
 }
 
@@ -77,6 +78,9 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
       };
     }
   }, [period, today]);
+  // Un preajuste («los últimos 90 días») termina hoy, así que su ventana se
+  // desplaza a diario; un periodo personalizado nombra dos fechas y no se mueve.
+  const windowKind: WindowKind = period.preset === 'custom' ? 'fixed' : 'rolling';
   const hasValidAthlete = INTERNAL_ID.test(athleteId);
   const scopeKey = hasValidAthlete && resolved.period
     ? [athleteId, resolved.period.oldest, resolved.period.newest, environment].join('|')
@@ -87,9 +91,9 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
   const compatibleSnapshot = resolved.period && snapshotMatches(
     loadState.snapshot,
     athleteId,
-    resolved.period.oldest,
-    resolved.period.newest,
+    resolved.period,
     environment,
+    windowKind,
   ) ? loadState.snapshot : null;
   const loading = Boolean(requestKey) && loadState.key !== requestKey;
   const error = loadState.key === requestKey ? loadState.error : '';
@@ -105,6 +109,7 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
       oldest: resolved.period.oldest,
       newest: resolved.period.newest,
       environment,
+      window: windowKind,
     }, controller.signal).then((next) => {
       if (generation !== requestGeneration.current || controller.signal.aborted) return;
       setLoadState({ key: requestKey, error: '', snapshot: next });
@@ -117,9 +122,9 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
         snapshot: snapshotMatches(
           current.snapshot,
           athleteId,
-          resolved.period!.oldest,
-          resolved.period!.newest,
+          resolved.period!,
           environment,
+          windowKind,
         ) ? current.snapshot : null,
       }));
       setConfirmation(emptyConfirmation);
@@ -130,7 +135,7 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
       confirmationGeneration.current += 1;
       controller.abort();
     };
-  }, [api, athleteId, demoOpen, environment, hasValidAthlete, requestKey, resolved.period]);
+  }, [api, athleteId, demoOpen, environment, hasValidAthlete, requestKey, resolved.period, windowKind]);
 
   const retryLoad = useCallback(() => setRetryVersion((current) => current + 1), []);
   const confirmationNeedsReload = confirmation.status === 'error'
@@ -201,6 +206,10 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
   }
 
   const visibleSnapshot = confirmedSnapshot(compatibleSnapshot, confirmation.result);
+  // La instantánea puede ser de días antes, así que se dice qué cubre de verdad.
+  const windowNotice = resolved.period
+    ? staleWindowNotice(compatibleSnapshot, resolved.period)
+    : null;
   const coverageInsufficient = compatibleSnapshot.result.coverage === 'insufficient';
   const cannotConfirm = coverageInsufficient || confirmationNeedsReload;
 
@@ -213,6 +222,9 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
       )}
       {sync.status === 'partial' && (
         <div className="durability-context-warning" role="status">{sync.message}</div>
+      )}
+      {windowNotice && (
+        <div className="durability-context-warning" role="status">{windowNotice}</div>
       )}
       {loading && (
         <div className="durability-context-warning" role="status">

@@ -125,6 +125,7 @@ describe('authorized power snapshot API', () => {
       oldest: '2026-06-08',
       newest: '2026-09-05',
       environment: 'indoor',
+      window: 'fixed',
     });
     expect(JSON.parse(response.body)).toEqual({
       id: snapshotId,
@@ -159,6 +160,7 @@ describe('authorized power snapshot API', () => {
       oldest: '2026-06-08',
       newest: '2026-09-05',
       environment: 'indoor',
+      window: 'fixed',
     });
 
     expect(result).toEqual({ snapshot: snapshotRow, ftp: ftpRow });
@@ -185,6 +187,84 @@ describe('authorized power snapshot API', () => {
       order: 'observed_at.desc',
       limit: '1',
     });
+  });
+
+  // El periodo «90 días» termina hoy, así que sus dos extremos avanzan cada día.
+  // Con igualdad estricta la instantánea de anteayer dejaba de encontrarse y la
+  // pantalla decía que no había curva teniendo uno guardada.
+  it('con ventana deslizante recupera la instantánea de los mismos días tomada hace dos', async () => {
+    const requests: string[] = [];
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      requests.push(String(input));
+      return requests.length === 1
+        ? new Response(JSON.stringify([snapshotRow]), { status: 200 })
+        : new Response(JSON.stringify([ftpRow]), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const result = await loadLatestPowerSnapshot(fetchImpl, {
+      url: 'https://supabase.test',
+      headers: { apikey: 'server-secret', Authorization: 'Bearer server-secret', 'Content-Type': 'application/json' },
+    }, {
+      athleteId,
+      oldest: '2026-06-10',
+      newest: '2026-09-07',
+      environment: 'indoor',
+      window: 'rolling',
+    });
+
+    expect(result).toEqual({ snapshot: snapshotRow, ftp: ftpRow });
+    const snapshotUrl = new URL(requests[0]);
+    expect(Object.fromEntries(snapshotUrl.searchParams)).toEqual({
+      select: 'id,athlete_id,sport,environment,oldest,newest,points,source_models,synchronized_at',
+      athlete_id: `eq.${athleteId}`,
+      sport: 'eq.Ride',
+      environment: 'eq.indoor',
+      newest: 'lte.2026-09-07',
+      order: 'synchronized_at.desc',
+      limit: '8',
+    });
+  });
+
+  it('con ventana deslizante descarta una instantánea de otra duración', async () => {
+    const treintaDias = { ...snapshotRow, oldest: '2026-08-07', newest: '2026-09-05' };
+    const fetchImpl = vi.fn(async () => new Response(
+      JSON.stringify([treintaDias]),
+      { status: 200 },
+    )) as unknown as typeof fetch;
+
+    const result = await loadLatestPowerSnapshot(fetchImpl, {
+      url: 'https://supabase.test',
+      headers: { apikey: 'server-secret', Authorization: 'Bearer server-secret', 'Content-Type': 'application/json' },
+    }, {
+      athleteId,
+      oldest: '2026-06-10',
+      newest: '2026-09-07',
+      environment: 'indoor',
+      window: 'rolling',
+    });
+
+    expect(result).toEqual({ snapshot: null, ftp: null });
+  });
+
+  it('con ventana deslizante descarta una instantánea demasiado vieja', async () => {
+    const vieja = { ...snapshotRow, oldest: '2026-01-01', newest: '2026-03-31' };
+    const fetchImpl = vi.fn(async () => new Response(
+      JSON.stringify([vieja]),
+      { status: 200 },
+    )) as unknown as typeof fetch;
+
+    const result = await loadLatestPowerSnapshot(fetchImpl, {
+      url: 'https://supabase.test',
+      headers: { apikey: 'server-secret', Authorization: 'Bearer server-secret', 'Content-Type': 'application/json' },
+    }, {
+      athleteId,
+      oldest: '2026-06-10',
+      newest: '2026-09-07',
+      environment: 'indoor',
+      window: 'rolling',
+    });
+
+    expect(result).toEqual({ snapshot: null, ftp: null });
   });
 
   it('returns 404 when the exact period and environment have no snapshot', async () => {

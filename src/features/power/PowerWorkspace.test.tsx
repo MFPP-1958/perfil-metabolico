@@ -112,6 +112,7 @@ describe('PowerWorkspace', () => {
       oldest: '2026-06-08',
       newest: '2026-09-05',
       environment: 'all',
+      window: 'rolling',
     }, expect.any(AbortSignal));
 
     await act(async () => resolve(snapshot()));

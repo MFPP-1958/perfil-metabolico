@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { WindowKind } from '../../analysis/snapshotWindow';
 import type { AnalysisEnvironment } from '../../analysis/types';
 import { getAccessToken } from '../../auth/supabase';
 
@@ -80,6 +81,7 @@ export interface DurabilitySnapshotQuery {
   oldest: string;
   newest: string;
   environment: AnalysisEnvironment;
+  window: WindowKind;
 }
 
 export interface ConfirmDurabilityAnalysisInput {
@@ -129,6 +131,7 @@ export function createDurabilityApi(
         oldest: query.oldest,
         newest: query.newest,
         environment: query.environment,
+        window: query.window,
       });
       const response = await fetchImpl(`/.netlify/functions/durability-analysis?${search}`, {
         method: 'GET',

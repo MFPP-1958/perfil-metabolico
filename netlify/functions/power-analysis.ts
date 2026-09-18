@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import {
+  ROLLING_CANDIDATES,
+  snapshotFitsPeriod,
+  snapshotWindowOf,
+  windowSpanDays,
+  type WindowKind,
+} from '../../src/analysis/snapshotWindow.js';
 import type { AnalysisEnvironment } from '../../src/analysis/types.js';
 import { fitPowerDuration } from '../../src/physiology/power-duration/fit.js';
 import type { CurveQuality, PowerDurationModel } from '../../src/physiology/power-duration/types.js';
@@ -19,6 +26,7 @@ interface PowerQuery {
   oldest: string;
   newest: string;
   environment: AnalysisEnvironment;
+  window: WindowKind;
 }
 
 interface PowerAnalysisDependencies {
@@ -148,6 +156,9 @@ const powerQuerySchema = z.strictObject({
   oldest: z.iso.date(),
   newest: z.iso.date(),
   environment: z.enum(['all', 'outdoor', 'indoor']),
+  // Sin declarar, la ventana se trata como fija: quien no lo diga recibe la
+  // coincidencia exacta de siempre y nunca una instantánea de otras fechas.
+  window: z.enum(['rolling', 'fixed']).default('fixed'),
 });
 
 function utcDay(value: string) {
@@ -195,22 +206,34 @@ export async function loadLatestPowerSnapshot(
   query: PowerQuery,
 ) {
   const { url, headers } = service;
+  const rolling = query.window === 'rolling';
+  const period = { oldest: query.oldest, newest: query.newest, days: windowSpanDays(query) };
   const snapshotQuery = new URLSearchParams({
     select: snapshotSelect,
     athlete_id: `eq.${query.athleteId}`,
     sport: 'eq.Ride',
     environment: `eq.${query.environment}`,
-    oldest: `eq.${query.oldest}`,
-    newest: `eq.${query.newest}`,
+    ...(rolling
+      // La ventana deslizante avanza cada día, así que la instantánea de ayer
+      // nunca coincidiría con un filtro de igualdad. Se piden las más recientes
+      // que no rebasen el final pedido y se elige la que representa el periodo.
+      ? { newest: `lte.${query.newest}` }
+      : { oldest: `eq.${query.oldest}`, newest: `eq.${query.newest}` }),
     order: 'synchronized_at.desc',
-    limit: '1',
+    limit: String(rolling ? ROLLING_CANDIDATES : 1),
   });
   const snapshotResponse = await fetchImpl(`${url}/rest/v1/power_curve_snapshots?${snapshotQuery}`, {
     headers,
     signal: AbortSignal.timeout(8_000),
   });
   if (!snapshotResponse.ok) throw new Error('Unable to load power curve snapshot');
-  const snapshots = await snapshotResponse.json() as unknown[];
+  const rows = await snapshotResponse.json() as unknown[];
+  const snapshots = rolling
+    ? rows.filter((row) => {
+      const window = snapshotWindowOf(row);
+      return window !== null && snapshotFitsPeriod(window, period, 'rolling');
+    })
+    : rows;
   if (!snapshots[0]) return { snapshot: null, ftp: null };
 
   const ftpQuery = new URLSearchParams({
