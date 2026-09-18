@@ -70,12 +70,33 @@ describe('metabolic scenario browser API', () => {
       config: savedScenario.config,
     };
 
-    expect(await api.save(input)).toEqual(savedScenario);
+    expect(await api.save(input)).toEqual({ scenario: savedScenario, created: true });
     expect(fetchImpl).toHaveBeenCalledWith('/.netlify/functions/metabolic-scenarios', {
       method: 'POST',
       headers: { Authorization: 'Bearer access-token', 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
+  });
+
+  // El servidor deduplica por los n\u00fameros del escenario y responde 200 con el que
+  // ya ten\u00eda guardado. Perder esa distinci\u00f3n hac\u00eda que la app dijese \u00abguardado\u00bb
+  // habiendo descartado el nombre y la justificaci\u00f3n reci\u00e9n escritos.
+  it('distingue un escenario ya existente, que el servidor devuelve con 200', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(savedScenario, 200));
+    const api = createScenarioApi({ getToken: vi.fn().mockResolvedValue('access-token'), fetchImpl });
+
+    const resultado = await api.save({
+      athleteId,
+      scenarioName: 'Otro nombre',
+      rationale: 'Otra justificaci\u00f3n',
+      eventProfile: savedScenario.eventProfile,
+      realInputs,
+      targets: savedScenario.targets,
+      referencePowerWatts: savedScenario.referencePowerWatts,
+      config: savedScenario.config,
+    });
+
+    expect(resultado).toEqual({ scenario: savedScenario, created: false });
   });
 
   it('maps a 403 to a specific Spanish message', async () => {

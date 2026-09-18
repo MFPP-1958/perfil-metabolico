@@ -255,16 +255,18 @@ export function AnalysisProvider({
   }, [api, athleteId, createSyncKey, environment, period, sync.synchronizedAt, today]);
 
   const addObservation = useCallback(async (observation: Observation) => {
-    if (!athlete || observation.athleteId !== athlete.id) return;
+    if (!athlete || observation.athleteId !== athlete.id) return false;
     setAthlete((current) => current ? { ...current, observations: [observation, ...current.observations] } : current);
-    if (!api.createObservation) return;
+    if (!api.createObservation) return false;
     try {
       await api.createObservation(observation);
+      return true;
     } catch {
       setAthlete((current) => current
         ? { ...current, observations: current.observations.filter((item) => item.id !== observation.id) }
         : current);
       setError('La observación no se guardó y se ha retirado del historial.');
+      return false;
     }
   }, [api, athlete]);
 

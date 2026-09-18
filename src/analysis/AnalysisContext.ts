@@ -20,7 +20,8 @@ export interface AnalysisContextValue {
   setEnvironment(environment: AnalysisEnvironment): void;
   synchronize(): Promise<void>;
   reloadRoster(): Promise<void>;
-  addObservation(observation: Observation): Promise<void>;
+  /** Resuelve a cierto solo cuando el servidor ha aceptado y guardado la observación. */
+  addObservation(observation: Observation): Promise<boolean>;
   clearError(): void;
 }
 

@@ -44,6 +44,9 @@ type SaveState =
   | { status: 'idle' }
   | { status: 'saving' }
   | { status: 'saved' }
+  // El servidor ya tenía uno con estos mismos números y ha devuelto aquel: lo
+  // escrito ahora no se ha guardado, y hay que decirlo con su nombre.
+  | { status: 'duplicate'; existingName: string }
   | { status: 'error'; message: string };
 
 function formatSavedDate(iso: string) {
@@ -193,8 +196,13 @@ export function ScenarioPanel({
       referencePowerWatts: scenario.referencePowerWatts,
       config: { restingVo2: 5 },
     })
-      .then((saved) => {
+      .then(({ scenario: saved, created }) => {
         if (generation !== saveGeneration.current) return;
+        if (!created) {
+          // No vaciar el formulario: lo escrito no se ha guardado en ninguna parte.
+          setSaveState({ status: 'duplicate', existingName: saved.scenarioName });
+          return;
+        }
         setSaveState({ status: 'saved' });
         setScenarioName('');
         setRationale('');
@@ -397,6 +405,12 @@ export function ScenarioPanel({
               <p role="alert" className="protocol-result protocol-result--warning">{saveState.message}</p>
             )}
             {saveState.status === 'saved' && <p role="status">Escenario guardado.</p>}
+            {saveState.status === 'duplicate' && (
+              <p role="status" className="protocol-result protocol-result--warning">
+                Ya tenías guardado este mismo escenario con el nombre «{saveState.existingName}».
+                No se ha creado uno nuevo: cambia algún valor si quieres guardar otro distinto.
+              </p>
+            )}
           </section>
         </>
       )}

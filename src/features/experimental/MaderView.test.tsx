@@ -32,12 +32,24 @@ describe('MaderView', () => {
     expect(screen.getByText('CP')).toBeVisible();
   });
 
-  it('requires acknowledgement before enabling report inclusion', async () => {
+  // Antes hab\u00eda aqu\u00ed un bot\u00f3n \u00abIncluir en informe\u00bb sin ninguna acci\u00f3n asociada: se
+  // habilitaba al marcar la casilla y al pulsarlo no ocurr\u00eda nada ni se guardaba
+  // nada. Mientras los informes no existan, la pantalla debe decirlo.
+  it('no ofrece un bot\u00f3n de informe mientras el m\u00f3dulo no exista', () => {
+    render(<MaderView inputs={inputs} />);
+    expect(screen.queryByRole('button', { name: /incluir en informe/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/informes todav\u00eda est\u00e1n en construcci\u00f3n/i)).toBeInTheDocument();
+  });
+
+  it('la casilla de contraste cambia lo que se anuncia, sin prometer un guardado', async () => {
     const user = userEvent.setup();
     render(<MaderView inputs={inputs} />);
-    const reportButton = screen.getByRole('button', { name: /incluir en informe/i });
-    expect(reportButton).toBeDisabled();
+    expect(screen.getByText(/solo podr\u00e1n incluir resultados que hayas contrastado/i)).toBeInTheDocument();
+
     await user.click(screen.getByRole('checkbox', { name: /comprendo las limitaciones/i }));
-    expect(reportButton).toBeEnabled();
+
+    const aviso = screen.getByText(/queda apto para incluirse/i);
+    expect(aviso).toBeInTheDocument();
+    expect(aviso).toHaveTextContent(/todav\u00eda no se guarda/i);
   });
 });

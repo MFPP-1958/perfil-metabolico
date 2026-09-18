@@ -23,7 +23,13 @@ export function MaderView({ inputs }: { inputs: MaderInputs }) {
       {substrates.status === 'calculated' && <SubstrateProfile profile={substrates} />}
       <table aria-label="Comparación independiente de métricas"><thead><tr><th>Métrica independiente</th><th>Valor</th><th>Relación con el modelo</th></tr></thead><tbody>{comparisons.map(([label, watts]) => <tr key={label}><td>{label}</td><td>{watts} W</td><td>Solo comparación; no sustituida</td></tr>)}</tbody></table>
       <label className="acknowledgement"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> Comprendo las limitaciones y he contrastado los datos de entrada.</label>
-      <button type="button" className="primary-action" disabled={!result.reportEligible}>Incluir en informe como resultado experimental</button>
+      {/* No hay botón de informe: el módulo de Informes está sin construir y el que
+          había aquí no tenía ninguna acción asociada. Se dice lo que hay. */}
+      <p className="model-warning" role="note">
+        {result.reportEligible
+          ? 'Los informes todavía están en construcción. Este resultado queda apto para incluirse cuando existan, pero todavía no se guarda en ninguna parte.'
+          : 'Los informes todavía están en construcción. Cuando existan, solo podrán incluir resultados que hayas contrastado marcando la casilla.'}
+      </p>
     </>}
     <details><summary>Fuentes y formulación</summary><ul>{MADER_REFERENCES.map((reference) => <li key={reference}>{reference}</li>)}</ul></details>
   </section>;

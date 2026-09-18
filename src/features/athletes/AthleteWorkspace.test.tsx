@@ -18,6 +18,49 @@ function renderIntegratedWorkspace(api: Parameters<typeof AnalysisProvider>[0]['
   );
 }
 
+describe('confirmaci\u00f3n al a\u00f1adir una observaci\u00f3n', () => {
+  const nuevoValor = '250';
+
+  async function rellenarYEnviar() {
+    await userEvent.selectOptions(await screen.findByLabelText('Ciclista activo'), realAthleteId);
+    await screen.findByRole('heading', { name: 'Jaume Santamaria' });
+    await userEvent.type(screen.getByLabelText('Valor'), nuevoValor);
+    await userEvent.click(screen.getByRole('button', { name: 'A\u00f1adir observaci\u00f3n' }));
+  }
+
+  // La ficha aparec\u00eda al instante pero nada dec\u00eda que el servidor la hubiese
+  // aceptado. La confirmaci\u00f3n debe llegar despu\u00e9s de que la acepte, no antes.
+  it('confirma solo cuando el servidor ha aceptado la observaci\u00f3n', async () => {
+    let aceptar: () => void = () => {};
+    const guardado = new Promise<void>((resolve) => { aceptar = resolve; });
+    const api = {
+      list: vi.fn().mockResolvedValue([{ id: realAthleteId, intervalsId: 'i123', name: 'Jaume Santamaria' }]),
+      load: vi.fn().mockResolvedValue({ id: realAthleteId, intervalsId: 'i123', name: 'Jaume Santamaria', observations: [] }),
+      createObservation: vi.fn().mockReturnValue(guardado),
+    };
+    renderIntegratedWorkspace(api);
+    await rellenarYEnviar();
+
+    expect(screen.queryByText(/observaci\u00f3n guardada/i)).not.toBeInTheDocument();
+
+    aceptar();
+    expect(await screen.findByText(/observaci\u00f3n guardada/i)).toBeVisible();
+  });
+
+  it('no confirma nada si el servidor la rechaza', async () => {
+    const api = {
+      list: vi.fn().mockResolvedValue([{ id: realAthleteId, intervalsId: 'i123', name: 'Jaume Santamaria' }]),
+      load: vi.fn().mockResolvedValue({ id: realAthleteId, intervalsId: 'i123', name: 'Jaume Santamaria', observations: [] }),
+      createObservation: vi.fn().mockRejectedValue(new Error('rechazada')),
+    };
+    renderIntegratedWorkspace(api);
+    await rellenarYEnviar();
+
+    expect(await screen.findByText(/no se guard\u00f3 y se ha retirado/i)).toBeVisible();
+    expect(screen.queryByText(/observaci\u00f3n guardada/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('athlete workspace synchronization', () => {
   it('uses the single global cyclist selection and removes the synthetic demo action', async () => {
     const api = {

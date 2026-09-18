@@ -125,9 +125,20 @@ export interface SaveScenarioInput {
   config: { restingVo2: number };
 }
 
+/**
+ * Lo que respondió el servidor al guardar. `created` en falso significa que ya
+ * tenía guardado un escenario con estos mismos números y ha devuelto aquel: el
+ * nombre y la justificación recién escritos no se han guardado, y quien llame
+ * debe decirlo en vez de dar el guardado por bueno.
+ */
+export interface SaveScenarioResult {
+  scenario: SavedScenario;
+  created: boolean;
+}
+
 export interface ScenarioApi {
   list(athleteId: string, signal: AbortSignal): Promise<SavedScenario[]>;
-  save(input: SaveScenarioInput): Promise<SavedScenario>;
+  save(input: SaveScenarioInput): Promise<SaveScenarioResult>;
 }
 
 interface ScenarioApiDependencies {
@@ -184,7 +195,9 @@ export function createScenarioApi(dependencies: Partial<ScenarioApiDependencies>
         body: JSON.stringify(input),
       });
       if (!response.ok) throw new Error(await responseError(response));
-      return parseSuccessfulResponse(response, savedScenarioSchema);
+      // 201 lo creó; 200 significa que ya existía uno idéntico y devuelve aquel.
+      const created = response.status === 201;
+      return { scenario: await parseSuccessfulResponse(response, savedScenarioSchema), created };
     },
   };
 }

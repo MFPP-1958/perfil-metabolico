@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { AnalysisContext, type AnalysisContextValue } from '../../analysis/AnalysisContext';
@@ -64,7 +64,7 @@ function savedScenarioFixture(overrides: Partial<SavedScenario> = {}): SavedScen
 function fakeApi(overrides: Partial<ScenarioApi> = {}): ScenarioApi {
   return {
     list: vi.fn().mockResolvedValue([]),
-    save: vi.fn().mockResolvedValue(savedScenarioFixture()),
+    save: vi.fn().mockResolvedValue({ scenario: savedScenarioFixture(), created: true }),
     ...overrides,
   };
 }
@@ -214,10 +214,13 @@ describe('ScenarioPanel', () => {
     it('un escenario guardado aparece en la lista con su fecha y su nombre', async () => {
       const user = userEvent.setup();
       const api = fakeApi({
-        save: vi.fn().mockResolvedValue(savedScenarioFixture({
-          scenarioName: 'Techo glucolítico para el esprint',
-          createdAt: '2026-09-16T12:00:00.000Z',
-        })),
+        save: vi.fn().mockResolvedValue({
+          scenario: savedScenarioFixture({
+            scenarioName: 'Techo glucolítico para el esprint',
+            createdAt: '2026-09-16T12:00:00.000Z',
+          }),
+          created: true,
+        }),
       });
       renderPanel({ api });
       await user.type(screen.getByLabelText(/VLa máx objetivo/i), '0.8');
@@ -228,6 +231,39 @@ describe('ScenarioPanel', () => {
       const lista = await screen.findByRole('list', { name: /escenarios guardados/i });
       expect(lista).toHaveTextContent('Techo glucolítico para el esprint');
       expect(lista).toHaveTextContent('16/09/2026');
+    });
+
+    // El servidor deduplica por los números del escenario. Antes la app decía
+    // «Escenario guardado», vaciaba el formulario y repetía el viejo en la lista,
+    // de modo que el nombre y la justificación escritos se perdían en silencio.
+    it('avisa cuando ya existía ese escenario, conserva lo escrito y no lo repite en la lista', async () => {
+      const user = userEvent.setup();
+      const yaExistente = savedScenarioFixture({
+        scenarioName: 'Más chispa para el esprint',
+        createdAt: '2026-09-16T12:00:00.000Z',
+      });
+      const api = fakeApi({
+        list: vi.fn().mockResolvedValue([yaExistente]),
+        save: vi.fn().mockResolvedValue({ scenario: yaExistente, created: false }),
+      });
+      renderPanel({ api });
+      await user.type(screen.getByLabelText(/VLa máx objetivo/i), '0.8');
+      await user.type(screen.getByLabelText(/nombre del escenario/i), 'Otro nombre distinto');
+      await user.type(screen.getByLabelText(/justificaci/i), 'Otra justificación distinta.');
+      await user.click(await screen.findByRole('button', { name: /guardar escenario/i }));
+
+      const aviso = await screen.findByRole('status');
+      expect(aviso).toHaveTextContent(/ya ten\u00edas guardado/i);
+      expect(aviso).toHaveTextContent('Más chispa para el esprint');
+      expect(aviso).not.toHaveTextContent(/^Escenario guardado\.$/);
+
+      // Lo escrito sigue ahí: no se ha guardado, así que no debe desaparecer.
+      expect(screen.getByLabelText(/nombre del escenario/i)).toHaveValue('Otro nombre distinto');
+      expect(screen.getByLabelText(/justificaci/i)).toHaveValue('Otra justificación distinta.');
+
+      // Y la lista no repite el que ya estaba.
+      const lista = await screen.findByRole('list', { name: /escenarios guardados/i });
+      expect(within(lista).getAllByText(/Más chispa para el esprint/)).toHaveLength(1);
     });
 
     it('un fallo del servidor deja el formulario intacto y muestra el mensaje', async () => {

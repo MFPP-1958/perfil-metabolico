@@ -1,5 +1,6 @@
 import { useAnalysis } from '../../analysis/AnalysisContext';
 import type { Observation } from '../../domain/observation';
+import { useState } from 'react';
 import { ObservationForm } from '../observations/ObservationForm';
 import { ObservationHistory } from '../observations/ObservationHistory';
 import { AthleteHeader } from './AthleteHeader';
@@ -17,8 +18,13 @@ export function AthleteWorkspace() {
     addObservation,
   } = useAnalysis();
 
+  // La ficha se añade al historial en cuanto se envía, pero confirmar antes de que
+  // el servidor responda sería prometer un guardado que aún puede fallar.
+  const [saved, setSaved] = useState(false);
+
   function add(observation: Observation) {
-    void addObservation(observation);
+    setSaved(false);
+    void addObservation(observation).then((ok) => setSaved(ok));
   }
 
   return (
@@ -36,7 +42,10 @@ export function AthleteWorkspace() {
           <div className="athlete-data-grid">
             <div><h3>Historial inmutable</h3><ObservationHistory observations={athlete.observations} /></div>
             <DataQualityPanel observations={athlete.observations} />
-            <ObservationForm athleteId={athlete.id} onAdd={add} />
+            <div>
+              <ObservationForm athleteId={athlete.id} onAdd={add} />
+              {saved && <p role="status" className="field-hint">Observación guardada.</p>}
+            </div>
           </div>
         </>
       ) : (
