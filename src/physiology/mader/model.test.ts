@@ -57,6 +57,28 @@ describe('experimental Mader model', () => {
     expect(result.provenanceNotices.join(' ')).toMatch(/VLa máx/);
   });
 
+  it('accepts a VO₂max and a P@VO₂max modelled by third-party software, naming it in the result', () => {
+    const result = runMaderModel({
+      ...measuredInputs,
+      vo2max: { ...measuredInputs.vo2max, quality: 'calculated', sourceReference: { software: 'WKO5' } },
+      pVo2max: { ...measuredInputs.pVo2max, quality: 'calculated', sourceReference: { software: 'WKO5' } },
+    }, { restingVo2: 5, acknowledged: true });
+    expect(result.status).toBe('calculated');
+    if (result.status !== 'calculated') return;
+    expect(result.provenanceNotices.join(' ')).toMatch(/VO₂max procede de WKO5/);
+    expect(result.provenanceNotices.join(' ')).toMatch(/P@VO₂max procede de WKO5/);
+  });
+
+  it('still blocks a VO₂max that is only an imported estimate', () => {
+    const result = runMaderModel({
+      ...measuredInputs,
+      vo2max: { ...measuredInputs.vo2max, quality: 'imported_estimate' },
+    }, { restingVo2: 5, acknowledged: true });
+    expect(result.status).toBe('blocked');
+    if (result.status !== 'blocked') return;
+    expect(result.reasons.join(' ')).toMatch(/VO₂max/);
+  });
+
   it('reports no provenance notice when every input was measured directly', () => {
     const result = runMaderModel(measuredInputs, { restingVo2: 5, acknowledged: true });
     expect(result.status).toBe('calculated');

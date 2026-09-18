@@ -81,10 +81,10 @@ export function runMaderModel(inputs: MaderInputs, config: MaderConfig): Experim
   const reasons: string[] = [];
   const required = [inputs.vo2max, inputs.vlamax, inputs.bodyMass, inputs.pVo2max];
   if (required.some((input) => !Number.isFinite(input.value) || input.value <= 0)) reasons.push('Todos los valores de entrada deben ser positivos y finitos.');
-  if (inputs.vo2max.quality !== 'measured') reasons.push('El VO₂max debe proceder de una medición compatible.');
+  if (!['measured', 'calculated'].includes(inputs.vo2max.quality)) reasons.push('El VO₂max debe proceder de una medición compatible o de un modelado de terceros documentado.');
   if (!['measured', 'calculated'].includes(inputs.vlamax.quality)) reasons.push('La VLa máx debe proceder de un protocolo medido y completo.');
   if (inputs.bodyMass.quality !== 'measured') reasons.push('La masa corporal debe estar medida.');
-  if (inputs.pVo2max.quality !== 'measured') reasons.push('La P@VO₂max debe estar medida en una prueba compatible.');
+  if (!['measured', 'calculated'].includes(inputs.pVo2max.quality)) reasons.push('La P@VO₂max debe estar medida en una prueba compatible o modelada por un programa documentado.');
   if (!Number.isFinite(config.restingVo2) || config.restingVo2 <= 0 || config.restingVo2 >= inputs.vo2max.value) reasons.push('El VO₂ de reposo configurado no es válido.');
   if (reasons.length) return { status: 'blocked', reasons, version: MADER_MODEL_VERSION };
 
