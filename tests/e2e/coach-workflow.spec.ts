@@ -43,6 +43,21 @@ test('coach reviews real athlete data and opens unfinished module demos explicit
   await page.route('**/.netlify/functions/durability-analysis**', async (route) => {
     await route.fulfill({ status: 404, json: { error: 'missing_snapshot' } });
   });
+  await page.route('**/.netlify/functions/sessions**', async (route) => {
+    const url = new URL(route.request().url());
+    const activityId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const interval = (index: number, type: string, movingSeconds: number, averageWatts: number) => ({
+      index, type, startSeconds: index * 300, movingSeconds, averageWatts, averageHeartRate: 160, averageCadence: 90,
+    });
+    await route.fulfill({ json: url.searchParams.has('activityId')
+      ? { activityId, powerZones: null, intervals: [
+        interval(0, 'RECOVERY', 900, 150), interval(1, 'WORK', 300, 290), interval(2, 'WORK', 295, 285), interval(3, 'WORK', 305, 280),
+      ] }
+      : { activities: [{
+        id: activityId, startedAt: '2026-09-06T08:00:00+00:00', name: "Pista - FTP (15')- 1 x ( 3 x 5' @ 100 % FTP R-3' @ 60 % )",
+        durationSeconds: 4200, averagePowerWatts: 210, indoor: false,
+      }] } });
+  });
   await page.goto('/');
   await expect(page.getByText('entrenador@prueba.local')).toBeVisible();
   await page.getByLabel('Ciclista activo').selectOption(firstAthleteId);
@@ -72,8 +87,10 @@ test('coach reviews real athlete data and opens unfinished module demos explicit
   await expect(page.getByRole('status')).toHaveText(/Demostración sintética/);
 
   await page.getByRole('link', { name: 'Sesiones' }).click();
-  await page.getByRole('button', { name: 'Abrir demostración' }).click();
-  await expect(page.getByRole('table', { name: 'Bloques prescritos y realizados' })).toBeVisible();
+  await page.getByRole('button', { name: /FTP \(15'\)/ }).click();
+  const resultado = page.getByRole('region', { name: 'Resultado' });
+  await expect(resultado).toContainText('3 de 3');
+  await expect(page.getByRole('checkbox', { name: 'Intervalo 1 cuenta como serie' })).not.toBeChecked();
 
   await page.getByRole('link', { name: 'Prescripción' }).click();
   await page.getByRole('button', { name: 'Abrir demostración' }).click();
