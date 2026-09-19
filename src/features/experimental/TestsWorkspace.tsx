@@ -47,6 +47,9 @@ export function TestsWorkspace() {
         </div>
       ) : (
         <>
+          {inputs.warnings.map((warning) => (
+            <p key={warning} className="model-warning" role="note">{warning}</p>
+          ))}
           <MaderView inputs={inputs.inputs} />
           {/*
             `AthleteDetail` no lleva fecha de nacimiento ni edad — solo añade

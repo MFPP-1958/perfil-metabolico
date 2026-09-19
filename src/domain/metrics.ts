@@ -1,6 +1,8 @@
 export const metricCatalog = {
   ftp: { label: 'FTP', unit: 'W', min: 1, max: 800 },
   eftp: { label: 'eFTP', unit: 'W', min: 1, max: 800 },
+  /** FTP modelado por WKO5. Nunca se mezcla con el FTP de un test ni con el de Intervals.icu. */
+  mftp: { label: 'mFTP', unit: 'W', min: 1, max: 800 },
   cp: { label: 'CP', unit: 'W', min: 1, max: 800 },
   mlss: { label: 'MLSS', unit: 'W', min: 1, max: 800 },
   lt1: { label: 'LT1', unit: 'W', min: 1, max: 700 },

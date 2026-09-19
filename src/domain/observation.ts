@@ -22,6 +22,9 @@ export const observationSchema = z.object({
     version: z.string().min(1).optional(),
   }).optional(),
   notes: z.string().max(2_000).optional(),
+  /** Un valor erróneo no se borra: se retira, con fecha y motivo, y deja de usarse. */
+  retractedAt: z.iso.datetime({ offset: true }).optional(),
+  retractionReason: z.string().min(1).max(500).optional(),
 }).superRefine((observation, context) => {
   if (observation.origin === 'external_model' && !observation.sourceReference) {
     context.addIssue({ code: 'custom', path: ['sourceReference'], message: 'Un valor producido por software de terceros debe nombrar el programa que lo calculó.' });

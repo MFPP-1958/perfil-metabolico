@@ -15,6 +15,8 @@ export interface ObservationRow {
   protocol_name: string;
   protocol_version: string;
   notes: string | null;
+  retracted_at?: string | null;
+  retraction_reason?: string | null;
 }
 
 export function toObservationRow(coachId: string, observation: Observation): ObservationRow {
@@ -32,6 +34,8 @@ export function toObservationRow(coachId: string, observation: Observation): Obs
     protocol_name: observation.protocol.name,
     protocol_version: observation.protocol.version,
     notes: observation.notes ?? null,
+    retracted_at: observation.retractedAt ?? null,
+    retraction_reason: observation.retractionReason ?? null,
   };
 }
 
@@ -56,6 +60,8 @@ export function fromObservationRow(row: ObservationRow | Record<string, unknown>
       ? { sourceReference: { software: source.software, ...(typeof source.version === 'string' ? { version: source.version } : {}) } }
       : {}),
     ...(row.notes == null ? {} : { notes: row.notes }),
+    ...(row.retracted_at == null ? {} : { retractedAt: new Date(String(row.retracted_at)).toISOString() }),
+    ...(row.retraction_reason == null ? {} : { retractionReason: row.retraction_reason }),
   });
   return parsed.success ? parsed.data : null;
 }

@@ -62,6 +62,10 @@ create table public.observations (
   protocol_name text not null,
   protocol_version text not null,
   notes text check (notes is null or char_length(notes) <= 2000),
+  -- Un valor erróneo no se borra: se retira con fecha y motivo y deja de usarse.
+  retracted_at timestamptz,
+  retraction_reason text check (retraction_reason is null or char_length(retraction_reason) between 1 and 500),
+  constraint observations_retraction_complete check ((retracted_at is null) = (retraction_reason is null)),
   created_at timestamptz not null default now()
 );
 
@@ -401,15 +405,22 @@ begin
     metric_code text, value numeric, unit text, observed_at timestamptz,
     protocol_name text, protocol_version text
   )
+  -- Solo se registra un valor nuevo si cambia respecto al último importado de ese
+  -- campo: así un FTP que va de 236 a 240 y vuelve a 236 deja las tres marcas.
   where not exists (
-    select 1 from public.observations existing
-    where existing.athlete_id = target_athlete_id
-      and existing.origin = 'intervals_icu'
-      and existing.metric_code = item.metric_code
-      and existing.value = item.value
-      and existing.unit = item.unit
-      and existing.protocol_name = item.protocol_name
-      and existing.protocol_version = item.protocol_version
+    select 1 from (
+      select existing.value, existing.unit
+      from public.observations existing
+      where existing.athlete_id = target_athlete_id
+        and existing.origin = 'intervals_icu'
+        and existing.metric_code = item.metric_code
+        and existing.protocol_name = item.protocol_name
+        and existing.protocol_version = item.protocol_version
+        and existing.retracted_at is null
+      order by existing.observed_at desc, existing.created_at desc
+      limit 1
+    ) latest
+    where latest.value = item.value and latest.unit = item.unit
   );
 
   insert into public.derived_results (

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Observation } from '../../domain/observation';
 import { maderInputsFromObservations } from './maderInputs';
 
+
 const athleteId = '11111111-1111-4111-8111-111111111111';
 
 function observation(overrides: Partial<Observation>): Observation {
@@ -93,4 +94,42 @@ describe('maderInputsFromObservations', () => {
     // para que la elección no cambie de una ejecución a otra.
     expect(result.inputs.vo2max.value).toBe(primera.value);
   });
+
+  it('usa la regla del perfil: el test de campo gana a la estimación de Intervals.icu', () => {
+    const result = maderInputsFromObservations([
+      ...completo.filter((item) => item.metricCode !== 'ftp'),
+      observation({ metricCode: 'ftp', value: 239, unit: 'W', origin: 'field_test', observedAt: '2026-09-02T08:00:00.000Z' }),
+      observation({ metricCode: 'ftp', value: 236, unit: 'W', origin: 'intervals_icu', quality: 'imported_estimate', observedAt: '2026-09-05T08:00:00.000Z' }),
+    ], '2026-09-10');
+    if (result.status !== 'ready') throw new Error('Las entradas deben estar completas.');
+    expect(result.inputs.comparison?.ftpWatts).toBe(239);
+  });
+
+  it('calcula con lo que se sabía en la fecha pedida', () => {
+    const result = maderInputsFromObservations([
+      ...completo,
+      observation({ metricCode: 'vlamax', value: 0.6, unit: 'mmol·l⁻¹·s⁻¹', observedAt: '2026-09-10T08:00:00.000Z', origin: 'external_model', quality: 'calculated', sourceReference: { software: 'WKO5' } }),
+    ], '2026-09-05');
+    if (result.status !== 'ready') throw new Error('Las entradas deben estar completas.');
+    expect(result.inputs.vlamax.value).toBe(0.4);
+  });
+
+  it('avisa si VO₂max y P@VO₂max no proceden del mismo día', () => {
+    const result = maderInputsFromObservations([
+      ...completo.filter((item) => item.metricCode !== 'p_vo2max'),
+      observation({ metricCode: 'p_vo2max', value: 400, unit: 'W', origin: 'field_test', observedAt: '2026-09-08T08:00:00.000Z' }),
+    ], '2026-09-10');
+    if (result.status !== 'ready') throw new Error('Las entradas deben estar completas.');
+    expect(result.warnings.join(' ')).toMatch(/VO₂max y la P@VO₂max no proceden del mismo día/);
+  });
+
+  it('avisa si las entradas están separadas más de 30 días', () => {
+    const result = maderInputsFromObservations([
+      ...completo.filter((item) => item.metricCode !== 'body_mass'),
+      observation({ metricCode: 'body_mass', value: 70, unit: 'kg', origin: 'manual', observedAt: '2026-10-15T08:00:00.000Z' }),
+    ], '2026-10-16');
+    if (result.status !== 'ready') throw new Error('Las entradas deben estar completas.');
+    expect(result.warnings.join(' ')).toMatch(/separadas 44 días/);
+  });
 });
+

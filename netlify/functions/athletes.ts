@@ -40,7 +40,7 @@ async function listDefault(coachId: string): Promise<AthleteRow[]> {
 
 async function observationsDefault(athleteId: string): Promise<Observation[]> {
   const { url, headers } = configuration();
-  const query = new URLSearchParams({ select: 'id,athlete_id,metric_code,value,unit,observed_at,origin,quality,source_reference,protocol_name,protocol_version,notes', athlete_id: `eq.${athleteId}`, order: 'observed_at.desc', limit: '500' });
+  const query = new URLSearchParams({ select: 'id,athlete_id,metric_code,value,unit,observed_at,origin,quality,source_reference,protocol_name,protocol_version,notes,retracted_at,retraction_reason', athlete_id: `eq.${athleteId}`, order: 'observed_at.desc', limit: '500' });
   const response = await fetch(`${url}/rest/v1/observations?${query}`, { headers, signal: AbortSignal.timeout(8_000) });
   if (!response.ok) throw new Error('Unable to list athlete observations');
   const rows = await response.json() as Array<Record<string, unknown>>;
