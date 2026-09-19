@@ -2,15 +2,15 @@
 
 | Versión | Entradas | Salidas | Estado | Límites principales |
 |---|---|---|---|---|
-| `ecp@1.0.0` | Mejores potencias y duraciones | CP, W′, residuos, RMSE | Analítico | Necesita esfuerzos representativos; CP no es FTP ni MLSS. |
-| `morton-3p@1.0.0` | Mejores potencias y duraciones | CP, W′, Pmax modelada, residuos | Analítico | Pmax modelada no equivale a potencia observada de 5 s. |
+| `pd-ecp-2p@1.1.0` | Mejores potencias y duraciones | CP, W′, residuos, RMSE | Analítico | Solo ajusta esfuerzos de 2 a 20 min: por encima la potencia cae bajo la hipérbola y arrastraría CP hacia abajo. Necesita esfuerzos máximos; CP no es FTP ni MLSS. |
+| `pd-morton-3p@1.1.0` | Mejores potencias y duraciones | CP, W′, Pmax modelada, residuos | Analítico | Solo ajusta esfuerzos de hasta 20 min. Pmax modelada no equivale a potencia observada de 5 s. |
 | `durability-record-profile@2.0.0` | Curvas récord de campo fresca, `kJ0` y `kJ1`; peso con fecha observada; procedencia y recuentos de soporte | Descenso firmado por duración exacta, carga de inicio en kJ y kJ/kg, calidad de cobertura | Analítico | Compara solo 10, 60, 300 y 1.200 s, sin interpolar; su alcance se limita a esas curvas, cargas y descensos. |
 | `lactate-sprint@1.0.0` | Lactato basal, esprint, tiempo aláctico y muestras minutadas | Tasa pico o VLa máx estimada | Condicionado | VLa máx solo se etiqueta si existe pico seguido de meseta o descenso. |
 | `mader-reproduction@1.0.0` | VO₂max, VLa máx, masa, P@VO₂max y VO₂ basal | MLSS y FATmax modelados, sensibilidad | Experimental | Coste de O₂ deducido, cadencia no modelada, validez discutida. Nunca actualiza LT1 o zonas. |
-| `substrate-metabolism@1.0.0` | Barrido de Mader, masa corporal y P@VO₂max | Déficit de piruvato, acumulación neta de lactato, FatOx g/min, CHO g/h, kcal/h y % de VO₂max por vatio | Experimental | Reparto derivado de la propia glucólisis del modelo, no de calorimetría indirecta. Infravalora el CHO por debajo de FATmax y agota la grasa en el MLSS. No publica concentración de lactato. |
+| `substrate-metabolism@2.0.0` | Barrido de Mader, masa corporal y P@VO₂max | Déficit de piruvato, acumulación neta de lactato, FatOx g/min, CHO g/h, kcal/h y % de VO₂max por vatio | Experimental | Reparto derivado de la glucólisis del modelo con estequiometría real (3 O₂ por piruvato, 67,2 ml/mmol); la versión 1.0.0 reutilizaba la constante ajustada de Mader (48,8 ml/mmol), sobrestimaba la grasa y atribuía al carbohidrato más energía que el VO₂ total. La grasa se agota algo antes del MLSS. Sin validación publicada frente a calorimetría: hipótesis de trabajo. No publica concentración de lactato. |
+| `metabolic-scenario@2.0.0` | Perfil real de Mader y objetivos de VLa máx y VO₂max | Curvas actual y objetivo, deltas de MLSS, FATmax y sustratos | Experimental | Conserva la economía (coste de O₂ por vatio): con un VO₂max objetivo, la P@VO₂max del escenario sube en proporción. La versión 1.0.0 conservaba la P@VO₂max e infravaloraba unas 7 veces el efecto del VO₂max. VO₂max y VLa máx se tratan como independientes, cosa que el organismo rara vez concede. |
 | `meaningful-change@1.0.0` | Dos resultados y error típico | Compatibilidad y clase de cambio | Analítico | No compara métricas, unidades o protocolos distintos; no atribuye causalidad. |
 | `aerobic-power-intervals@1.0.0` | Objetivo, fase, disponibilidad y P@VO₂max | Borrador de sesión | Regla | Requiere ajuste y aprobación del entrenador; no es consejo médico. |
-| `metabolic-scenario@1.0.0` | Perfil real que supera la guarda de Mader y valores objetivo de VLa máx y VO₂max | Dos proyecciones de sustratos, desplazamiento de FATmax y MLSS, y cambio de grasa y carbohidrato en una potencia de referencia | Experimental | Hipótesis del entrenador, no predicción. Trata VLa máx y VO₂max como independientes. Hereda todos los límites del modelo de Mader y del reparto de sustratos. |
 | `vlamax-reference-bands@1.0.0` | Perfil de prueba | Intervalo orientativo de VLa máx con su población y su cita | Referencia | Orientación bibliográfica, no objetivo. Un perfil sin intervalo publicado se queda sin banda. Una población distinta a la del ciclista invalida la lectura. |
 
 ## Entradas producidas por software de terceros
@@ -28,7 +28,7 @@ llega por esta vía desde WKO5.
 ## Base científica inicial
 
 - Leo P et al. Power profiling and the power-duration relationship in cycling. *European Journal of Applied Physiology* (2022). DOI: 10.1007/s00421-021-04833-y.
-- Jones AM et al. The Critical Power Concept. *Sports Medicine* (2017). DOI: 10.1007/s40279-017-0688-0.
+- Jones AM, Vanhatalo A. The «Critical Power» Concept: Applications to Sports Performance with a Focus on Intermittent High-Intensity Exercise. *Sports Medicine* (2017). DOI: 10.1007/s40279-017-0688-0.
 - Maunder E et al. The Importance of Durability in the Physiological Profiling of Endurance Athletes. *Sports Medicine* (2021). DOI: 10.1007/s40279-021-01459-0.
 - Quittmann OJ et al. Maximal lactate accumulation rate: current evidence and future directions. *European Journal of Applied Physiology* (2025). DOI: 10.1007/s00421-025-06022-7.
 - Sablain M et al. Evaluating maximal lactate accumulation rate and estimated MLSS in cycling. *European Journal of Applied Physiology* (2025). DOI: 10.1007/s00421-025-05751-z.

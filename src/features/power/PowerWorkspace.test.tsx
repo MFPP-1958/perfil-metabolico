@@ -169,7 +169,7 @@ describe('PowerWorkspace', () => {
     expect(screen.getByRole('heading', { name: 'FTP importado' })).toBeVisible();
     expect(screen.getByText('285 W')).toBeVisible();
     expect(await screen.findByText('CP modelada')).toBeVisible();
-    expect(screen.getAllByText(/pd-morton-3p@1\.0\.0/)[0]).toBeVisible();
+    expect(screen.getAllByText(/pd-morton-3p@1\.1\.0/)[0]).toBeVisible();
   });
 
   it('uses Morton when it is adjustable but ECP lacks two long durations', async () => {
@@ -229,7 +229,7 @@ describe('PowerWorkspace', () => {
       id: '33dad9bf-8f42-4cff-8910-15c34ef24e6a',
       snapshotId: 'ab77d6b7-cbcf-49a4-920c-519f9e29e895',
       model: 'MORTON_3P',
-      algorithmVersion: 'pd-morton-3p@1.0.0',
+      algorithmVersion: 'pd-morton-3p@1.1.0',
       cpWatts: 290,
       wPrimeJoules: 19_000,
       pmaxWatts: 1_100,

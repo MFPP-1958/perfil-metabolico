@@ -69,7 +69,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
         id: '33dad9bf-8f42-4cff-8910-15c34ef24e6a',
         snapshot_id: snapshotId,
         model: 'ECP',
-        algorithm_version: 'pd-ecp-2p@1.0.0',
+        algorithm_version: 'pd-ecp-2p@1.1.0',
         cp_watts: 273.0952380952381,
         w_prime_joules: 16857.142857142855,
         pmax_watts: null,
@@ -321,7 +321,7 @@ describe('immutable power analysis confirmation', () => {
       snapshotId,
       createdBy: 'coach-1',
       model: 'ECP',
-      algorithmVersion: 'pd-ecp-2p@1.0.0',
+      algorithmVersion: 'pd-ecp-2p@1.1.0',
       cpWatts: 273.0952380952381,
       wPrimeJoules: 16857.142857142855,
       pmaxWatts: null,
@@ -331,7 +331,7 @@ describe('immutable power analysis confirmation', () => {
     expect(JSON.parse(response.body)).toMatchObject({
       snapshotId,
       model: 'ECP',
-      algorithmVersion: 'pd-ecp-2p@1.0.0',
+      algorithmVersion: 'pd-ecp-2p@1.1.0',
       confirmedAt: '2026-09-05T12:00:00.000Z',
     });
     expect(response.body).not.toContain('athleteId');
@@ -355,7 +355,7 @@ describe('immutable power analysis confirmation', () => {
         id: '43dad9bf-8f42-4cff-8910-15c34ef24e6b',
         snapshot_id: snapshotId,
         model: 'MORTON_3P',
-        algorithm_version: 'pd-morton-3p@1.0.0',
+        algorithm_version: 'pd-morton-3p@1.1.0',
         cp_watts: 280,
         w_prime_joules: 20000,
         pmax_watts: 1100.088800118559,
@@ -375,7 +375,7 @@ describe('immutable power analysis confirmation', () => {
     expect(response.statusCode).toBe(201);
     const stored = persistAnalysis.mock.calls[0][0];
     expect(stored.model).toBe('MORTON_3P');
-    expect(stored.algorithmVersion).toBe('pd-morton-3p@1.0.0');
+    expect(stored.algorithmVersion).toBe('pd-morton-3p@1.1.0');
     expect(stored.cpWatts).toBeCloseTo(280, 6);
     expect(stored.wPrimeJoules).toBeCloseTo(20000, 3);
     expect(stored.pmaxWatts).toBeCloseTo(1100.0888, 3);
@@ -435,7 +435,7 @@ describe('immutable power analysis confirmation', () => {
       id: '33dad9bf-8f42-4cff-8910-15c34ef24e6a',
       snapshot_id: snapshotId,
       model: 'ECP',
-      algorithm_version: 'pd-ecp-2p@1.0.0',
+      algorithm_version: 'pd-ecp-2p@1.1.0',
       cp_watts: 273.0952380952381,
       w_prime_joules: 16857.142857142855,
       pmax_watts: null,
@@ -459,7 +459,7 @@ describe('immutable power analysis confirmation', () => {
       snapshotId,
       createdBy: '19e4a15f-64ed-4ee2-b1ed-57ab27e0660c',
       model: 'ECP',
-      algorithmVersion: 'pd-ecp-2p@1.0.0',
+      algorithmVersion: 'pd-ecp-2p@1.1.0',
       cpWatts: 273.0952380952381,
       wPrimeJoules: 16857.142857142855,
       pmaxWatts: null,
@@ -478,6 +478,6 @@ describe('immutable power analysis confirmation', () => {
       cp_watts: 273.0952380952381,
     });
     expect(requests[1].url).toContain('snapshot_id=eq.');
-    expect(requests[1].url).toContain('algorithm_version=eq.pd-ecp-2p%401.0.0');
+    expect(requests[1].url).toContain('algorithm_version=eq.pd-ecp-2p%401.1.0');
   });
 });

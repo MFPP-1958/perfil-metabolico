@@ -48,6 +48,14 @@ describe('buildMetabolicScenario', () => {
     expect(conVo2max.target.mlss.powerWatts).toBeGreaterThan(soloVlamax.target.mlss.powerWatts);
   });
 
+  it('mantiene la economía del ciclista al subir el VO₂max, no la P@VO₂max', () => {
+    // Conservar la P@VO₂max real equivaldría a empeorar el coste de O₂ por vatio y
+    // dejaba el efecto de un VO₂max un 10 % mayor en +5,3 W en vez de +41,3 W.
+    const result = buildMetabolicScenario(inputs, config, { vlamax: 0.4, vo2max: 74.8 });
+    if (result.status !== 'calculated') throw new Error('El escenario debe calcularse.');
+    expect(result.change.mlssWattsDelta).toBeCloseTo(41.34, 1);
+  });
+
   it('avisa cuando el objetivo no se distingue de la sensibilidad del modelo', () => {
     const result = buildMetabolicScenario(inputs, { ...config, sensitivityVlamaxDelta: 0.1 }, { vlamax: 0.45 });
     if (result.status !== 'calculated') throw new Error('El escenario debe calcularse.');

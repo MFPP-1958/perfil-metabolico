@@ -18,10 +18,11 @@ describe('substrate metabolism profile', () => {
     expect(result.status).toBe('calculated');
     if (result.status !== 'calculated') return;
     expect(result.fatmax.powerWatts).toBeCloseTo(186.6884, 2);
-    expect(result.fatmax.fatOxidationGramsPerMin).toBeCloseTo(0.797, 3);
+    // El piruvato oxidado consume 3 O₂ por mmol (67,2 ml), no 1/0,02049 = 48,8 ml.
+    expect(result.fatmax.fatOxidationGramsPerMin).toBeCloseTo(0.6456, 3);
     expect(result.fatmax.carbohydrateGramsPerHour).toBeCloseTo(80.4408, 2);
-    expect(result.fatmax.energyKcalPerHour).toBeCloseTo(695.1118, 2);
-    expect(result.version).toBe('substrate-metabolism@1.0.0');
+    expect(result.fatmax.energyKcalPerHour).toBeCloseTo(701.6829, 2);
+    expect(result.version).toBe('substrate-metabolism@2.0.0');
   });
 
   it('anchors MLSS to the same crossing point as the Mader model', () => {
@@ -33,23 +34,36 @@ describe('substrate metabolism profile', () => {
     expect(result.mlss.pyruvateDeficit).toBeCloseTo(0, 4);
   });
 
-  it('peaks fat oxidation at FATmax and exhausts it at MLSS', () => {
+  it('keeps FATmax near the peak of fat oxidation and exhausts fat by the MLSS', () => {
     const result = buildSubstrateProfile(measuredInputs, config);
     expect(result.status).toBe('calculated');
     if (result.status !== 'calculated') return;
     const peak = Math.max(...result.curve.map((point) => point.fatOxidationGramsPerMin));
-    expect(result.fatmax.fatOxidationGramsPerMin).toBeCloseTo(peak, 2);
+    // FATmax es el anclaje de Mader (máximo déficit de piruvato); con la
+    // estequiometría real el pico de la curva queda muy cerca, no encima.
+    expect(result.fatmax.fatOxidationGramsPerMin).toBeGreaterThan(peak * 0.95);
     expect(result.mlss.fatOxidationGramsPerMin).toBeCloseTo(0, 2);
   });
 
-  it('raises carbohydrate cost monotonically with power', () => {
+  it('never attributes to carbohydrate more energy than the whole oxygen uptake provides', () => {
+    const result = buildSubstrateProfile(measuredInputs, config);
+    expect(result.status).toBe('calculated');
+    if (result.status !== 'calculated') return;
+    // Glucógeno: unos 4,19 kcal por gramo oxidado (0,829 l de O₂ a 5,05 kcal/l).
+    for (const point of [...result.curve, result.fatmax, result.mlss]) {
+      expect(point.carbohydrateGramsPerHour * 4.19).toBeLessThanOrEqual(point.energyKcalPerHour * 1.001);
+      expect(point.fatOxidationGramsPerMin).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('raises carbohydrate cost with power, never lowering it', () => {
     const result = buildSubstrateProfile(measuredInputs, config);
     expect(result.status).toBe('calculated');
     if (result.status !== 'calculated') return;
     expect(result.curve.length).toBeGreaterThan(20);
     for (let i = 1; i < result.curve.length; i += 1) {
       expect(result.curve[i].powerWatts).toBeGreaterThan(result.curve[i - 1].powerWatts);
-      expect(result.curve[i].carbohydrateGramsPerHour).toBeGreaterThan(result.curve[i - 1].carbohydrateGramsPerHour);
+      expect(result.curve[i].carbohydrateGramsPerHour).toBeGreaterThanOrEqual(result.curve[i - 1].carbohydrateGramsPerHour);
     }
   });
 

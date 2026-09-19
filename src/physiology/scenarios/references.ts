@@ -1,4 +1,4 @@
-export const SCENARIO_MODEL_VERSION = 'metabolic-scenario@1.0.0';
+export const SCENARIO_MODEL_VERSION = 'metabolic-scenario@2.0.0';
 
 export const SCENARIO_HYPOTHESIS_NOTICE =
   'El perfil objetivo es una hipótesis de trabajo del entrenador. No es una medición, no predice el resultado del entrenamiento y no afirma que el objetivo sea alcanzable.';
@@ -8,5 +8,5 @@ export const SCENARIO_MINOR_NOTICE =
 
 export const SCENARIO_LIMITATIONS = [
   'El modelo trata la VLa máx y el VO₂max como parámetros independientes. El entrenamiento que mueve uno rara vez deja el otro intacto, así que un escenario que solo mueve uno describe un cambio aislado que el organismo no suele conceder por separado.',
-  'La comparación conserva la masa corporal y la P@VO₂max reales. Un cambio de peso alteraría la conversión a vatios y haría que las dos curvas dejaran de ser comparables.',
+  'La comparación conserva la masa corporal y la economía real del ciclista (su coste de oxígeno por vatio). Con un VO₂max objetivo, la P@VO₂max del escenario sube en la misma proporción que el VO₂max por encima del reposo.',
 ] as const;

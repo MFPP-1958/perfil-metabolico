@@ -1,6 +1,6 @@
 import { MADER_CONSTANTS } from '../mader/references';
 import { runMaderModel, type MaderConfig, type MaderInputs } from '../mader/model';
-import { oxidativeCapacity, pyruvateDeficit, sweepMetabolicStates, type MetabolicState } from '../mader/sweep';
+import { pyruvateDeficit, sweepMetabolicStates, type MetabolicState } from '../mader/sweep';
 import { SUBSTRATE_CONSTANTS, SUBSTRATE_LIMITATIONS, SUBSTRATE_MODEL_VERSION } from './references';
 
 export interface SubstratePoint {
@@ -49,20 +49,23 @@ export type SubstrateProfileResult =
     };
 
 function describe(state: MetabolicState, vo2max: number, bodyMass: number, toWatts: (relative: number) => number): SubstratePoint {
-  const { lactateDistributionVolume, oxygenLactateEquivalent } = MADER_CONSTANTS;
-  const { pyruvatePerGlucosyl, glucosylMolarMassGrams, litresOxygenPerGramFat, kcalPerLitreOxygenCarbohydrate, kcalPerLitreOxygenFat } = SUBSTRATE_CONSTANTS;
+  const { lactateDistributionVolume } = MADER_CONSTANTS;
+  const {
+    pyruvatePerGlucosyl, glucosylMolarMassGrams, millilitresOxygenPerMmolPyruvate,
+    litresOxygenPerGramFat, kcalPerLitreOxygenCarbohydrate, kcalPerLitreOxygenFat,
+  } = SUBSTRATE_CONSTANTS;
 
-  const capacity = oxidativeCapacity(state.vo2Relative);
   const deficit = pyruvateDeficit(state);
   const distributionVolumeLitres = lactateDistributionVolume * bodyMass;
 
-  // Flujo glucolítico total del organismo, en mmol·s⁻¹ de equivalentes de lactato.
+  // Flujo glucolítico total del organismo, en mmol·s⁻¹ de piruvato (equivalentes de lactato).
   const glycolyticFlux = state.glycolyticRate * distributionVolumeLitres;
-  // Piruvato que la mitocondria alcanza a oxidar, limitado por la capacidad oxidativa.
-  const oxidisedFlux = Math.min(state.glycolyticRate, capacity) * distributionVolumeLitres;
-
   const vo2Absolute = state.vo2Relative * bodyMass;
-  const vo2FromCarbohydrate = (oxidisedFlux * 60) / oxygenLactateEquivalent;
+  // La constante de eliminación de Mader es un parámetro ajustado, no un equivalente
+  // químico: oxidar 1 mmol de piruvato exige 3 mmol de O₂ (67,2 ml). El carbohidrato
+  // oxidado no puede superar lo que el VO₂ total alcanza a oxidar.
+  const oxidisedFlux = Math.min(glycolyticFlux, vo2Absolute / 60 / millilitresOxygenPerMmolPyruvate);
+  const vo2FromCarbohydrate = oxidisedFlux * 60 * millilitresOxygenPerMmolPyruvate;
   const vo2FromFat = Math.max(0, vo2Absolute - vo2FromCarbohydrate);
 
   return {
@@ -71,7 +74,7 @@ function describe(state: MetabolicState, vo2max: number, bodyMass: number, toWat
     pyruvateDeficit: deficit,
     netLactateAccumulation: -deficit,
     fatOxidationGramsPerMin: vo2FromFat / 1000 / litresOxygenPerGramFat,
-    carbohydrateGramsPerHour: ((glycolyticFlux * 3600) / pyruvatePerGlucosyl) * (glucosylMolarMassGrams / 1000),
+    carbohydrateGramsPerHour: ((oxidisedFlux * 3600) / pyruvatePerGlucosyl) * (glucosylMolarMassGrams / 1000),
     energyKcalPerHour: ((vo2FromCarbohydrate * 60) / 1000) * kcalPerLitreOxygenCarbohydrate + ((vo2FromFat * 60) / 1000) * kcalPerLitreOxygenFat,
   };
 }

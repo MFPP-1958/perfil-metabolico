@@ -94,11 +94,16 @@ export function buildMetabolicScenario(
     pVo2max: inputs.pVo2max.value,
   }, config);
 
+  // Se conserva la economía (coste de O₂ por vatio), no la P@VO₂max: más VO₂max con
+  // la misma economía rinde más vatios en el techo. Conservar la P@VO₂max equivalía a
+  // empeorar la economía y ocultaba casi todo el efecto de subir el VO₂max.
+  const targetPVo2max = inputs.pVo2max.value
+    * (appliedTargets.vo2max - config.restingVo2) / (realValues.vo2max - config.restingVo2);
   const target = projectSubstrateCurve({
     vo2max: appliedTargets.vo2max,
     vlamax: appliedTargets.vlamax,
     bodyMass: inputs.bodyMass.value,
-    pVo2max: inputs.pVo2max.value,
+    pVo2max: targetPVo2max,
   }, config);
 
   const referencePowerWatts = positive(config.referencePowerWatts)
