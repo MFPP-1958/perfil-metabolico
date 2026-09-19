@@ -273,6 +273,38 @@ export function AnalysisProvider({
     }
   }, [api, athlete]);
 
+  const addObservations = useCallback(async (observations: Observation[]) => {
+    if (!athlete || !observations.length || observations.some((item) => item.athleteId !== athlete.id)) return false;
+    if (!api.createObservations) return false;
+    const athleteAtStart = athlete.id;
+    try {
+      // Sin adelantarse: el lote aparece cuando el servidor lo ha aceptado entero.
+      const saved = await api.createObservations(observations);
+      setAthlete((current) => current && current.id === athleteAtStart
+        ? { ...current, observations: [...saved, ...current.observations] }
+        : current);
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Los valores no se guardaron.');
+      return false;
+    }
+  }, [api, athlete]);
+
+  const retractObservation = useCallback(async (observationId: string, reason: string) => {
+    if (!athlete || !api.retractObservation) return false;
+    const athleteAtStart = athlete.id;
+    try {
+      const retracted = await api.retractObservation({ athleteId: athlete.id, observationId, reason });
+      setAthlete((current) => current && current.id === athleteAtStart
+        ? { ...current, observations: current.observations.map((item) => item.id === observationId ? retracted : item) }
+        : current);
+      return true;
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'No se pudo retirar el valor.');
+      return false;
+    }
+  }, [api, athlete]);
+
   const value = useMemo<AnalysisContextValue>(() => ({
     athletes,
     athleteId,
@@ -290,9 +322,13 @@ export function AnalysisProvider({
     synchronize,
     reloadRoster: loadRoster,
     addObservation,
+    addObservations,
+    retractObservation,
     clearError: () => setError(''),
   }), [
     addObservation,
+    addObservations,
+    retractObservation,
     athlete,
     athleteId,
     athletes,

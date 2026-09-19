@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -13,7 +14,7 @@ function renderIntegratedWorkspace(api: Parameters<typeof AnalysisProvider>[0]['
   return render(
     <AnalysisProvider api={api} now={() => new Date('2026-09-05T12:00:00Z')}>
       <AnalysisContextBar />
-      <AthleteWorkspace />
+      <MemoryRouter><AthleteWorkspace /></MemoryRouter>
     </AnalysisProvider>,
   );
 }

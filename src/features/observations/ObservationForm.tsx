@@ -3,7 +3,7 @@ import { metricCatalog, type MetricCode } from '../../domain/metrics';
 import { observationSchema, type Observation } from '../../domain/observation';
 
 const selectableMetrics: readonly MetricCode[] = [
-  'ftp', 'cp', 'lt1', 'vt1', 'p_vo2max', 'pmax', 'vo2max', 'vlamax', 'lactate', 'body_mass', 'tte', 'rpe',
+  'ftp', 'mftp', 'cp', 'w_prime', 'frc', 'mlss', 'lt1', 'vt1', 'p_vo2max', 'pmax', 'vo2max', 'vlamax', 'lactate', 'body_mass', 'tte', 'rpe',
 ];
 
 function localToday() {

@@ -90,6 +90,8 @@ function context(overrides: Partial<AnalysisContextValue> = {}): AnalysisContext
     synchronize: vi.fn().mockResolvedValue(undefined),
     reloadRoster: vi.fn().mockResolvedValue(undefined),
     addObservation: vi.fn().mockResolvedValue(true),
+    addObservations: vi.fn().mockResolvedValue(true),
+    retractObservation: vi.fn().mockResolvedValue(true),
     clearError: vi.fn(),
     ...overrides,
   };

@@ -5,7 +5,7 @@ declare global { interface Window { axe: { run(): Promise<{ violations: Array<{ 
 
 const axePath = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
 
-for (const route of ['/', '/potencia', '/durabilidad', '/tests', '/sesiones']) {
+for (const route of ['/', '/perfil', '/datos', '/potencia', '/durabilidad', '/tests', '/sesiones']) {
   test(`accessibility scan ${route}`, async ({ page }) => {
     await page.route('**/.netlify/functions/athletes**', async (request) => request.fulfill({ json: [] }));
     await page.goto(route);
@@ -225,3 +225,47 @@ test('populated Durability meets axe, keyboard, focus, semantics and 44px target
   await expect(page.getByRole('status').filter({ hasText: 'Sincronización parcial' }).first()).toBeVisible();
   await expect(page.getByRole('img', { name: /10 s: fresca 900 W/i })).toBeVisible();
 });
+
+const profileAthleteId = '44444444-4444-4444-8444-444444444444';
+const profileObservations = [
+  ['ftp', 236, 'W', '2026-09-15T15:45:07.000Z', 'intervals_icu', 'imported_estimate'],
+  ['ftp', 239, 'W', '2026-09-16T10:29:10.000Z', 'field_test', 'measured'],
+  ['vo2max', 71.5, 'ml·kg⁻¹·min⁻¹', '2026-09-18T07:07:10.000Z', 'external_model', 'calculated'],
+  ['vlamax', 0.3, 'mmol·l⁻¹·s⁻¹', '2026-09-18T07:07:52.000Z', 'external_model', 'calculated'],
+  ['p_vo2max', 392, 'W', '2026-09-18T07:08:18.000Z', 'external_model', 'calculated'],
+  ['body_mass', 54.8, 'kg', '2026-09-18T07:08:43.000Z', 'manual', 'measured'],
+].map(([metricCode, value, unit, observedAt, origin, quality], index) => ({
+  id: `55555555-5555-4555-8555-${String(index + 1).padStart(12, '0')}`,
+  athleteId: profileAthleteId, metricCode, value, unit, observedAt, origin, quality,
+  protocol: { name: 'x', version: '1' },
+  ...(origin === 'external_model' ? { sourceReference: { software: 'WKO5' } } : {}),
+}));
+
+for (const route of ['/perfil', '/datos']) {
+  test(`populated ${route} meets axe, 44px targets and keyboard focus`, async ({ page }) => {
+    await page.route('**/.netlify/functions/athletes**', async (request) => {
+      const url = new URL(request.request().url());
+      const athlete = { id: profileAthleteId, intervalsId: 'i593028', name: 'Ciclista Perfil', observations: profileObservations };
+      await request.fulfill({ json: url.searchParams.get('syncState') === 'true' ? null : url.searchParams.has('athleteId') ? athlete : [athlete] });
+    });
+    await page.goto(route);
+    await page.getByLabel('Ciclista activo').selectOption(profileAthleteId);
+    await expect(page.getByRole('heading', { name: 'Ciclista Perfil' })).toBeVisible();
+    await page.addScriptTag({ path: axePath });
+    const violations = await page.evaluate(async () => (await window.axe.run()).violations.filter((violation) => violation.impact === 'critical' || violation.impact === 'serious'));
+    expect(violations).toEqual([]);
+    const undersizedTargets = await page.locator('a[href], button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex="0"]')
+      .evaluateAll((elements) => elements.flatMap((element) => {
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height || getComputedStyle(element).visibility === 'hidden') return [];
+        // Los enlaces dentro de un párrafo siguen la excepción de WCAG 2.5.8 para texto en línea.
+        if (element.tagName === 'A' && element.closest('p')) return [];
+        return rect.width < 44 || rect.height < 44
+          ? [{ tag: element.tagName, label: element.getAttribute('aria-label') ?? element.textContent?.trim(), width: rect.width, height: rect.height }]
+          : [];
+      }));
+    expect(undersizedTargets).toEqual([]);
+    await page.keyboard.press('Tab');
+    await expect(page.locator(':focus')).toBeVisible();
+  });
+}

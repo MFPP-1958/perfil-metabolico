@@ -22,6 +22,10 @@ export interface AnalysisContextValue {
   reloadRoster(): Promise<void>;
   /** Resuelve a cierto solo cuando el servidor ha aceptado y guardado la observación. */
   addObservation(observation: Observation): Promise<boolean>;
+  /** Guarda varios valores de una vez; o entran todos o ninguno. Resuelve a cierto si el servidor los aceptó. */
+  addObservations(observations: Observation[]): Promise<boolean>;
+  /** Retira un valor erróneo con su motivo, sin borrarlo del historial. */
+  retractObservation(observationId: string, reason: string): Promise<boolean>;
   clearError(): void;
 }
 

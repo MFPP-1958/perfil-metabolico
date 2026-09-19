@@ -12,6 +12,8 @@ import { TestsWorkspace } from '../features/experimental/TestsWorkspace';
 import { PowerWorkspace } from '../features/power/PowerWorkspace';
 import type { PowerApi } from '../features/power/powerApi';
 import { appRoutes, type AppRoute } from './routes';
+import { DataSourcesWorkspace } from '../features/profile/DataSourcesWorkspace';
+import { ProfileWorkspace } from '../features/profile/ProfileWorkspace';
 import { SessionsWorkspace } from '../features/sessions/SessionsWorkspace';
 import type { SessionsApi } from '../features/sessions/sessionsApi';
 
@@ -59,6 +61,7 @@ function Application({
   sessionsAnalysisApi?: SessionsApi;
 }) {
   const routeContent: Record<string, ReactNode> = {
+    '/perfil': <ProfileWorkspace />, '/datos': <DataSourcesWorkspace />,
     '/potencia': <PowerWorkspace api={powerAnalysisApi} />, '/durabilidad': <DurabilityWorkspace api={durabilityAnalysisApi} />, '/tests': <TestsWorkspace />, '/sesiones': <SessionsWorkspace api={sessionsAnalysisApi} />,
   };
   return (
