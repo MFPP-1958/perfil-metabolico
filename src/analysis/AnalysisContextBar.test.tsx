@@ -139,6 +139,9 @@ describe('AnalysisContextBar', () => {
 
   it.each([
     [{ status: 'partial' as const, synchronizedAt: '2026-09-05T12:01:00.000Z', warnings: ['power_curves'] }, 'Sincronización parcial: potencia'],
+    [{ status: 'partial' as const, synchronizedAt: '2026-09-05T12:01:00.000Z', warnings: ['durability_curves:2_rejected'] }, 'Sincronización parcial: durabilidad: 2 descartados'],
+    // Un aviso redactado se muestra entero aunque lleve dos puntos.
+    [{ status: 'partial' as const, synchronizedAt: '2026-09-05T12:01:00.000Z', warnings: ['Faltan umbrales: configúralos en Intervals.icu.'] }, 'Sincronización parcial: Faltan umbrales: configúralos en Intervals.icu.'],
     [new Error('Intervals.icu no responde.'), 'Intervals.icu no responde.'],
   ])('announces partial and failed outcomes', async (outcome, message) => {
     const sync = outcome instanceof Error

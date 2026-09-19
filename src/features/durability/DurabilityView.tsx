@@ -70,6 +70,7 @@ export function DurabilityView({ snapshot }: { snapshot: DurabilitySnapshotRespo
         <div className="durability-notice" role="status">
           <strong>Sin curvas tras trabajo acumulado</strong>
           <p>La potencia fresca está disponible, pero faltan los niveles kJ0 y kJ1 para medir el cambio.</p>
+          <p>Intervals.icu solo calcula la potencia tras trabajo acumulado si el ciclista tiene configurados sus dos umbrales de fatiga, en kilojulios. Revísalos en Intervals.icu: en la gráfica de curva de potencia, pulsa «? kJ» y escribe los kilojulios. Después vuelve a sincronizar.</p>
         </div>
       )}
 

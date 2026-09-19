@@ -6,6 +6,8 @@ import {
   createSyncHandler,
   loadIntervalsAthleteData,
   normalizeAthleteData,
+  fatigueThresholdsMissing,
+  FATIGUE_THRESHOLDS_MISSING_WARNING,
   persistNormalizedAthleteData,
 } from '../../netlify/functions/sync-athlete';
 import durabilityCurves from '../../src/server/intervals/fixtures/durability-curves.json';
@@ -434,6 +436,32 @@ describe('athlete synchronization', () => {
 
     expect(normalized.durabilitySnapshot?.fresh_curve.points).toHaveLength(4);
     expect(normalized.warnings).toContain('Faltan curvas fatigadas de Durabilidad para uno o más umbrales.');
+  });
+
+  it('names the missing fatigue thresholds as the cause when Intervals.icu has none configured', () => {
+    const request = {
+      athleteId: internalAthleteId,
+      oldest: '2026-06-08', newest: '2026-09-05', days: 90, environment: 'all' as const, syncKey: 'sync-3',
+    };
+    const normalized = normalizeAthleteData({
+      athlete: { name: 'Ciclista', sportSettings: [{ types: ['Ride', 'VirtualRide'], after_kj0: null, after_kj1: null }] },
+      activities: [],
+      powerCurves: { list: [durabilityCurves.list[1]] },
+      durabilityCurves: { list: [durabilityCurves.list[1]] },
+      plannedWorkouts: [],
+      warnings: [],
+      updated: ['power_curves', 'durability_curves'],
+      received: { durability_curves: 1 },
+    }, request, new Date('2026-09-05T12:00:00Z'));
+
+    expect(normalized.warnings).toContain(FATIGUE_THRESHOLDS_MISSING_WARNING);
+    expect(normalized.warnings).not.toContain('Faltan curvas fatigadas de Durabilidad para uno o más umbrales.');
+  });
+
+  it('detects configured fatigue thresholds only on the cycling settings', () => {
+    expect(fatigueThresholdsMissing({ sportSettings: [{ types: ['Run'], after_kj0: 500 }, { types: ['Ride'], after_kj0: null, after_kj1: null }] })).toBe(true);
+    expect(fatigueThresholdsMissing({ sportSettings: [{ types: ['Ride'], after_kj0: 1000, after_kj1: 1500 }] })).toBe(false);
+    expect(fatigueThresholdsMissing(null)).toBe(false);
   });
 
   it('normalizes a non-positive source weight to null before atomic persistence', () => {

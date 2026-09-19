@@ -202,6 +202,19 @@ async function beginSyncDefault(athleteId: string, syncKey: string) {
   if (!response.ok) throw new Error('Unable to start synchronized athlete request');
 }
 
+export const FATIGUE_THRESHOLDS_MISSING_WARNING =
+  'Intervals.icu no tiene configurados los umbrales de fatiga (kJ) de este ciclista y sin ellos no calcula la potencia tras trabajo acumulado. Configúralos en Intervals.icu: en la gráfica de curva de potencia, pulsa «? kJ» y escribe los kilojulios; después vuelve a sincronizar.';
+
+/** Cierto si la ficha de ciclismo del atleta existe y no tiene ninguno de los dos umbrales de fatiga. */
+export function fatigueThresholdsMissing(athlete: unknown): boolean {
+  const settings = (athlete as { sportSettings?: unknown } | null)?.sportSettings;
+  if (!Array.isArray(settings)) return false;
+  const ride = settings.find((setting) => Array.isArray(setting?.types) && setting.types.includes('Ride'));
+  if (!ride) return false;
+  const configured = (value: unknown) => typeof value === 'number' && value > 0;
+  return !configured(ride.after_kj0) && !configured(ride.after_kj1);
+}
+
 export async function loadIntervalsAthleteData(
   client: IntervalsClient,
   intervalsAthleteId: string,
@@ -417,7 +430,10 @@ export function normalizeAthleteData(
       );
       durabilityAccepted = 1 + mapped.fatigued.length;
       if (mapped.fatigued.length < 2 && mapped.rejected.length === 0) {
-        warnings.add('Faltan curvas fatigadas de Durabilidad para uno o más umbrales.');
+        // La causa habitual no es la falta de datos, sino que no hay umbrales configurados.
+        warnings.add(fatigueThresholdsMissing(data.athlete)
+          ? FATIGUE_THRESHOLDS_MISSING_WARNING
+          : 'Faltan curvas fatigadas de Durabilidad para uno o más umbrales.');
       }
     } catch {
       warnings.add('durability_curves:1_rejected');

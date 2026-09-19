@@ -35,12 +35,15 @@ function warningMessage(warnings: readonly string[]) {
     athlete: 'perfil',
     activities: 'actividades',
     power_curves: 'potencia',
+    durability_curves: 'durabilidad',
     planned_workouts: 'entrenamientos',
   };
   const translated = warnings.map((warning) => {
-    const [component, rejection] = warning.split(':');
-    const label = labels[component] ?? component;
-    const rejected = rejection?.match(/^(\d+)_rejected$/)?.[1];
+    // Solo los códigos internos se traducen; un aviso ya redactado se muestra entero.
+    const code = warning.match(/^([a-z_]+)(?::(\d+)_rejected)?$/);
+    if (!code) return warning;
+    const label = labels[code[1]] ?? code[1];
+    const rejected = code[2];
     return rejected ? `${label}: ${rejected} descartado${rejected === '1' ? '' : 's'}` : label;
   });
   return translated.length
