@@ -451,3 +451,4 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .batch-form__context, .batch-form__values { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; }
 .batch-form .primary-action { justify-self: start; }
 .data-sources__retired { margin-top: 28px; }
+.metric-tile__unit { font-size: .95rem; font-weight: 700; color: var(--muted); }

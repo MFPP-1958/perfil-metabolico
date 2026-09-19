@@ -4,7 +4,7 @@ import { useAnalysis } from '../../analysis/AnalysisContext';
 import { checkThresholdCoherence, COHERENCE_TOLERANCE_PERCENT, resolveProfile, type ProfileGroup, type ResolvedMetric } from '../../domain/profile';
 import { runMaderModel } from '../../physiology/mader/model';
 import { maderInputsFromProfile } from '../experimental/maderInputs';
-import { ageText, formatDay, formatMetric, formatWattsPerKg, sourceText, TIER_SYMBOLS } from './provenance';
+import { ageText, formatDay, formatMetricParts, formatWattsPerKg, sourceText, TIER_SYMBOLS } from './provenance';
 
 const GROUPS: ReadonlyArray<{ group: ProfileGroup; title: string }> = [
   { group: 'capacities', title: 'Capacidades máximas' },
@@ -30,7 +30,10 @@ function MetricTile({ metric, bodyMass, previous, compareDate }: { metric: Resol
   return (
     <div role="group" aria-label={metric.label} className={metric.expired ? 'metric-tile metric-tile--expired' : 'metric-tile'}>
       <span className="metric-tile__label">{metric.label}</span>
-      <strong className="metric-tile__value">{formatMetric(metric.metricCode, current.value, current.unit)}</strong>
+      <span className="metric-tile__reading">
+        <strong className="metric-tile__value">{formatMetricParts(metric.metricCode, current.value, current.unit).number}</strong>
+        {' '}<span className="metric-tile__unit">{formatMetricParts(metric.metricCode, current.value, current.unit).unit}</span>
+      </span>
       {perKg && <span className="metric-tile__secondary">{perKg}</span>}
       <span className="metric-tile__source">
         <span aria-hidden="true">{TIER_SYMBOLS[metric.tier]}</span> {sourceText(current)} · {formatDay(current.observedAt)}

@@ -87,7 +87,7 @@ export function Wko5BatchForm({ athleteId, today, onSubmit }: {
     setSaving(false);
     if (!ok) return;
     setValues(emptyValues());
-    setSaved(`Guardados ${observations.length} ${observations.length === 1 ? 'valor' : 'valores'} de ${software.trim()} del ${formatDay(observedAtFor(date, today))}.`);
+    setSaved(`${observations.length === 1 ? 'Guardado 1 valor' : `Guardados ${observations.length} valores`} de ${software.trim()} del ${formatDay(observedAtFor(date, today))}.`);
   }
 
   return (

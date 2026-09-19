@@ -36,10 +36,16 @@ function formatNumber(value: number, decimals: number) {
   return format.format(value);
 }
 
-/** Valor con su unidad, con los decimales que tienen sentido para esa métrica. TTE se muestra en minutos. */
+/** Cifra y unidad por separado, para poder dar a la unidad menos peso visual. TTE se muestra en minutos. */
+export function formatMetricParts(metricCode: MetricCode, value: number, unit: string) {
+  if (metricCode === 'tte') return { number: formatNumber(value / 60, 0), unit: 'min' };
+  return { number: formatNumber(value, DECIMALS[metricCode] ?? 0), unit };
+}
+
+/** Valor con su unidad, con los decimales que tienen sentido para esa métrica. */
 export function formatMetric(metricCode: MetricCode, value: number, unit: string) {
-  if (metricCode === 'tte') return `${formatNumber(value / 60, 0)} min`;
-  return `${formatNumber(value, DECIMALS[metricCode] ?? 0)} ${unit}`;
+  const parts = formatMetricParts(metricCode, value, unit);
+  return `${parts.number} ${parts.unit}`;
 }
 
 export function formatWattsPerKg(watts: number, kilograms: number) {
