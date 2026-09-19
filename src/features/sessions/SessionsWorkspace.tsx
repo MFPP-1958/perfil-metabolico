@@ -9,8 +9,10 @@ import {
   DURATION_TOLERANCE,
   evaluateCompliance,
   resolveTargetWatts,
+  type DetectedInterval,
   type Verdict,
 } from '../../training/title-prescription/compliance';
+import { findBestEfforts, MAX_PAUSE_SECONDS } from '../../training/title-prescription/bestEfforts';
 import { parseTitlePrescription, type PrescriptionReference, type TitlePrescription, type TitleTarget } from '../../training/title-prescription/parseTitle';
 import { decimalFormat, formatDuration, prescriptionSummary, referencesFromObservations } from './sessionFormat';
 import { sessionsApi as defaultSessionsApi, type SessionActivity, type SessionDetail, type SessionsApi } from './sessionsApi';
@@ -18,6 +20,7 @@ import { sessionsApi as defaultSessionsApi, type SessionActivity, type SessionDe
 const INTERNAL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type TargetKind = 'percent' | 'watts' | 'zone' | 'none';
+type SeriesSource = 'intervals' | 'stream';
 
 interface PrescriptionForm {
   repetitions: string;
@@ -85,10 +88,40 @@ function VerdictChip({ label, verdict }: { label: string; verdict: Verdict }) {
 
 // ---------- Detalle de una sesión ----------
 
+function IntervalRows({ rows, selection, onToggle }: { rows: readonly DetectedInterval[]; selection?: readonly number[]; onToggle?: (index: number) => void }) {
+  return (
+    <>
+      {rows.map((interval) => (
+        <tr key={interval.index} className={selection?.includes(interval.index) ? 'session-row--selected' : undefined}>
+          {selection && onToggle && (
+            <td>
+              <input
+                type="checkbox"
+                aria-label={`Intervalo ${interval.index + 1} cuenta como serie`}
+                checked={selection.includes(interval.index)}
+                disabled={interval.averageWatts == null}
+                onChange={() => onToggle(interval.index)}
+              />
+            </td>
+          )}
+          <td>{interval.index + 1}</td>
+          {selection && <td>{interval.type === 'WORK' ? 'Trabajo' : interval.type === 'RECOVERY' ? 'Recuperación' : interval.type}</td>}
+          <td>{formatClock(interval.startSeconds)}</td>
+          <td>{formatDuration(interval.movingSeconds)}</td>
+          <td>{interval.averageWatts != null ? `${Math.round(interval.averageWatts)} W` : '—'}</td>
+          <td>{interval.averageHeartRate != null ? `${Math.round(interval.averageHeartRate)} ppm` : '—'}</td>
+          <td>{interval.averageCadence != null ? `${Math.round(interval.averageCadence)} rpm` : '—'}</td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 function SessionComparison({ activity, detail, observations }: { activity: SessionActivity; detail: SessionDetail; observations: readonly Observation[] }) {
   const parsed = useMemo(() => parseTitlePrescription(activity.name ?? ''), [activity.name]);
   const [form, setForm] = useState<PrescriptionForm>(() => formFromPrescription(parsed));
   const [manualSelection, setManualSelection] = useState<number[] | null>(null);
+  const [chosenSource, setChosenSource] = useState<SeriesSource | null>(null);
 
   const references = useMemo(() => referencesFromObservations(observations, detail.powerZones), [detail.powerZones, observations]);
   const repetitions = parseNumber(form.repetitions);
@@ -96,10 +129,19 @@ function SessionComparison({ activity, detail, observations }: { activity: Sessi
   const repSeconds = repSecondsValue === null ? null : repSecondsValue * 60;
   const target = targetFromForm(form, parsed);
   const resolution = resolveTargetWatts(target, references);
-  const selection = manualSelection ?? defaultSelection(detail.intervals, repSeconds, repetitions);
-  const selected = detail.intervals.filter((interval) => selection.includes(interval.index));
-  const result = evaluateCompliance(selected, resolution, { repetitions, repSeconds });
-  const noneFits = manualSelection === null && repSeconds !== null && selection.length === 0;
+  const automaticSelection = defaultSelection(detail.intervals, repSeconds, repetitions);
+  const selection = manualSelection ?? automaticSelection;
+  const stream = detail.stream;
+  const efforts = stream && repSeconds && repetitions ? findBestEfforts(stream, repSeconds, repetitions) : [];
+
+  // Si Intervals.icu no detectó intervalos de la duración pautada, las series se
+  // buscan en la señal de potencia. El entrenador puede cambiar de fuente.
+  const automaticSource: SeriesSource = automaticSelection.length === 0 && stream && repSeconds ? 'stream' : 'intervals';
+  const source = chosenSource === 'stream' && !stream ? 'intervals' : chosenSource ?? automaticSource;
+  const fromStream = source === 'stream';
+  const counted = fromStream ? efforts : detail.intervals.filter((interval) => selection.includes(interval.index));
+  const result = evaluateCompliance(counted, resolution, { repetitions, repSeconds });
+  const noneFits = !fromStream && manualSelection === null && repSeconds !== null && selection.length === 0;
 
   const update = (patch: Partial<PrescriptionForm>) => setForm((current) => ({ ...current, ...patch }));
   const toggle = (index: number) => setManualSelection(
@@ -108,6 +150,9 @@ function SessionComparison({ activity, detail, observations }: { activity: Sessi
 
   const parsedTarget = parsed.target?.kind === 'percent' ? parsed.target : null;
   const valueLabel = form.targetKind === 'watts' ? 'Vatios' : form.targetKind === 'zone' ? 'Zona' : 'Porcentaje';
+  const missingChip = result.missingRepetitions > 0 && !noneFits && (fromStream
+    ? `Solo caben ${result.count} ${result.count === 1 ? 'bloque' : 'bloques'} en la actividad`
+    : result.missingRepetitions === 1 ? 'Falta 1 serie' : `Faltan ${result.missingRepetitions} series`);
 
   return (
     <article className="session-comparison" aria-labelledby="session-title">
@@ -156,6 +201,18 @@ function SessionComparison({ activity, detail, observations }: { activity: Sessi
         </p>
       </fieldset>
 
+      <fieldset className="session-source">
+        <legend>Series tomadas de</legend>
+        <label>
+          <input type="radio" name="series-source" checked={!fromStream} onChange={() => setChosenSource('intervals')} />
+          Intervalos detectados por Intervals.icu
+        </label>
+        <label>
+          <input type="radio" name="series-source" checked={fromStream} disabled={!stream} onChange={() => setChosenSource('stream')} />
+          Mejores bloques de la señal de potencia{stream ? '' : ' (Intervals.icu no ha dado la señal)'}
+        </label>
+      </fieldset>
+
       <section aria-label="Resultado" className="session-result">
         <div className="model-summary">
           <p><span>Objetivo</span><strong>{resolution.status === 'ok' ? `${Math.round(resolution.watts)} W` : '—'}</strong></p>
@@ -167,63 +224,70 @@ function SessionComparison({ activity, detail, observations }: { activity: Sessi
         </div>
         <p className="session-verdict">
           <VerdictChip label="Potencia" verdict={result.powerVerdict} />
-          <VerdictChip label="Duración" verdict={result.durationVerdict} />
-          {/* Si no encaja ningún intervalo, las series no constan como no hechas: solo no se han detectado. */}
-          {result.missingRepetitions > 0 && !noneFits && (
-            <span className="quality-chip quality-chip--rejected">{result.missingRepetitions === 1 ? 'Falta 1 serie' : `Faltan ${result.missingRepetitions} series`}</span>
-          )}
+          {fromStream
+            // Los bloques miden lo que pide la pauta por construcción: no hay duración que juzgar.
+            ? <span className="quality-chip">Duración: la fija la pauta</span>
+            : <VerdictChip label="Duración" verdict={result.durationVerdict} />}
+          {missingChip && <span className="quality-chip quality-chip--rejected">{missingChip}</span>}
         </p>
         {noneFits && (
           <p className="model-warning" role="status">
             Ningún intervalo detectado dura lo que pide la pauta ({formatDuration(repSeconds)} ± {Math.round(DURATION_TOLERANCE * 100)} %), así que no hay veredicto.
             Intervals.icu suele trocear los esfuerzos largos en tramos más cortos, o no detectarlos si fueron muy continuos.
-            Si reconoces las series en la tabla, márcalas a mano.
+            {stream ? ' Elige «Mejores bloques de la señal de potencia» o marca a mano los intervalos.' : ' Si reconoces las series en la tabla, márcalas a mano.'}
+          </p>
+        )}
+        {fromStream && (
+          <p className="session-note" role="status">
+            {chosenSource === null && 'Intervals.icu no detectó intervalos de la duración pautada, así que las series se buscan en la señal de potencia. '}
+            Son los {repetitions ?? ''} bloques de {repSeconds ? formatDuration(repSeconds) : '—'} que, sin solaparse, dan la potencia media más alta de la actividad;
+            no se cuenta ningún bloque con una parada de más de {MAX_PAUSE_SECONDS} s dentro. Si la sesión no se hizo como estaba pautada,
+            estos bloques son simplemente lo mejor que hubo.
           </p>
         )}
       </section>
 
-      <h3>Intervalos detectados por Intervals.icu</h3>
-      {detail.intervals.length === 0 ? (
-        <p>Intervals.icu no detectó intervalos en esta actividad.</p>
+      {fromStream ? (
+        <>
+          <h3>Bloques encontrados en la señal de potencia</h3>
+          {efforts.length === 0 ? (
+            <p>No cabe ningún bloque de esa duración en la actividad.</p>
+          ) : (
+            <div className="power-table-scroll" tabIndex={0} role="region" aria-label="Bloques encontrados">
+              <table>
+                <thead>
+                  <tr><th scope="col">N.º</th><th scope="col">Inicio</th><th scope="col">Duración</th><th scope="col">Potencia</th><th scope="col">FC</th><th scope="col">Cadencia</th></tr>
+                </thead>
+                <tbody><IntervalRows rows={efforts} /></tbody>
+              </table>
+            </div>
+          )}
+        </>
       ) : (
-        <div className="power-table-scroll" tabIndex={0} role="region" aria-label="Intervalos detectados">
-          <table>
-            <thead>
-              <tr><th scope="col">Serie</th><th scope="col">N.º</th><th scope="col">Tipo</th><th scope="col">Inicio</th><th scope="col">Duración</th><th scope="col">Potencia</th><th scope="col">FC</th><th scope="col">Cadencia</th></tr>
-            </thead>
-            <tbody>
-              {detail.intervals.map((interval) => (
-                <tr key={interval.index} className={selection.includes(interval.index) ? 'session-row--selected' : undefined}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      aria-label={`Intervalo ${interval.index + 1} cuenta como serie`}
-                      checked={selection.includes(interval.index)}
-                      disabled={interval.averageWatts == null}
-                      onChange={() => toggle(interval.index)}
-                    />
-                  </td>
-                  <td>{interval.index + 1}</td>
-                  <td>{interval.type === 'WORK' ? 'Trabajo' : interval.type === 'RECOVERY' ? 'Recuperación' : interval.type}</td>
-                  <td>{formatClock(interval.startSeconds)}</td>
-                  <td>{formatDuration(interval.movingSeconds)}</td>
-                  <td>{interval.averageWatts != null ? `${Math.round(interval.averageWatts)} W` : '—'}</td>
-                  <td>{interval.averageHeartRate != null ? `${Math.round(interval.averageHeartRate)} ppm` : '—'}</td>
-                  <td>{interval.averageCadence != null ? `${Math.round(interval.averageCadence)} rpm` : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {manualSelection !== null && (
-        <button type="button" className="text-action" onClick={() => setManualSelection(null)}>Volver a la selección automática</button>
+        <>
+          <h3>Intervalos detectados por Intervals.icu</h3>
+          {detail.intervals.length === 0 ? (
+            <p>Intervals.icu no detectó intervalos en esta actividad.</p>
+          ) : (
+            <div className="power-table-scroll" tabIndex={0} role="region" aria-label="Intervalos detectados">
+              <table>
+                <thead>
+                  <tr><th scope="col">Serie</th><th scope="col">N.º</th><th scope="col">Tipo</th><th scope="col">Inicio</th><th scope="col">Duración</th><th scope="col">Potencia</th><th scope="col">FC</th><th scope="col">Cadencia</th></tr>
+                </thead>
+                <tbody><IntervalRows rows={detail.intervals} selection={selection} onToggle={toggle} /></tbody>
+              </table>
+            </div>
+          )}
+          {manualSelection !== null && (
+            <button type="button" className="text-action" onClick={() => setManualSelection(null)}>Volver a la selección automática</button>
+          )}
+        </>
       )}
 
       <p className="session-note">
-        La pauta se lee del título porque hoy no se prescribe dentro de Intervals.icu. Por defecto cuentan como series los intervalos
-        de trabajo cuya duración encaja con la pauta; la potencia es la media ponderada por el tiempo. Cuando prescribas en
-        Intervals.icu, esto pasará a leer el entrenamiento planificado.
+        La pauta se lee del título porque hoy no se prescribe dentro de Intervals.icu. Con los intervalos de Intervals.icu cuentan por
+        defecto los de trabajo cuya duración encaja con la pauta; la potencia es siempre la media ponderada por el tiempo. Cuando
+        prescribas en Intervals.icu, esto pasará a leer el entrenamiento planificado.
       </p>
     </article>
   );

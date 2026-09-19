@@ -50,7 +50,7 @@ test('coach reviews real athlete data and opens unfinished module demos explicit
       index, type, startSeconds: index * 300, movingSeconds, averageWatts, averageHeartRate: 160, averageCadence: 90,
     });
     await route.fulfill({ json: url.searchParams.has('activityId')
-      ? { activityId, powerZones: null, intervals: [
+      ? { activityId, powerZones: null, stream: null, intervals: [
         interval(0, 'RECOVERY', 900, 150), interval(1, 'WORK', 300, 290), interval(2, 'WORK', 295, 285), interval(3, 'WORK', 305, 280),
       ] }
       : { activities: [{

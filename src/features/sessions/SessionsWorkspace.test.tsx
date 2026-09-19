@@ -35,9 +35,18 @@ function interval(index: number, type: string, movingSeconds: number, averageWat
   return { index, type, startSeconds: index * 300, movingSeconds, averageWatts, averageHeartRate: 170, averageCadence: 92 };
 }
 
+function powerStream(segments: Array<[seconds: number, watts: number]>): NonNullable<SessionDetail['stream']> {
+  const watts = segments.flatMap(([seconds, value]) => Array<number>(seconds).fill(value));
+  return { time: watts.map((_, second) => second), watts, heartRate: watts.map(() => 160), cadence: watts.map(() => 90) };
+}
+
+// Dos bloques de 25 min a 198 y 204 W que Intervals.icu no separa.
+const umbralStream = powerStream([[300, 100], [1500, 198], [600, 120], [1500, 204], [300, 100]]);
+
 const vo2Detail: SessionDetail = {
   activityId: vo2Id,
   powerZones: [55, 75, 90, 105, 120, 150, 999],
+  stream: null,
   intervals: [
     interval(0, 'RECOVERY', 1200, 150),
     interval(1, 'WORK', 20, 600),
@@ -52,13 +61,14 @@ const vo2Detail: SessionDetail = {
 const umbralDetail: SessionDetail = {
   activityId: umbralId,
   powerZones: null,
+  stream: null,
   intervals: [interval(0, 'WORK', 103, 236), interval(1, 'WORK', 108, 213)],
 };
 
-function fakeApi(): SessionsApi {
+function fakeApi(details: { umbral?: SessionDetail; vo2?: SessionDetail } = {}): SessionsApi {
   return {
     list: vi.fn().mockResolvedValue(activities),
-    detail: vi.fn(async ({ activityId }: { activityId: string }) => (activityId === umbralId ? umbralDetail : vo2Detail)),
+    detail: vi.fn(async ({ activityId }: { activityId: string }) => (activityId === umbralId ? details.umbral ?? umbralDetail : details.vo2 ?? vo2Detail)),
   };
 }
 
@@ -173,6 +183,37 @@ describe('SessionsWorkspace', () => {
     expect(within(screen.getByRole('region', { name: 'Resultado' })).getByText('0 de 2')).toBeInTheDocument();
     // No detectarlas no es lo mismo que no haberlas hecho.
     expect(screen.queryByText(/Faltan 2 series/)).not.toBeInTheDocument();
+  });
+
+  it('busca las series en la señal de potencia si Intervals.icu no las separó', async () => {
+    renderWorkspace(fakeApi({ umbral: { ...umbralDetail, stream: umbralStream } }));
+    await userEvent.click(await screen.findByRole('button', { name: /P\.Umbral/ }));
+    const summary = await screen.findByRole('region', { name: 'Resultado' });
+    expect(within(summary).getByText('2 de 2')).toBeInTheDocument();
+    expect(within(summary).getByText('201 W')).toBeInTheDocument();
+    expect(within(summary).getByText('Potencia: En objetivo')).toBeInTheDocument();
+    expect(within(summary).getByText('Duración: la fija la pauta')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Mejores bloques de la señal de potencia' })).toBeChecked();
+    expect(screen.getByText(/Intervals\.icu no detectó intervalos de la duración pautada/)).toBeInTheDocument();
+    const blocks = screen.getByRole('region', { name: 'Bloques encontrados' });
+    expect(within(blocks).getByText('198 W')).toBeInTheDocument();
+    expect(within(blocks).getByText('204 W')).toBeInTheDocument();
+  });
+
+  it('deja volver a los intervalos de Intervals.icu', async () => {
+    renderWorkspace(fakeApi({ umbral: { ...umbralDetail, stream: umbralStream } }));
+    await userEvent.click(await screen.findByRole('button', { name: /P\.Umbral/ }));
+    await screen.findByRole('region', { name: 'Resultado' });
+    await userEvent.click(screen.getByRole('radio', { name: 'Intervalos detectados por Intervals.icu' }));
+    expect(screen.getByText(/Ningún intervalo detectado dura lo que pide la pauta/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Intervalos detectados' })).toBeInTheDocument();
+  });
+
+  it('se queda con los intervalos cuando encajan, aunque haya señal', async () => {
+    renderWorkspace(fakeApi({ vo2: { ...vo2Detail, stream: umbralStream } }));
+    await userEvent.click(await screen.findByRole('button', { name: /VO2 max/ }));
+    await screen.findByRole('region', { name: 'Resultado' });
+    expect(screen.getByRole('radio', { name: 'Intervalos detectados por Intervals.icu' })).toBeChecked();
   });
 
   it('avisa si no hay ciclista', () => {

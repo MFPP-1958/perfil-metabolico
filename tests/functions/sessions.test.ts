@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSessionsHandler, mapIntervals, rideZones } from '../../netlify/functions/sessions';
+import { createSessionsHandler, mapIntervals, mapStream, rideZones } from '../../netlify/functions/sessions';
 
 const athleteId = '8ca7cc82-02b0-47ca-84ca-253607a04b72';
 const activityId = '3f0f5c0e-8f1f-4d8e-9d55-1f1b8f7f2a10';
@@ -28,6 +28,12 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       { type: 'WORK', moving_time: 180, start_time: 600, average_watts: 255, average_heartrate: 165, average_cadence: 92 },
     ] }),
     fetchSportSettings: vi.fn().mockResolvedValue([{ types: ['Ride', 'VirtualRide'], power_zones: [55, 75, 90, 105, 120, 150, 999] }]),
+    fetchStreams: vi.fn().mockResolvedValue([
+      { type: 'time', data: [0, 1, 2] },
+      { type: 'watts', data: [200, null, 210] },
+      { type: 'heartrate', data: [150, 151, 152] },
+      { type: 'cadence', data: [90, 91, 92] },
+    ]),
     ...overrides,
   };
 }
@@ -89,6 +95,8 @@ describe('sessions function', () => {
     const body = JSON.parse(response.body);
     expect(body.activityId).toBe(activityId);
     expect(body.powerZones).toEqual([55, 75, 90, 105, 120, 150, 999]);
+    expect(deps.fetchStreams).toHaveBeenCalledWith('i184470088');
+    expect(body.stream).toEqual({ time: [0, 1, 2], watts: [200, null, 210], heartRate: [150, 151, 152], cadence: [90, 91, 92] });
     expect(body.intervals[1]).toEqual({ index: 1, type: 'WORK', startSeconds: 600, movingSeconds: 180, averageWatts: 255, averageHeartRate: 165, averageCadence: 92 });
   });
 
@@ -106,6 +114,13 @@ describe('sessions function', () => {
     expect(JSON.parse(response.body).powerZones).toBeNull();
   });
 
+  it('still answers without the power stream if Intervals.icu fails to give it', async () => {
+    const deps = dependencies({ fetchStreams: vi.fn().mockRejectedValue(new Error('boom')) });
+    const response = await createSessionsHandler(deps)(getEvent({ athleteId, activityId }));
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).stream).toBeNull();
+  });
+
   it('returns 502 when Intervals.icu does not give the intervals', async () => {
     const deps = dependencies({ fetchIntervals: vi.fn().mockRejectedValue(new Error('boom')) });
     const response = await createSessionsHandler(deps)(getEvent({ athleteId, activityId }));
@@ -119,6 +134,22 @@ describe('mapIntervals', () => {
       { index: 0, type: 'WORK', startSeconds: null, movingSeconds: 30, averageWatts: null, averageHeartRate: null, averageCadence: null },
     ]);
     expect(mapIntervals({})).toEqual([]);
+  });
+});
+
+describe('mapStream', () => {
+  it('keeps time, power, heart rate and cadence aligned', () => {
+    expect(mapStream([{ type: 'time', data: [0, 1] }, { type: 'watts', data: [100, 'x'] }])).toEqual({
+      time: [0, 1], watts: [100, null], heartRate: null, cadence: null,
+    });
+  });
+
+  it('refuses a stream without time or power, or with misaligned series', () => {
+    expect(mapStream([{ type: 'time', data: [0, 1] }])).toBeNull();
+    expect(mapStream([{ type: 'time', data: [0, 1] }, { type: 'watts', data: [100] }])).toBeNull();
+    expect(mapStream([{ type: 'time', data: [0, 1] }, { type: 'watts', data: [100, 110] }, { type: 'heartrate', data: [1] }]))
+      .toMatchObject({ heartRate: null });
+    expect(mapStream('nada')).toBeNull();
   });
 });
 

@@ -24,10 +24,20 @@ const intervalSchema = z.strictObject({
   averageCadence: nullableFinite,
 });
 
+const streamSchema = z.strictObject({
+  time: z.array(z.number().finite()),
+  watts: z.array(nullableFinite),
+  heartRate: z.array(nullableFinite).nullable(),
+  cadence: z.array(nullableFinite).nullable(),
+}).refine((stream) => stream.watts.length === stream.time.length
+  && (stream.heartRate?.length ?? stream.time.length) === stream.time.length
+  && (stream.cadence?.length ?? stream.time.length) === stream.time.length, 'Señal desalineada.');
+
 const sessionDetailSchema = z.strictObject({
   activityId: z.uuid(),
   intervals: z.array(intervalSchema),
   powerZones: z.array(z.number().finite()).nullable(),
+  stream: streamSchema.nullable(),
 });
 
 export type SessionActivity = z.infer<typeof activitySchema>;

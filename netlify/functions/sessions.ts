@@ -3,8 +3,9 @@ import { authenticateRequest } from './lib/authorization.js';
 import { bearerToken, jsonResponse } from './lib/http.js';
 
 // Sesiones: lista las actividades guardadas del ciclista y, para una de ellas,
-// trae de Intervals.icu los intervalos detectados y las zonas de potencia. No
-// escribe nada: la pauta se lee del título y el veredicto se calcula en pantalla.
+// trae de Intervals.icu los intervalos detectados, las zonas de potencia y la
+// señal segundo a segundo. No escribe nada: la pauta se lee del título y el
+// veredicto se calcula en pantalla.
 
 type SessionsEvent = {
   httpMethod: string;
@@ -29,6 +30,7 @@ interface SessionsDependencies {
   loadActivity(athleteId: string, activityId: string): Promise<{ intervalsActivityId: string; intervalsAthleteId: string } | null>;
   fetchIntervals(intervalsActivityId: string): Promise<unknown>;
   fetchSportSettings(intervalsAthleteId: string): Promise<unknown>;
+  fetchStreams(intervalsActivityId: string): Promise<unknown>;
 }
 
 const isoDate = z.iso.date();
@@ -67,6 +69,27 @@ export function mapIntervals(raw: unknown) {
       averageCadence: interval.average_cadence,
     }];
   });
+}
+
+function streamSeries(raw: unknown[], type: string) {
+  const series = raw.find((item) => (item as { type?: unknown } | null)?.type === type) as { data?: unknown } | undefined;
+  return Array.isArray(series?.data) ? series.data : null;
+}
+
+const numberOrNull = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
+/** Tiempo, potencia, pulso y cadencia alineados muestra a muestra; sin tiempo o sin potencia no sirve. */
+export function mapStream(raw: unknown) {
+  if (!Array.isArray(raw)) return null;
+  const time = streamSeries(raw, 'time');
+  const watts = streamSeries(raw, 'watts');
+  if (!time || !watts || !time.length || time.length !== watts.length) return null;
+  if (!time.every((value) => typeof value === 'number' && Number.isFinite(value))) return null;
+  const aligned = (type: string) => {
+    const series = streamSeries(raw, type);
+    return series && series.length === time.length ? series.map(numberOrNull) : null;
+  };
+  return { time: time as number[], watts: watts.map(numberOrNull), heartRate: aligned('heartrate'), cadence: aligned('cadence') };
 }
 
 export function rideZones(raw: unknown): number[] | null {
@@ -146,6 +169,7 @@ const defaults: SessionsDependencies = {
   loadActivity: loadActivityDefault,
   fetchIntervals: (id) => fetchIntervalsApi(`/activity/${id}/intervals`),
   fetchSportSettings: (id) => fetchIntervalsApi(`/athlete/${id}/sport-settings`),
+  fetchStreams: (id) => fetchIntervalsApi(`/activity/${id}/streams?${new URLSearchParams({ types: 'time,watts,heartrate,cadence' })}`),
 };
 
 function optionalNumber(value: unknown) {
@@ -189,15 +213,15 @@ export function createSessionsHandler(dependencies: Partial<SessionsDependencies
       if (!activity || !INTERVALS_ACTIVITY_ID.test(activity.intervalsActivityId) || !INTERVALS_ATHLETE_ID.test(activity.intervalsAthleteId)) {
         return jsonResponse(404, { error: 'La actividad no existe para este ciclista.' });
       }
-      let rawIntervals: unknown;
-      try {
-        rawIntervals = await deps.fetchIntervals(activity.intervalsActivityId);
-      } catch {
-        return jsonResponse(502, { error: 'Intervals.icu no devolvió los intervalos de esta actividad.' });
-      }
-      // Sin zonas se puede seguir: solo faltarán los objetivos escritos por zona.
-      const powerZones = await deps.fetchSportSettings(activity.intervalsAthleteId).then(rideZones, () => null);
-      return jsonResponse(200, { activityId, intervals: mapIntervals(rawIntervals), powerZones });
+      // Sin zonas o sin señal se puede seguir: solo faltarán los objetivos por
+      // zona o la búsqueda de bloques en la señal de potencia.
+      const [intervals, powerZones, stream] = await Promise.all([
+        deps.fetchIntervals(activity.intervalsActivityId).then(mapIntervals, () => null),
+        deps.fetchSportSettings(activity.intervalsAthleteId).then(rideZones, () => null),
+        deps.fetchStreams(activity.intervalsActivityId).then(mapStream, () => null),
+      ]);
+      if (!intervals) return jsonResponse(502, { error: 'Intervals.icu no devolvió los intervalos de esta actividad.' });
+      return jsonResponse(200, { activityId, intervals, powerZones, stream });
     } catch {
       return jsonResponse(500, { error: 'No se pudieron leer las sesiones.' });
     }
