@@ -251,8 +251,8 @@ describe('athlete synchronization', () => {
 
   it.each([
     ['all', undefined],
-    ['indoor', '[{"field_id":"indoor","operator":"eq","value":true}]'],
-    ['outdoor', '[{"field_id":"indoor","operator":"eq","value":false}]'],
+    ['indoor', '[{"field_id":"indoor","operator":"eq","value":"indoor"}]'],
+    ['outdoor', '[{"field_id":"indoor","operator":"eq","value":"outdoor"}]'],
   ] as const)('loads exact dates and the %s power-curve environment', async (environment, expectedFilters) => {
     const calls: Array<{ path: string; query?: Readonly<Record<string, string>> }> = [];
     const client = new IntervalsClient({

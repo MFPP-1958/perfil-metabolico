@@ -13,7 +13,7 @@ describe('IntervalsClient', () => {
       newest: '2026-09-14',
       type: 'Ride',
       subMaxEfforts: '3',
-      filters: JSON.stringify([{ field_id: 'indoor', operator: 'eq', value: true }]),
+      filters: JSON.stringify([{ field_id: 'indoor', operator: 'eq', value: 'indoor' }]),
     });
   });
 });

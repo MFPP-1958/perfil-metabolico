@@ -2,6 +2,11 @@ export interface IntervalsTransport {
   get(path: string, query?: Readonly<Record<string, string>>): Promise<unknown>;
 }
 
+/** Intervals.icu espera el entorno como texto («indoor»/«outdoor»); con un booleano responde 422. */
+function environmentFilter(indoor: boolean) {
+  return JSON.stringify([{ field_id: 'indoor', operator: 'eq', value: indoor ? 'indoor' : 'outdoor' }]);
+}
+
 export class IntervalsClient {
   constructor(private readonly transport: IntervalsTransport) {}
 
@@ -16,7 +21,7 @@ export class IntervalsClient {
       type: 'Ride',
     };
     if (indoor !== undefined) {
-      query.filters = JSON.stringify([{ field_id: 'indoor', operator: 'eq', value: indoor }]);
+      query.filters = environmentFilter(indoor);
     }
     return this.transport.get(`/athlete/${athleteId}/power-curves`, query);
   }
@@ -28,7 +33,7 @@ export class IntervalsClient {
       subMaxEfforts: '3',
     };
     if (indoor !== undefined) {
-      query.filters = JSON.stringify([{ field_id: 'indoor', operator: 'eq', value: indoor }]);
+      query.filters = environmentFilter(indoor);
     }
     return this.transport.get(`/athlete/${athleteId}/power-curves`, query);
   }
