@@ -14,7 +14,6 @@ import type { PowerApi } from '../features/power/powerApi';
 import { appRoutes, type AppRoute } from './routes';
 import { SessionsWorkspace } from '../features/sessions/SessionsWorkspace';
 import type { SessionsApi } from '../features/sessions/sessionsApi';
-import { EvolutionDemo, PrescriptionDemo, ReportsDemo } from './DemoViews';
 
 function EmptyWorkspace({ route }: { route: AppRoute }) {
   return (
@@ -61,7 +60,6 @@ function Application({
 }) {
   const routeContent: Record<string, ReactNode> = {
     '/potencia': <PowerWorkspace api={powerAnalysisApi} />, '/durabilidad': <DurabilityWorkspace api={durabilityAnalysisApi} />, '/tests': <TestsWorkspace />, '/sesiones': <SessionsWorkspace api={sessionsAnalysisApi} />,
-    '/prescripcion': <PrescriptionDemo />, '/evolucion': <EvolutionDemo />, '/informes': <ReportsDemo />,
   };
   return (
     <div className="app-layout">

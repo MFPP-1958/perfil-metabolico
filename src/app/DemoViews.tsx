@@ -1,10 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { DurabilityView } from '../features/durability/DurabilityView';
 import type { DurabilityRow, DurabilitySnapshotResponse } from '../features/durability/durabilityApi';
-import { EvolutionView } from '../features/evolution/EvolutionView';
 import { PowerDurationView } from '../features/power/PowerDurationView';
-import { PrescriptionEditor } from '../features/prescription/PrescriptionEditor';
-import { ReportBuilder } from '../features/reports/ReportBuilder';
 
 function ExplicitDemo({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -88,6 +85,3 @@ export function DurabilityDemo({ onClose }: { onClose?: () => void }) {
     </>
   );
 }
-export function EvolutionDemo() { return <ExplicitDemo label="Evolución"><EvolutionView typicalError={5} observations={[{ value: 300, unit: 'W', metricCode: 'cp', protocol: 'ecp@1', observedAt: '2026-05-01', modelVersion: 'ecp@1.0.0', source: 'Intervals.icu' }, { value: 308, unit: 'W', metricCode: 'cp', protocol: 'ecp@1', observedAt: '2026-08-01', modelVersion: 'ecp@1.0.0', source: 'Intervals.icu' }]} /></ExplicitDemo>; }
-export function PrescriptionDemo() { return <ExplicitDemo label="Prescripción"><PrescriptionEditor coachId="entrenador-demo" context={{ athleteId: 'demo', age: 30, goal: 'Mejorar potencia aeróbica', phase: 'desarrollo', availableDays: 4, evidence: [{ metricCode: 'p_vo2max', value: 400, unit: 'W', observationId: 'demo-pvo2', quality: 'measured' }] }} /></ExplicitDemo>; }
-export function ReportsDemo() { return <ExplicitDemo label="Informes"><ReportBuilder data={{ athleteId: 'demo', athleteName: 'Ciclista de demostración', generatedAt: '2026-09-03T16:00:00Z', results: [{ id: 'demo-cp', metric: 'CP', value: 305, unit: 'W', status: 'approved', modelVersion: 'ecp@1.0.0', source: 'Curva de potencia Intervals.icu', limitation: 'La estimación depende de la cobertura de esfuerzos máximos.' }], prescription: { id: 'demo-p', status: 'approved', summary: '4 × 4 min de potencia aeróbica.', approvedBy: 'entrenador-demo' } }} /></ExplicitDemo>; }

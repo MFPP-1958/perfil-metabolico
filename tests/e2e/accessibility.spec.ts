@@ -5,7 +5,7 @@ declare global { interface Window { axe: { run(): Promise<{ violations: Array<{ 
 
 const axePath = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
 
-for (const route of ['/', '/potencia', '/durabilidad', '/tests', '/sesiones', '/prescripcion', '/evolucion', '/informes']) {
+for (const route of ['/', '/potencia', '/durabilidad', '/tests', '/sesiones']) {
   test(`accessibility scan ${route}`, async ({ page }) => {
     await page.route('**/.netlify/functions/athletes**', async (request) => request.fulfill({ json: [] }));
     await page.goto(route);

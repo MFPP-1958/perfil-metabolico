@@ -1,6 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { mkdir } from 'node:fs/promises';
-import path from 'node:path';
 
 const responsiveAthleteId = '33333333-3333-4333-8333-333333333333';
 
@@ -141,15 +139,4 @@ test('populated Durability remains usable at 360px and real Chromium 200% page s
   for (let step = 0; step < 6; step += 1) await page.keyboard.press('ArrowRight');
   await expect.poll(() => tableRegion.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
   await page.screenshot({ path: 'test-results/artifacts/durabilidad-mobile-360.png', fullPage: true });
-});
-
-test('A4 report has one unclipped page', async ({ page }) => {
-  await page.route('**/.netlify/functions/athletes**', async (route) => route.fulfill({ json: [] }));
-  await page.goto('/informes');
-  await page.getByRole('button', { name: 'Abrir demostración' }).click();
-  await page.emulateMedia({ media: 'print' });
-  const output = path.resolve('test-results/artifacts');
-  await mkdir(output, { recursive: true });
-  await page.pdf({ path: path.join(output, 'informe-demostracion-a4.pdf'), format: 'A4', printBackground: true, preferCSSPageSize: true });
-  await expect(page.getByRole('table', { name: 'Resultados incluidos en el informe' })).toBeVisible();
 });

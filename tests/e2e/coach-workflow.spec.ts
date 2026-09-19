@@ -92,15 +92,8 @@ test('coach reviews real athlete data and opens unfinished module demos explicit
   await expect(resultado).toContainText('3 de 3');
   await expect(page.getByRole('checkbox', { name: 'Intervalo 1 cuenta como serie' })).not.toBeChecked();
 
-  await page.getByRole('link', { name: 'Prescripción' }).click();
-  await page.getByRole('button', { name: 'Abrir demostración' }).click();
-  await expect(page.getByText('Borrador pendiente de revisión')).toBeVisible();
-  await page.getByRole('button', { name: 'Aprobar prescripción' }).click();
-  await expect(page.getByText(/Aprobada por entrenador-demo/)).toBeVisible();
-
-  await page.getByRole('link', { name: 'Informes' }).click();
-  await page.getByRole('button', { name: 'Abrir demostración' }).click();
-  await expect(page.getByRole('heading', { name: 'Informe para el entrenador' })).toBeVisible();
+  // Prescripción, Evolución e Informes salen del menú hasta que se construyan de verdad.
+  await expect(page.getByRole('link', { name: 'Prescripción' })).toHaveCount(0);
 });
 
 test('coach explicitly imports a selected Intervals cyclist', async ({ page }) => {

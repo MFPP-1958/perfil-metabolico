@@ -92,7 +92,8 @@ test('saving a metabolic scenario survives reload of the Tests route', async ({ 
     const body = route.request().postDataJSON() as SaveRequestBody;
     const saved = scenarioFromRequest(body, `bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb${saveCount}`, '2026-09-17T10:00:00.000Z');
     savedScenarios = [saved, ...savedScenarios];
-    await route.fulfill({ json: saved });
+    // 201: el servidor real distingue «creado» de «ya existía» (200).
+    await route.fulfill({ status: 201, json: saved });
   });
 
   await page.goto('/');
@@ -151,7 +152,8 @@ test('the Tests route with a proposed and saved scenario meets axe, keyboard, 36
     const body = route.request().postDataJSON() as SaveRequestBody;
     const saved = scenarioFromRequest(body, 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '2026-09-17T11:00:00.000Z');
     savedScenarios = [saved, ...savedScenarios];
-    await route.fulfill({ json: saved });
+    // 201: el servidor real distingue «creado» de «ya existía» (200).
+    await route.fulfill({ status: 201, json: saved });
   });
 
   await page.goto('/');

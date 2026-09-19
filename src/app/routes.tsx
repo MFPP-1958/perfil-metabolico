@@ -14,7 +14,4 @@ export const appRoutes: readonly AppRoute[] = [
   { path: '/durabilidad', label: 'Durabilidad', shortLabel: 'Durabilidad', description: 'Cambio del rendimiento después de acumular trabajo.' },
   { path: '/tests', label: 'Tests fisiológicos', shortLabel: 'Tests', description: 'Protocolos guiados y observaciones trazables.' },
   { path: '/sesiones', label: 'Sesiones', shortLabel: 'Sesiones', description: 'Comparación entre trabajo planificado y completado.' },
-  { path: '/prescripcion', label: 'Prescripción', shortLabel: 'Prescripción', description: 'Borradores explicables sujetos a aprobación profesional.' },
-  { path: '/evolucion', label: 'Evolución', shortLabel: 'Evolución', description: 'Cambios compatibles con su error y protocolo.' },
-  { path: '/informes', label: 'Informes', shortLabel: 'Informes', description: 'Versiones aprobadas para entrenador, ciclista y familia.' },
 ];
