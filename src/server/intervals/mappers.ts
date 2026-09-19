@@ -187,6 +187,17 @@ export function mapPowerCurve(input: unknown) {
   };
 }
 
+/**
+ * Intervals.icu solo marca `trainer` en las sesiones de rodillo; en exterior lo deja
+ * vacío. Rodillo si está marcado o es virtual; exterior si no está marcado y hubo
+ * desplazamiento; si no, se desconoce.
+ */
+function inferIndoor(activity: { trainer?: boolean | null; type: string; distance?: number | null }) {
+  if (activity.trainer === true || activity.type === 'VirtualRide') return true;
+  if (activity.trainer === false) return false;
+  return activity.distance != null && activity.distance > 0 ? false : null;
+}
+
 export function mapActivity(input: unknown) {
   const result = activitySchema.safeParse(input);
   if (!result.success) throw new Error('La actividad de Intervals.icu no tiene una forma válida.');
@@ -199,7 +210,7 @@ export function mapActivity(input: unknown) {
     startedAt: activity.start_date,
     durationSeconds: activity.moving_time,
     distanceMetres: activity.distance ?? null,
-    indoor: activity.trainer ?? null,
+    indoor: inferIndoor(activity),
     deviceWatts: activity.device_watts ?? null,
     averagePowerWatts: activity.icu_average_watts ?? null,
     averageHeartRateBpm: activity.average_heartrate ?? null,

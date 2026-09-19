@@ -299,7 +299,7 @@ interface ListState { key: string; activities: SessionActivity[]; error: string 
 interface DetailState { key: string; detail: SessionDetail | null; error: string }
 
 export function SessionsWorkspace({ api = defaultSessionsApi }: { api?: SessionsApi }) {
-  const { athleteId, athlete, period, environment, today, sync } = useAnalysis();
+  const { athleteId, athlete, period, environment, today, sync, setEnvironment } = useAnalysis();
   const [listState, setListState] = useState<ListState>({ key: '', activities: [], error: '' });
   const [detailState, setDetailState] = useState<DetailState>({ key: '', detail: null, error: '' });
   const [selectedId, setSelectedId] = useState('');
@@ -345,6 +345,10 @@ export function SessionsWorkspace({ api = defaultSessionsApi }: { api?: Sessions
       .sort((left, right) => Date.parse(right.activity.startedAt) - Date.parse(left.activity.startedAt));
   }, [environment, listKey, listState, onlyPrescribed]);
 
+  const hiddenByEnvironment = listState.key === listKey && environment !== 'all'
+    ? listState.activities.filter((activity) => !matchesEnvironment(activity, environment)).length
+    : 0;
+
   if (!validAthlete || !athlete) {
     return (
       <section className="workspace workspace-empty">
@@ -387,7 +391,15 @@ export function SessionsWorkspace({ api = defaultSessionsApi }: { api?: Sessions
           </label>
           {loadingList && <p role="status">Cargando las actividades del periodo…</p>}
           {!loadingList && !listState.error && listed.length === 0 && (
-            <p>No hay actividades guardadas en este periodo. Sincroniza el ciclista para traerlas de Intervals.icu.</p>
+            hiddenByEnvironment > 0 ? (
+              // Vacía por el filtro, no por falta de datos: se dice y se ofrece la salida.
+              <div className="sessions-empty">
+                <p>Con el filtro «{environment === 'indoor' ? 'Rodillo' : 'Exterior'}» no queda ninguna actividad, pero en este periodo hay {hiddenByEnvironment} en total.</p>
+                <button type="button" className="secondary-action" onClick={() => setEnvironment('all')}>Ver todas las actividades</button>
+              </div>
+            ) : (
+              <p>No hay actividades guardadas en este periodo. Sincroniza el ciclista para traerlas de Intervals.icu.</p>
+            )
           )}
           {listed.length > 0 && (
             <ul aria-label="Actividades del periodo">

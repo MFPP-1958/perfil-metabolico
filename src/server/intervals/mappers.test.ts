@@ -223,6 +223,18 @@ describe('Intervals.icu explicit mappers', () => {
     }));
   });
 
+  it('infers outdoor rides, which Intervals.icu leaves unmarked', () => {
+    // Intervals.icu solo marca «trainer» en las sesiones de rodillo; en las de
+    // exterior lo deja vacío. Sin inferirlo, el filtro «Exterior» lo excluía todo.
+    const unmarked = { ...activity, trainer: null };
+    expect(mapActivity(unmarked).indoor).toBe(false);
+    expect(mapActivity({ ...activity, trainer: true, distance: 0 }).indoor).toBe(true);
+    expect(mapActivity({ ...unmarked, type: 'VirtualRide' }).indoor).toBe(true);
+    expect(mapActivity({ ...unmarked, distance: 0 }).indoor).toBeNull();
+    expect(mapActivity({ ...unmarked, distance: null }).indoor).toBeNull();
+    expect(mapActivity({ ...activity, trainer: false }).indoor).toBe(false);
+  });
+
   it('maps structured planned blocks and their original target units', () => {
     expect(mapPlannedWorkout(planned).blocks[0]).toMatchObject({ durationSeconds: 720, targetUnit: '%ftp' });
   });

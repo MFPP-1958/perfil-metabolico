@@ -193,7 +193,7 @@ describe('DurabilityWorkspace', () => {
     renderWorkspace(apiReturning(new Error('No hay un análisis de Durabilidad sincronizado para el periodo y entorno seleccionados.')), analysis);
 
     expect(await screen.findByRole('heading', { name: 'No hay datos de Durabilidad' })).toBeVisible();
-    expect(screen.getByText(/usa el control.*sincronizar ciclista.*barra superior/i)).toBeVisible();
+    expect(screen.getByText(/usa el botón.*sincronizar con intervals\.icu.*barra superior/i)).toBeVisible();
     expect(screen.queryByRole('button', { name: /sincronizar/i })).not.toBeInTheDocument();
     expect(analysis.synchronize).not.toHaveBeenCalled();
   });

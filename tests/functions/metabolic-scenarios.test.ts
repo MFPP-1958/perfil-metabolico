@@ -246,8 +246,8 @@ describe('ningún valor objetivo llega a observations ni a derived_results', () 
       targets: { vlamax: 0.8 },
       referencePowerWatts: 250,
       config: { restingVo2: 5 },
-      modelVersions: { mader: 'mader-reproduction@1.0.0', scenario: 'metabolic-scenario@1.0.0' },
-      outcome: { status: 'blocked', reasons: ['x'], version: 'metabolic-scenario@1.0.0' } as PersistScenarioInput['outcome'],
+      modelVersions: { mader: 'mader-reproduction@1.0.0', scenario: 'metabolic-scenario@2.0.0' },
+      outcome: { status: 'blocked', reasons: ['x'], version: 'metabolic-scenario@2.0.0' } as PersistScenarioInput['outcome'],
       contentHash: 'a'.repeat(64),
     });
 
@@ -271,8 +271,8 @@ describe('ningún valor objetivo llega a observations ni a derived_results', () 
       targets: { vlamax: 0.8 },
       referencePowerWatts: 250,
       config: { restingVo2: 5 },
-      modelVersions: { mader: 'mader-reproduction@1.0.0', scenario: 'metabolic-scenario@1.0.0' },
-      outcome: { status: 'blocked', reasons: ['x'], version: 'metabolic-scenario@1.0.0' } as PersistScenarioInput['outcome'],
+      modelVersions: { mader: 'mader-reproduction@1.0.0', scenario: 'metabolic-scenario@2.0.0' },
+      outcome: { status: 'blocked', reasons: ['x'], version: 'metabolic-scenario@2.0.0' } as PersistScenarioInput['outcome'],
       contentHash: 'stable-hash-value',
     };
     const key = `${input.athleteId}:${input.contentHash}`;
@@ -331,8 +331,8 @@ describe('la respuesta nunca incluye claves ni correos', () => {
           targets: { vlamax: 0.8 },
           referencePowerWatts: 250,
           config: { restingVo2: 5 },
-          modelVersions: { mader: 'mader-reproduction@1.0.0', scenario: 'metabolic-scenario@1.0.0' },
-          outcome: { status: 'blocked', reasons: ['x'], version: 'metabolic-scenario@1.0.0' } as PersistScenarioInput['outcome'],
+          modelVersions: { mader: 'mader-reproduction@1.0.0', scenario: 'metabolic-scenario@2.0.0' },
+          outcome: { status: 'blocked', reasons: ['x'], version: 'metabolic-scenario@2.0.0' } as PersistScenarioInput['outcome'],
           contentHash: 'a'.repeat(64),
         }, { api_key: 'LEAKED-NOT-A-REAL-KEY', athlete_email: 'athlete@example.com' }),
       ]),

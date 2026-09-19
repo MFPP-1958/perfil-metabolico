@@ -142,6 +142,16 @@ describe('SessionsWorkspace', () => {
     expect(within(list).getByRole('button')).toHaveTextContent('P.Umbral');
   });
 
+  it('explica cuándo la lista está vacía por el filtro de entorno y ofrece verlas todas', async () => {
+    const api = fakeApi();
+    api.list = vi.fn().mockResolvedValue([activities[2]]);
+    const setEnvironment = vi.fn();
+    renderWorkspace(api, context({ environment: 'outdoor', setEnvironment }));
+    expect(await screen.findByText(/Con el filtro «Exterior» no queda ninguna actividad, pero en este periodo hay 1 en total/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Ver todas las actividades' }));
+    expect(setEnvironment).toHaveBeenCalledWith('all');
+  });
+
   it('compara las series que encajan con la pauta y deja fuera las demás', async () => {
     const api = renderWorkspace();
     await userEvent.click(await screen.findByRole('button', { name: /VO2 max/ }));

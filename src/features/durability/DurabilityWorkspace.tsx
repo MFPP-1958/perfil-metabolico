@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAnalysis } from '../../analysis/AnalysisContext';
 import { resolvePeriod } from '../../analysis/period';
 import { snapshotFitsPeriod, staleWindowNotice, type WindowKind } from '../../analysis/snapshotWindow';
-import type { ResolvedPeriod } from '../../analysis/types';
+import type { AnalysisEnvironment, ResolvedPeriod } from '../../analysis/types';
 import { DurabilityDemo } from '../../app/DemoViews';
 import { DurabilityView } from './DurabilityView';
 import {
@@ -59,8 +59,13 @@ function confirmedSnapshot(
   };
 }
 
+function environmentNote(environment: AnalysisEnvironment) {
+  if (environment === 'all') return null;
+  return `Tienes puesto el filtro «${environment === 'indoor' ? 'Rodillo' : 'Exterior'}», y cada entorno se sincroniza por separado. Prueba con todos los entornos o sincroniza este.`;
+}
+
 export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: DurabilityApi }) {
-  const { athleteId, period, environment, today, sync } = useAnalysis();
+  const { athleteId, period, environment, today, sync, setEnvironment } = useAnalysis();
   const [loadState, setLoadState] = useState<LoadState>(emptyLoad);
   const [confirmation, setConfirmation] = useState<ConfirmationState>(emptyConfirmation);
   const [retryVersion, setRetryVersion] = useState(0);
@@ -195,9 +200,13 @@ export function DurabilityWorkspace({ api = defaultDurabilityApi }: { api?: Dura
         <h1>{missingSnapshot ? 'No hay datos de Durabilidad' : 'No se pudo cargar Durabilidad'}</h1>
         <p>{error}</p>
         {missingSnapshot && (
-          <p>Usa el control «Sincronizar ciclista» de la barra superior y vuelve cuando termine.</p>
+          <p>Usa el botón «Sincronizar con Intervals.icu» de la barra superior y vuelve cuando termine.</p>
         )}
+        {environmentNote(environment) && <p>{environmentNote(environment)}</p>}
         <div className="durability-empty-actions">
+          {environment !== 'all' && (
+            <button type="button" className="primary-action" onClick={() => setEnvironment('all')}>Ver todos los entornos</button>
+          )}
           <button type="button" className="secondary-action" onClick={retryLoad}>Reintentar carga</button>
           <button type="button" className="text-action" onClick={() => setDemoOpen(true)}>Abrir demostración sintética</button>
         </div>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAnalysis } from '../../analysis/AnalysisContext';
 import { resolvePeriod } from '../../analysis/period';
 import { snapshotFitsPeriod, staleWindowNotice, type WindowKind } from '../../analysis/snapshotWindow';
-import type { ResolvedPeriod } from '../../analysis/types';
+import type { AnalysisEnvironment, ResolvedPeriod } from '../../analysis/types';
 import { fitPowerDuration } from '../../physiology/power-duration/fit';
 import { assessCurveCompleteness } from '../../physiology/power-duration/quality';
 import type { PowerDurationInput, PowerDurationModel } from '../../physiology/power-duration/types';
@@ -129,8 +129,13 @@ function SyntheticPowerDemo({ onClose }: { onClose(): void }) {
   );
 }
 
+function environmentNote(environment: AnalysisEnvironment) {
+  if (environment === 'all') return null;
+  return `Tienes puesto el filtro «${environment === 'indoor' ? 'Rodillo' : 'Exterior'}», y cada entorno se sincroniza por separado. Prueba con todos los entornos o sincroniza este.`;
+}
+
 export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
-  const { athleteId, period, environment, today, sync, synchronize } = useAnalysis();
+  const { athleteId, period, environment, today, sync, synchronize, setEnvironment } = useAnalysis();
   const [loadState, setLoadState] = useState<LoadState>(emptyLoad);
   const [selectedModel, setSelectedModel] = useState<PowerDurationModel | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmationState>(emptyConfirmation);
@@ -295,7 +300,11 @@ export function PowerWorkspace({ api = defaultPowerApi }: { api?: PowerApi }) {
       <section className="workspace workspace-empty">
         <h1>{missingSnapshot ? 'No hay curva para este periodo' : 'No se pudo cargar la curva'}</h1>
         <p>{error}</p>
+        {environmentNote(environment) && <p>{environmentNote(environment)}</p>}
         <div className="power-empty-actions">
+          {environment !== 'all' && (
+            <button type="button" className="secondary-action" onClick={() => setEnvironment('all')}>Ver todos los entornos</button>
+          )}
           <button
             type="button"
             className="primary-action"
